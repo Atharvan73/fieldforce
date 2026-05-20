@@ -2,7 +2,7 @@
   "name": "FieldForce Pro",
   "short_name": "FieldForce",
   "description": "Shakti Machinery — B2B Field Sales Dashboard",
-  "start_url": "/",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#0F172A",
   "theme_color": "#0F172A",
@@ -19,14 +19,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "form_factor": "narrow"
     }
   ],
   "categories": ["business", "productivity"],

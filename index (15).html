@@ -1,0 +1,2843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FieldForce">
+<meta name="application-name" content="FieldForce Pro">
+<meta name="theme-color" content="#0F172A">
+<meta name="description" content="Shakti Machinery — B2B Field Sales Dashboard">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>FieldForce Pro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+:root {
+  --bg: #0F172A;
+  --bg2: #1E293B;
+  --bg3: #334155;
+  --border: #334155;
+  --border2: #475569;
+  --text: #F1F5F9;
+  --text2: #94A3B8;
+  --text3: #64748B;
+  --indigo: #6366F1;
+  --indigo2: #818CF8;
+  --emerald: #10B981;
+  --amber: #F59E0B;
+  --red: #EF4444;
+  --purple: #8B5CF6;
+  --blue: #3B82F6;
+  --card-radius: 14px;
+  --btn-radius: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; }
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+
+/* APP SHELL — responsive */
+#app { width: 100%; height: 100dvh; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; }
+
+/* TOPBAR */
+#topbar { background: var(--bg); border-bottom: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; z-index: 50; }
+.topbar-logo { display: flex; align-items: center; gap: 8px; }
+.logo-mark { width: 28px; height: 28px; background: var(--indigo); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff; }
+.topbar-title { font-size: 14px; font-weight: 600; letter-spacing: -0.3px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.notif-btn { position: relative; cursor: pointer; color: var(--text2); }
+.notif-dot { position: absolute; top: -2px; right: -2px; width: 7px; height: 7px; background: var(--red); border-radius: 50%; border: 1.5px solid var(--bg); }
+.user-av { width: 30px; height: 30px; border-radius: 50%; background: var(--indigo); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; cursor: pointer; color: #fff; }
+
+/* MAIN BODY — sidebar + content */
+#main-body { flex: 1; display: flex; overflow: hidden; }
+
+/* SIDEBAR NAV (desktop only) */
+#sidebar { width: 220px; flex-shrink: 0; background: var(--bg2); border-right: 1px solid var(--border); display: none; flex-direction: column; padding: 12px 10px; overflow-y: auto; }
+#sidebar::-webkit-scrollbar { display: none; }
+.side-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; color: var(--text2); font-size: 13px; font-weight: 500; border: none; background: none; width: 100%; text-align: left; transition: all .15s; margin-bottom: 2px; }
+.side-item:hover { background: var(--bg3); color: var(--text); }
+.side-item.active { background: rgba(99,102,241,.12); color: var(--indigo2); }
+.side-item i { font-size: 18px; flex-shrink: 0; }
+.side-section { font-size: 9px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; padding: 8px 12px 4px; margin-top: 6px; }
+.side-footer { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
+.side-user { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 8px; cursor: pointer; }
+.side-user:hover { background: var(--bg3); }
+.side-user-info { flex: 1; min-width: 0; }
+.side-user-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side-user-role { font-size: 10px; color: var(--text3); }
+
+/* CONTENT AREA */
+#content-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+/* PAGES */
+#pages { flex: 1; overflow: hidden; position: relative; }
+.page { position: absolute; inset: 0; overflow-y: auto; padding: 16px 16px 76px; display: none; }
+.page.active { display: block; }
+.page::-webkit-scrollbar { width: 4px; }
+.page::-webkit-scrollbar-track { background: transparent; }
+.page::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+/* PANELS — full content area on desktop, full screen on mobile */
+.panel { position: absolute; inset: 0; background: var(--bg); z-index: 40; overflow-y: auto; padding: 20px 20px 30px; display: none; flex-direction: column; }
+.panel.open { display: flex; }
+.panel::-webkit-scrollbar { width: 4px; }
+.panel::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+/* BOTTOM NAV (mobile only) */
+#bottomnav { background: var(--bg); border-top: 1px solid var(--border); display: flex; flex-shrink: 0; z-index: 50; padding-bottom: env(safe-area-inset-bottom); }
+.nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; cursor: pointer; color: var(--text3); font-size: 10px; font-weight: 500; border: none; background: none; transition: color .2s; }
+.nav-item.active { color: var(--indigo2); }
+.nav-item i { font-size: 20px; }
+
+/* DESKTOP BREAKPOINT */
+@media (min-width: 768px) {
+  #app { max-width: 100%; }
+  #sidebar { display: flex; }
+  #bottomnav { display: none; }
+  .page { padding: 28px 32px 28px; max-width: 900px; }
+  .panel { padding: 28px 32px 28px; }
+  /* wider grid layouts on desktop */
+  .desk-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .desk-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  /* login screen wider */
+  #login-screen > div { max-width: 440px; }
+  /* toast above nothing since no bottom nav */
+  .toast { bottom: 24px; }
+  /* cards slightly larger */
+  .card { padding: 18px; margin-bottom: 14px; }
+  /* text sizes up slightly */
+  .page h1, .page > div > div:first-child { font-size: 18px; }
+}
+
+/* LARGE DESKTOP — wider sidebar */
+@media (min-width: 1200px) {
+  #sidebar { width: 240px; }
+  .page { max-width: 1000px; }
+}
+
+/* CARDS */
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--card-radius); padding: 14px; margin-bottom: 10px; }
+.card-sm { background: var(--bg3); border-radius: 8px; padding: 10px; }
+
+/* BADGES */
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 500; }
+.badge-blue { background: rgba(99,102,241,.15); color: var(--indigo2); }
+.badge-green { background: rgba(16,185,129,.15); color: #34D399; }
+.badge-amber { background: rgba(245,158,11,.15); color: #FCD34D; }
+.badge-red { background: rgba(239,68,68,.15); color: #FCA5A5; }
+.badge-purple { background: rgba(139,92,246,.15); color: #C4B5FD; }
+.badge-gray { background: var(--bg3); color: var(--text2); border: 1px solid var(--border2); }
+
+/* PRIORITY */
+.pA { background: rgba(239,68,68,.15); color: #FCA5A5; border: 1px solid rgba(239,68,68,.3); border-radius: 4px; padding: 0 5px; font-size: 9px; font-weight: 700; }
+.pB { background: rgba(245,158,11,.15); color: #FCD34D; border: 1px solid rgba(245,158,11,.3); border-radius: 4px; padding: 0 5px; font-size: 9px; font-weight: 700; }
+.pC { background: var(--bg3); color: var(--text2); border: 1px solid var(--border2); border-radius: 4px; padding: 0 5px; font-size: 9px; font-weight: 700; }
+
+/* PROGRESS */
+.pbar-wrap { background: var(--bg3); border-radius: 4px; overflow: hidden; }
+.pbar { border-radius: 4px; transition: width .5s ease; }
+
+/* BUTTONS */
+.btn { display: inline-flex; align-items: center; gap: 5px; padding: 8px 14px; border-radius: var(--btn-radius); font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border2); background: var(--bg2); color: var(--text); font-family: 'DM Sans', sans-serif; transition: all .15s; }
+.btn:active { opacity: .8; transform: scale(.97); }
+.btn-primary { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+.btn-success { background: var(--emerald); color: #fff; border-color: var(--emerald); }
+.btn-danger { background: rgba(239,68,68,.15); color: #FCA5A5; border-color: rgba(239,68,68,.3); }
+.btn-purple { background: var(--purple); color: #fff; border-color: var(--purple); }
+.btn-sm { padding: 5px 10px; font-size: 11px; border-radius: 8px; }
+.btn-full { width: 100%; justify-content: center; padding: 12px; font-size: 13px; }
+
+/* INPUTS */
+.inp { width: 100%; padding: 10px 12px; border: 1px solid var(--border2); border-radius: 8px; background: var(--bg3); color: var(--text); font-size: 13px; outline: none; font-family: 'DM Sans', sans-serif; transition: border-color .2s; }
+.inp:focus { border-color: var(--indigo); }
+.inp::placeholder { color: var(--text3); }
+select.inp { cursor: pointer; }
+.inp-label { font-size: 11px; color: var(--text2); margin-bottom: 5px; font-weight: 500; letter-spacing: .3px; }
+.inp-group { margin-bottom: 12px; }
+
+/* LAYOUT */
+.row { display: flex; align-items: center; gap: 8px; }
+.row-between { display: flex; align-items: center; justify-content: space-between; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+/* TEXT */
+.text-xs { font-size: 10px; color: var(--text3); }
+.text-sm { font-size: 11px; color: var(--text2); }
+.text-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .8px; }
+.text-mono { font-family: 'DM Mono', monospace; }
+
+/* CHIPS / FILTER TABS */
+.chip-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; margin-bottom: 10px; }
+.chip-row::-webkit-scrollbar { display: none; }
+.chip { padding: 5px 12px; border-radius: 20px; font-size: 11px; border: 1px solid var(--border2); background: var(--bg2); color: var(--text2); cursor: pointer; white-space: nowrap; flex-shrink: 0; font-weight: 500; transition: all .15s; }
+.chip.active { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+
+/* SEGMENT TABS */
+.seg-tabs { display: flex; background: var(--bg3); border-radius: 10px; padding: 3px; margin-bottom: 12px; }
+.seg-tab { flex: 1; padding: 6px 4px; font-size: 11px; font-weight: 500; text-align: center; border-radius: 8px; cursor: pointer; border: none; background: none; color: var(--text2); transition: all .15s; }
+.seg-tab.active { background: var(--bg2); color: var(--indigo2); border: 1px solid var(--border); }
+
+/* LIST ITEMS */
+.list-item { padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 10px; }
+.list-item:last-child { border-bottom: none; padding-bottom: 0; }
+
+/* STATUS DOTS */
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.dot-green { background: var(--emerald); }
+.dot-amber { background: var(--amber); animation: pulse 1.5s infinite; }
+.dot-blue { background: var(--blue); }
+.dot-gray { background: var(--text3); }
+
+/* COMPANY LIST */
+.co-list { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--card-radius); overflow: hidden; margin-bottom: 10px; }
+.co-row { border-bottom: 1px solid var(--border); }
+.co-row:last-child { border-bottom: none; }
+.co-row-head { display: flex; align-items: center; padding: 9px 12px; cursor: pointer; gap: 8px; transition: background .1s; }
+.co-row-head:active { background: var(--bg3); }
+.co-num { width: 20px; font-size: 10px; color: var(--text3); text-align: right; flex-shrink: 0; }
+.co-info { flex: 1; min-width: 0; }
+.co-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.co-sub { font-size: 10px; color: var(--text3); margin-top: 1px; }
+.co-meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.co-ach { text-align: right; }
+.co-ach-val { font-size: 11px; font-weight: 600; }
+.co-ach-tgt { font-size: 9px; color: var(--text3); }
+.co-expand { background: var(--bg3); border-top: 1px solid var(--border); padding: 10px 12px; display: none; }
+.co-expand.open { display: block; }
+.expand-link { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--indigo2); cursor: pointer; margin-top: 8px; font-weight: 500; }
+
+/* PLAN ITEMS */
+.plan-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.plan-item:last-child { border-bottom: none; }
+.plan-time { font-size: 11px; font-weight: 500; color: var(--text2); width: 38px; flex-shrink: 0; margin-top: 2px; font-family: 'DM Mono', monospace; }
+.plan-body { flex: 1; min-width: 0; }
+.plan-co { font-size: 12px; font-weight: 500; }
+.plan-meta { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+/* CAL EVENTS */
+.cal-ev { display: flex; align-items: center; gap: 8px; padding: 9px 11px; background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.2); border-radius: 8px; margin-bottom: 6px; }
+.ai-ev { display: flex; align-items: flex-start; gap: 8px; padding: 9px 11px; background: rgba(139,92,246,.1); border: 1px solid rgba(139,92,246,.2); border-radius: 8px; margin-bottom: 6px; }
+
+/* SLAB */
+.slab { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 7px; transition: all .2s; }
+.slab.active-slab { border-color: var(--indigo); background: rgba(99,102,241,.08); }
+.slab.done-slab { border-color: rgba(16,185,129,.3); background: rgba(16,185,129,.06); }
+.slab-circle { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; flex-shrink: 0; }
+
+/* VEHICLE TAGS */
+.v-2w { display: inline-flex; align-items: center; gap: 3px; font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(245,158,11,.15); color: #FCD34D; border: 1px solid rgba(245,158,11,.2); }
+.v-4w { display: inline-flex; align-items: center; gap: 3px; font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(59,130,246,.15); color: #93C5FD; border: 1px solid rgba(59,130,246,.2); }
+.v-pt { display: inline-flex; align-items: center; gap: 3px; font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(16,185,129,.15); color: #6EE7B7; border: 1px solid rgba(16,185,129,.2); }
+
+/* PANEL (full screen overlay) */
+.panel { position: absolute; inset: 0; background: var(--bg); z-index: 40; overflow-y: auto; padding: 14px 14px 30px; display: none; flex-direction: column; }
+.panel.open { display: flex; }
+.panel::-webkit-scrollbar { display: none; }
+.panel-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.panel-back { background: none; border: none; color: var(--text2); cursor: pointer; padding: 4px; display: flex; }
+.panel-title { font-size: 15px; font-weight: 600; flex: 1; }
+
+/* INFO BOXES */
+.info-box { background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.2); border-radius: 8px; padding: 10px 12px; display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+.warn-box { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2); border-radius: 8px; padding: 10px 12px; display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+.success-box { background: rgba(16,185,129,.08); border: 1px solid rgba(16,185,129,.2); border-radius: 8px; padding: 10px 12px; display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+
+/* CALENDAR */
+.cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; margin-bottom: 8px; }
+.cal-day-hdr { text-align: center; font-size: 9px; color: var(--text3); font-weight: 600; padding: 3px 0; text-transform: uppercase; }
+.cal-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 11px; cursor: pointer; position: relative; color: var(--text2); transition: all .15s; }
+.cal-day:hover { background: var(--bg3); }
+.cal-day.today { background: var(--indigo); color: #fff; font-weight: 600; }
+.cal-day.has-ev::after { content: ''; width: 3px; height: 3px; background: var(--amber); border-radius: 50%; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); }
+.cal-day.today.has-ev::after { background: rgba(255,255,255,.7); }
+.cal-day.sunday { color: var(--red); }
+
+/* ON FIELD BANNER */
+.on-field-banner { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 10px; transition: all .3s; }
+.on-field-banner.active { background: rgba(16,185,129,.08); border-color: rgba(16,185,129,.3); }
+.field-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text3); flex-shrink: 0; transition: background .3s; }
+.field-dot.active { background: var(--emerald); animation: pulse 1.5s infinite; }
+
+/* VEHICLE SELECTOR */
+.vehicle-opts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.vehicle-opt { padding: 12px 8px; border: 2px solid var(--border); border-radius: 10px; text-align: center; cursor: pointer; transition: all .15s; }
+.vehicle-opt.selected { border-color: var(--indigo); background: rgba(99,102,241,.1); }
+.vehicle-opt i { font-size: 22px; display: block; margin-bottom: 4px; }
+.vehicle-opt span { font-size: 9px; font-weight: 600; color: var(--text2); display: block; }
+.vehicle-opt .rate { font-size: 10px; color: var(--indigo2); margin-top: 2px; font-weight: 600; }
+
+/* RMKS BOX */
+.rmk-box { background: var(--bg3); border-radius: 8px; padding: 10px; font-size: 11px; color: var(--text2); line-height: 1.6; }
+
+/* LOADING */
+.loading { display: flex; align-items: center; justify-content: center; padding: 32px 0; flex-direction: column; gap: 10px; }
+.spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--indigo); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+/* EMPTY STATE */
+.empty { text-align: center; padding: 40px 20px; }
+.empty i { font-size: 36px; color: var(--text3); display: block; margin-bottom: 12px; }
+.empty p { font-size: 13px; color: var(--text2); }
+.empty small { font-size: 11px; color: var(--text3); display: block; margin-top: 4px; }
+
+/* LOGIN */
+#login-screen { position: fixed; inset: 0; background: var(--bg); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 32px 24px 32px; overflow-y: auto; }
+#login-screen > div { width: 100%; max-width: 420px; margin: auto; }
+.login-logo { width: 64px; height: 64px; background: var(--indigo); border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 28px; color: #fff; margin: 0 auto 16px; }
+.login-title { font-size: 24px; font-weight: 700; text-align: center; letter-spacing: -0.5px; }
+.login-sub { font-size: 13px; color: var(--text2); text-align: center; margin-top: 4px; margin-bottom: 32px; }
+.user-card { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; cursor: pointer; transition: all .15s; background: var(--bg2); }
+.user-card:active { transform: scale(.98); }
+.user-card.selected { border-color: var(--indigo); background: rgba(99,102,241,.1); }
+.user-card-av { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #fff; flex-shrink: 0; }
+.user-card-info { flex: 1; }
+.user-card-name { font-size: 13px; font-weight: 500; }
+.user-card-role { font-size: 11px; color: var(--text2); }
+
+/* TOAST */
+.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; font-size: 12px; font-weight: 500; z-index: 200; opacity: 0; transition: all .3s; white-space: nowrap; max-width: 300px; text-align: center; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.success { border-color: rgba(16,185,129,.4); color: #34D399; }
+.toast.error { border-color: rgba(239,68,68,.4); color: #FCA5A5; }
+
+/* SEARCH */
+.search-wrap { position: relative; margin-bottom: 10px; }
+.search-wrap i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--text3); pointer-events: none; }
+.search-inp { width: 100%; padding: 8px 12px 8px 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg3); color: var(--text); font-size: 12px; outline: none; font-family: 'DM Sans', sans-serif; }
+.search-inp:focus { border-color: var(--indigo); }
+.search-inp::placeholder { color: var(--text3); }
+
+/* UPLOAD ZONE */
+.upload-zone { border: 2px dashed var(--border2); border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; transition: border-color .2s; }
+.upload-zone:hover { border-color: var(--indigo); }
+</style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div style="width:100%;max-width:420px;padding:16px 0 32px">
+    <div style="text-align:center;padding:24px 0 28px">
+      <div class="login-logo"><i class="ti ti-trending-up"></i></div>
+      <div class="login-title">FieldForce Pro</div>
+      <div class="login-sub">Shakti Machinery — B2B Field Sales</div>
+    </div>
+    <div class="text-label" style="margin-bottom:10px">Select your profile</div>
+    <div id="user-list-login"><div class="loading"><div class="spinner"></div><span class="text-sm">Loading team...</span></div></div>
+    <button class="btn btn-primary btn-full" style="margin-top:16px" onclick="doLogin()">Login to Dashboard →</button>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" style="display:none">
+  <!-- TOP BAR -->
+  <div id="topbar">
+    <div class="topbar-logo">
+      <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
+      <span class="topbar-title">FieldForce Pro</span>
+      <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v2.3</span>
+    </div>
+    <div class="topbar-right">
+      <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
+      <div class="notif-btn" onclick="showToast('No new notifications','')"><i class="ti ti-bell" style="font-size:20px"></i><div class="notif-dot" id="notif-dot"></div></div>
+      <div class="user-av" id="top-av" onclick="logout()"></div>
+    </div>
+  </div>
+
+  <!-- MAIN BODY -->
+  <div id="main-body">
+
+    <!-- SIDEBAR (desktop) -->
+    <div id="sidebar">
+      <div id="sidebar-nav"></div>
+      <div class="side-footer">
+        <div class="side-user" onclick="logout()">
+          <div class="user-av" id="side-av" style="width:32px;height:32px;font-size:12px"></div>
+          <div class="side-user-info">
+            <div class="side-user-name" id="side-name"></div>
+            <div class="side-user-role" id="side-role"></div>
+          </div>
+          <i class="ti ti-logout" style="font-size:16px;color:var(--text3)"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENT AREA -->
+    <div id="content-area">
+      <div id="pages">
+        <div class="page active" id="page-home"></div>
+        <div class="page" id="page-companies"></div>
+        <div class="page" id="page-plan"></div>
+        <div class="page" id="page-log"></div>
+        <div class="page" id="page-targets"></div>
+        <div class="page" id="page-gps"></div>
+        <div class="page" id="page-team"></div>
+        <div class="page" id="page-cal"></div>
+      </div>
+
+      <!-- PANELS (sit inside content area) -->
+      <div class="panel" id="panel-co"></div>
+      <div class="panel" id="panel-visit"></div>
+      <div class="panel" id="panel-addvisit"></div>
+      <div class="panel" id="panel-addco"></div>
+      <div class="panel" id="panel-upl"></div>
+      <div class="panel" id="panel-card"></div>
+      <div class="panel" id="panel-addcal"></div>
+      <div class="panel" id="panel-vehicle"></div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM NAV (mobile only) -->
+  <div id="bottomnav"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- PWA Install Banner -->
+<div id="install-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#1E293B;border-top:1px solid #334155;padding:12px 16px;z-index:300;display:none;align-items:center;gap:12px">
+  <div style="width:36px;height:36px;background:#4F46E5;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+    <i class="ti ti-trending-up" style="font-size:18px;color:#fff"></i>
+  </div>
+  <div style="flex:1">
+    <div style="font-size:12px;font-weight:600;color:#F1F5F9">Install FieldForce Pro</div>
+    <div style="font-size:10px;color:#94A3B8">Add to home screen for quick access</div>
+  </div>
+  <button id="install-btn" class="btn btn-primary btn-sm" style="flex-shrink:0">Install</button>
+  <button onclick="document.getElementById('install-banner').style.display='none'" style="background:none;border:none;color:#64748B;cursor:pointer;padding:4px"><i class="ti ti-x" style="font-size:16px"></i></button>
+</div>
+
+<script>
+// PWA Install prompt
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const banner = document.getElementById('install-banner');
+  if(banner) banner.style.display = 'flex';
+});
+document.getElementById('install-btn')?.addEventListener('click', async () => {
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const result = await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  document.getElementById('install-banner').style.display = 'none';
+});
+window.addEventListener('appinstalled', () => {
+  document.getElementById('install-banner').style.display = 'none';
+  deferredPrompt = null;
+  showToast('App installed successfully ✓', 'success');
+});
+
+// Register service worker
+if('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    // Works for both root (Netlify) and subdirectory (GitHub Pages)
+    const swPath = location.pathname.includes('/fieldforce') ? '/fieldforce/sw.js' : '/sw.js';
+    navigator.serviceWorker.register(swPath)
+      .then(reg => {
+        reg.update();
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          window.location.reload();
+        });
+      })
+      .catch(err => console.log('SW failed:', err));
+  });
+}
+</script>
+
+<script>
+// ── CONFIG ───────────────────────────────────────────────────────────────────
+const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
+const CLAUDE_KEY = ''; // Add your Claude API key here
+const KM_RATES = { 'two-wheeler': 3.5, 'four-wheeler': 8, 'public-transport': 3.5 };
+
+// ── MASTER DATA ───────────────────────────────────────────────────────────────
+const INDUSTRIES = [
+  'Airports',
+  'Construction — Building Projects',
+  'Construction — Metro Projects',
+  'Construction — Rail Projects',
+  'Construction — Roads and Bridges',
+  'Construction — Others',
+  'Facility Management Companies',
+  'Gas Distribution Companies',
+  'Healthcare and Hospitality',
+  'Manufacturing — Automobile',
+  'Manufacturing — Bio-Medical and Pharma',
+  'Manufacturing — Defence',
+  'Manufacturing — Drone',
+  'Manufacturing — EMS',
+  'Manufacturing — FMCG',
+  'Manufacturing — Food and Beverages',
+  'Manufacturing — Solar',
+  'Manufacturing — Tiles',
+  'Manufacturing — Others',
+  'Manpower Management Companies',
+  'Power Distribution Company',
+  'Power Plants',
+  'Power Transmission',
+  'PSUs',
+  'Refinery',
+  'Renewable Energy',
+  'Road Asset Management Companies',
+  'Smart Metering',
+  'Other',
+];
+
+const PRIORITIES = ['A — High priority', 'B — Medium priority', 'C — Low priority'];
+const PERIODS = ['Annual', 'Monthly', 'Weekly'];
+const VISIT_STATUS = ['planned', 'in-progress', 'completed', 'not-visited', 'unplanned', 'cancelled'];
+const PO_STATUS = ['pending', 'verified', 'rejected'];
+const APPROVAL_STATUS = ['pending', 'approved', 'rejected'];
+const TA_STATUS = ['submitted', 'approved', 'flagged'];
+const VEHICLE_TYPES = ['two-wheeler', 'four-wheeler', 'public-transport'];
+const USER_ROLES = ['rep', 'manager'];
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let STATE = {
+  user: null,
+  users: [], companies: [], targets: [], visits: [], planItems: [],
+  contacts: [], pos: [], gpsLogs: [], taClaims: [], calEvents: [], approvals: [],
+  page: 'home', period: 'annual', cpf: 'all', pld: todayStr(), vd: todayStr(),
+  exp: null, showAI: false, onField: false, fieldVehicle: null, viewRep: null,
+  logView: 'mine', planView: 'mine', coView: 'all',
+  calMonth: { y: new Date().getFullYear(), m: new Date().getMonth() },
+  gpsWatcher: null, gpsTrail: [], currentDayKm: 0,
+};
+
+// ── UTILS ────────────────────────────────────────────────────────────────────
+function todayStr() { return new Date().toISOString().slice(0,10); }
+function nowStr() { return new Date().toTimeString().slice(0,5); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function fmt(n) { n = Number(n)||0; if(n>=1e7) return '₹'+(n/1e7).toFixed(2)+'Cr'; if(n>=1e5) return '₹'+(n/1e5).toFixed(2)+'L'; if(n>=1e3) return '₹'+(n/1e3).toFixed(1)+'K'; return '₹'+n; }
+function fmtINR(n) { return '₹'+Math.round(Number(n)||0).toLocaleString('en-IN'); }
+function dsi(d) { if(!d) return null; return Math.floor((Date.now()-new Date(d))/86400000); }
+function pbc(p) { return p>=80?'#10B981':p>=50?'#6366F1':p>=25?'#F59E0B':'#EF4444'; }
+function pb(p, h=5) { return `<div class="pbar-wrap" style="height:${h}px"><div class="pbar" style="width:${Math.min(p,100)}%;height:${h}px;background:${pbc(p)}"></div></div>`; }
+function pri(p) { return `<span class="p${p}">${p}</span>`; }
+function dot(s) { const c={completed:'dot-green','in-progress':'dot-amber',planned:'dot-blue'}; return `<div class="dot ${c[s]||'dot-gray'}"></div>`; }
+function sbg(s) { const m={completed:['badge-green','Done'],'in-progress':['badge-amber','Active'],planned:['badge-blue','Planned'],cancelled:['badge-red','Cancelled']}; const[c,l]=m[s]||['badge-gray',s]; return `<span class="badge ${c}">${l}</span>`; }
+function calcInc(a) { a=Number(a)||0; if(a<=1e6) return 0; if(a<=3e6) return (a-1e6)*0.01; return 20000+(a-3e6)*0.015; }
+function kmRate(vh) { return KM_RATES[vh]||3.5; }
+function taAmt(km,vh) { return Math.round((Number(km)||0)*kmRate(vh)); }
+function weekRange(d) { const dt=new Date(d); const day=dt.getDay(); const diff=day===0?-6:1-day; const mon=new Date(dt); mon.setDate(dt.getDate()+diff); const sat=new Date(mon); sat.setDate(mon.getDate()+5); return { start:mon.toISOString().slice(0,10), end:sat.toISOString().slice(0,10) }; }
+function haversineKm(lat1,lon1,lat2,lon2) { const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180,a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2; return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); }
+function vehicleTag(vh) { if(vh==='four-wheeler') return `<span class="v-4w"><i class="ti ti-car" style="font-size:10px"></i>₹8/km</span>`; if(vh==='public-transport') return `<span class="v-pt"><i class="ti ti-bus" style="font-size:10px"></i>₹3.5/km</span>`; return `<span class="v-2w"><i class="ti ti-motorbike" style="font-size:10px"></i>₹3.5/km</span>`; }
+function co(id) { return STATE.companies.find(c=>c.id===id)||{}; }
+function rep(id) { return STATE.users.find(u=>u.id===id)||{}; }
+function myReps() { return STATE.users.filter(u=>u.role==='rep'); }
+
+// ── TOAST ────────────────────────────────────────────────────────────────────
+function showToast(msg, type='') {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show '+(type||'');
+  setTimeout(()=>t.className='toast',2500);
+}
+
+// ── API CALLS ────────────────────────────────────────────────────────────────
+async function apiRead(sheet) {
+  try {
+    const r = await fetch(`${API}?action=read&sheet=${sheet}`);
+    const d = await r.json();
+    return d.success ? d.data : [];
+  } catch(e) { console.error('Read error',sheet,e); return []; }
+}
+async function apiWrite(sheet, payload) {
+  try {
+    const r = await fetch(`${API}?action=write&sheet=${sheet}`, { method:'POST', body:JSON.stringify(payload) });
+    const d = await r.json();
+    if(!d.success) showToast('Save failed: '+d.error,'error');
+    return d.success;
+  } catch(e) { showToast('Network error','error'); return false; }
+}
+async function apiUpdate(sheet, payload) {
+  try {
+    const r = await fetch(`${API}?action=update&sheet=${sheet}`, { method:'POST', body:JSON.stringify(payload) });
+    const d = await r.json();
+    return d.success;
+  } catch(e) { return false; }
+}
+
+// ── DATA LOADING ─────────────────────────────────────────────────────────────
+async function loadAll() {
+  const [users,companies,targets,visits,planItems,contacts,pos,gpsLogs,taClaims,calEvents,approvals] = await Promise.all([
+    apiRead('Users'), apiRead('Companies'), apiRead('Targets'),
+    apiRead('Visits'), apiRead('VisitPlan'), apiRead('Contacts'),
+    apiRead('POs'), apiRead('GPSLogs'), apiRead('TAClaims'),
+    apiRead('CalendarEvents'), apiRead('Approvals')
+  ]);
+  // Normalise all date fields to YYYY-MM-DD strings to prevent type mismatch
+  function normDate(d) {
+    if(!d) return '';
+    if(d instanceof Date) return d.toISOString().slice(0,10);
+    const s = String(d).trim();
+    // Handle DD/MM/YYYY format
+    if(s.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+      const [dd,mm,yyyy] = s.split('/');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return s.slice(0,10);
+  }
+  visits.forEach(v=>{ v.date=normDate(v.date); v.repId=String(v.repId||'').trim(); v.companyId=String(v.companyId||'').trim(); });
+  planItems.forEach(p=>{ p.date=normDate(p.date); p.repId=String(p.repId||'').trim(); p.companyId=String(p.companyId||'').trim(); p.status=String(p.status||'planned').trim(); });
+  calEvents.forEach(e=>{ e.date=normDate(e.date); e.repId=String(e.repId||'').trim(); });
+  gpsLogs.forEach(g=>{ g.date=normDate(g.date); g.repId=String(g.repId||'').trim(); });
+
+  STATE.users=users;
+  STATE.companies=companies.filter(c=>String(c.active||'').trim().toUpperCase()!=='FALSE');
+  STATE.targets=targets.filter(t=>String(t.active||'').trim().toUpperCase()!=='FALSE');
+  STATE.visits=visits; STATE.planItems=planItems; STATE.contacts=contacts;
+  STATE.pos=pos; STATE.gpsLogs=gpsLogs; STATE.taClaims=taClaims;
+  STATE.calEvents=calEvents; STATE.approvals=approvals;
+  if(!STATE.viewRep && STATE.user.role==='manager') STATE.viewRep = myReps()[0]?.id;
+}
+
+async function refreshData() {
+  showToast('Refreshing...','');
+  await loadAll();
+  renderPage(STATE.page);
+  showToast('Data refreshed ✓','success');
+}
+let selectedLoginId = null;
+async function initLogin() {
+  const users = await apiRead('Users');
+  STATE.users = users;
+
+  // Check if user was previously logged in — auto-login
+  const savedId = localStorage.getItem('ffp_user_id');
+  if(savedId && users.find(u=>u.id===savedId)) {
+    selectedLoginId = savedId;
+    await doLogin(true); // silent auto-login
+    return;
+  }
+
+  const el = document.getElementById('user-list-login');
+  el.innerHTML = users.map(u => `
+    <div class="user-card" id="uc-${u.id}" onclick="selectLoginUser('${u.id}',this)">
+      <div class="user-card-av" style="background:${u.role==='manager'?'#6366F1':'#10B981'}">${u.avatar||u.name.slice(0,2).toUpperCase()}</div>
+      <div class="user-card-info">
+        <div class="user-card-name">${u.name}</div>
+        <div class="user-card-role" style="display:flex;align-items:center;gap:5px">
+          <span style="width:7px;height:7px;border-radius:50%;background:${u.role==='manager'?'#6366F1':'#10B981'};display:inline-block;flex-shrink:0"></span>
+          ${u.role==='manager'?'Manager':'Sales Rep'}
+        </div>
+      </div>
+      <i class="ti ti-check" id="chk-${u.id}" style="color:var(--indigo2);font-size:18px;display:none"></i>
+    </div>`).join('');
+}
+function selectLoginUser(id, el) {
+  selectedLoginId = id;
+  document.querySelectorAll('.user-card').forEach(c=>c.classList.remove('selected'));
+  document.querySelectorAll('[id^="chk-"]').forEach(c=>c.style.display='none');
+  el.classList.add('selected');
+  const chk = document.getElementById('chk-'+id);
+  if(chk) chk.style.display='block';
+}
+async function doLogin(silent=false) {
+  if(!selectedLoginId) { showToast('Please select a profile','error'); return; }
+  STATE.user = STATE.users.find(u=>u.id===selectedLoginId);
+  if(!STATE.user) { showToast('User not found','error'); return; }
+
+  // Save session so app remembers who is logged in
+  localStorage.setItem('ffp_user_id', selectedLoginId);
+
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='flex';
+  document.getElementById('top-av').textContent = STATE.user.avatar||STATE.user.name.slice(0,2).toUpperCase();
+  document.getElementById('top-av').style.background = STATE.user.role==='manager'?'#6366F1':'#10B981';
+  renderNav();
+  if(!silent) showToast('Loading data...','');
+  await loadAll();
+  navigate('home');
+}
+function logout() {
+  if(confirm('Log out?')) {
+    localStorage.removeItem('ffp_user_id');
+    STATE.user=null;
+    selectedLoginId=null;
+    document.getElementById('login-screen').style.display='flex';
+    document.getElementById('app').style.display='none';
+    stopGPS();
+    initLogin();
+  }
+}
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+function renderNav() {
+  const isM = STATE.user.role==='manager';
+
+  // All pages
+  const allPages = isM
+    ? [['home','home','Home'],['team','users','Team'],['companies','building','Companies'],['plan','calendar-plus','My Plan'],['log','clipboard-list','My Visits'],['targets','target','Targets'],['gps','truck','GPS & Travel'],['cal','calendar','Calendar']]
+    : [['home','home','Home'],['companies','building','Companies'],['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['targets','target','Targets'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']];
+
+  // Mobile bottom nav — first 5 pages
+  const mobilePages = allPages.slice(0,5);
+  document.getElementById('bottomnav').innerHTML = mobilePages.map(([id,ic,lb])=>
+    `<button class="nav-item${STATE.page===id?' active':''}" id="ni-${id}" onclick="navigate('${id}')">
+      <i class="ti ti-${ic}"></i><span>${lb.split(' ')[0]}</span>
+    </button>`).join('');
+
+  // Sidebar groups
+  const groups = isM
+    ? {
+        'Overview':    [['home','home','Home'],['team','users','Team Overview']],
+        'My field':    [['plan','calendar-plus','My Daily Plan'],['log','clipboard-list','My Visit Log'],['gps','map-pin','My GPS & TA']],
+        'Management':  [['companies','building','Companies'],['targets','target','Targets'],['cal','calendar','Calendar']]
+      }
+    : {
+        'Dashboard':   [['home','home','Home']],
+        'Field work':  [['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['companies','building','Companies']],
+        'Performance': [['targets','target','Targets'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']]
+      };
+
+  let sideHtml = '';
+  for(const [section, items] of Object.entries(groups)) {
+    sideHtml += `<div class="side-section">${section}</div>`;
+    sideHtml += items.map(([id,ic,lb])=>
+      `<button class="side-item${STATE.page===id?' active':''}" id="si-${id}" onclick="navigate('${id}')">
+        <i class="ti ti-${ic}"></i><span>${lb}</span>
+      </button>`).join('');
+  }
+  document.getElementById('sidebar-nav').innerHTML = sideHtml;
+
+  // User info in sidebar footer
+  const av = STATE.user.avatar||STATE.user.name.slice(0,2).toUpperCase();
+  document.getElementById('side-av').textContent = av;
+  document.getElementById('side-av').style.background = isM?'#6366F1':'#10B981';
+  document.getElementById('side-name').textContent = STATE.user.name;
+  document.getElementById('side-role').textContent = isM?'Manager':'Sales Rep';
+  document.getElementById('topbar-org').style.display = 'inline';
+}
+
+function navigate(p) {
+  STATE.page=p; closeAllPanels();
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  const pg=document.getElementById('page-'+p); if(pg) pg.classList.add('active');
+  renderPage(p);
+  // Update active state on both nav types
+  document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.side-item').forEach(x=>x.classList.remove('active'));
+  const nb=document.getElementById('ni-'+p); if(nb) nb.classList.add('active');
+  const sb=document.getElementById('si-'+p); if(sb) sb.classList.add('active');
+}
+function renderPage(p) {
+  const map = {
+    home: renderHome, companies: renderCompanies, plan: renderPlan,
+    log: renderLog, targets: renderTargets, gps: renderGPS,
+    team: renderTeam, cal: renderCal
+  };
+  if(map[p]) map[p]();
+}
+
+// ── PANELS ────────────────────────────────────────────────────────────────────
+function openPanel(id) { document.getElementById('panel-'+id).classList.add('open'); }
+function closePanel(id) { document.getElementById('panel-'+id).classList.remove('open'); }
+function closeAllPanels() { document.querySelectorAll('.panel').forEach(p=>p.classList.remove('open')); }
+function backBtn(panelId) { return `<div class="panel-head"><button class="panel-back" onclick="closePanel('${panelId}')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title"></span></div>`; }
+
+// ── HOME ──────────────────────────────────────────────────────────────────────
+function renderHome() {
+  const el = document.getElementById('page-home');
+  const isM = STATE.user.role==='manager';
+  if(isM) { renderMgrHome(el); } else { renderRepHome(el); }
+}
+function renderRepHome(el) {
+  const u = STATE.user;
+  const mt = STATE.targets.filter(t=>t.repId===u.id&&t.period==='monthly');
+  const monthTarget = mt.reduce((s,t)=>s+Number(t.saleTarget||0),0);
+  const myPOs = STATE.pos.filter(p=>p.repId===u.id&&p.status==='verified');
+  const achieved = myPOs.reduce((s,p)=>s+Number(p.amount||0),0);
+  const pc = monthTarget ? Math.round(achieved/monthTarget*100) : 0;
+  const inc = calcInc(achieved);
+  const todayV = STATE.visits.filter(v=>v.repId===u.id&&v.date===todayStr());
+  const tmrPlan = STATE.planItems.filter(p=>p.repId===u.id&&p.date===STATE.pld&&p.source==='manual');
+  const wk = weekRange(todayStr());
+  const weekLogs = STATE.gpsLogs.filter(g=>g.repId===u.id&&g.date>=wk.start&&g.date<=wk.end);
+  const weekKm = weekLogs.reduce((s,g)=>s+Number(g.totalKm||0),0);
+  const weekTA = weekLogs.reduce((s,g)=>s+Number(g.taAmount||0),0);
+
+  el.innerHTML = `
+    <div class="row-between" style="margin-bottom:14px">
+      <div><div style="font-size:16px;font-weight:600;letter-spacing:-.3px">Good morning, ${u.name.split(' ')[0]} 👋</div><div class="text-sm">${new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'short',year:'numeric'})}</div></div>
+      <div style="text-align:right"><div class="text-xs">Today's visits</div><div style="font-size:22px;font-weight:700">${todayV.length}</div></div>
+    </div>
+    <div class="card" style="border-color:rgba(99,102,241,.3);background:linear-gradient(135deg,rgba(99,102,241,.08),var(--bg2));margin-bottom:10px">
+      <div class="text-label" style="color:var(--indigo2);margin-bottom:6px">Monthly target — ${new Date().toLocaleString('default',{month:'long'})}</div>
+      <div class="row-between" style="margin-bottom:8px">
+        <div><div style="font-size:22px;font-weight:700">${fmt(achieved)}</div><div class="text-sm">of ${fmt(monthTarget)}</div></div>
+        <div style="text-align:right"><div style="font-size:22px;font-weight:700;color:${pbc(pc)}">${pc}%</div><div style="font-size:10px;color:#34D399">Incentive: ${fmt(inc)}</div></div>
+      </div>
+      ${pb(pc,6)}
+      <div class="text-xs" style="margin-top:6px">${monthTarget>0?fmt(monthTarget-achieved)+' remaining':'Set monthly targets to track progress'}</div>
+    </div>
+    <div class="grid2 desk-grid2" style="margin-bottom:10px">
+      <div class="card" style="padding:12px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--indigo2)">${STATE.targets.filter(t=>t.repId===u.id&&t.period==='annual').length}</div><div class="text-xs">Annual targets</div></div>
+      <div class="card" style="padding:12px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--amber)">${STATE.targets.filter(t=>t.repId===u.id&&t.period==='weekly').length}</div><div class="text-xs">Week targets</div></div>
+    </div>
+    <div class="card">
+      <div class="row-between" style="margin-bottom:10px"><span style="font-size:13px;font-weight:600">Today's visits</span></div>
+      ${todayV.length ? todayV.map(v=>`<div class="row-between" style="padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openVisitDetail('${v.id}')"><div class="row">${dot(v.status)}<div><div style="font-size:12px;font-weight:500">${co(v.companyId).name||'Unknown'}</div><div class="text-xs">${v.time} · ${v.meetingWith}</div></div></div>${sbg(v.status)}</div>`).join('') : '<div class="empty" style="padding:16px 0"><i class="ti ti-calendar-off" style="font-size:24px"></i><p>No visits today</p></div>'}
+    </div>
+    <div class="card">
+      <div class="row-between" style="margin-bottom:8px"><span style="font-size:13px;font-weight:600">Tomorrow's plan</span><button class="btn btn-primary btn-sm" onclick="navigate('plan')">Open planner →</button></div>
+      ${tmrPlan.length ? tmrPlan.map(p=>`<div class="plan-item"><div class="plan-time">${p.time}</div><div class="plan-body"><div class="plan-co">${co(p.companyId).name||'Unknown'}</div><div class="plan-meta">${p.meetingWith} · ${(p.itemsToPitch||'').substring(0,35)}${(p.itemsToPitch||'').length>35?'…':''}</div></div></div>`).join('') : `<div class="text-sm" style="text-align:center;padding:10px;color:var(--text3)">Nothing planned yet — <span style="color:var(--indigo2);cursor:pointer" onclick="navigate('plan')">start planning</span></div>`}
+    </div>
+    <div class="card" style="border-color:rgba(245,158,11,.3)">
+      <div class="row-between" style="margin-bottom:8px"><span class="text-label" style="color:var(--amber)">This week's travel</span>${STATE.onField?vehicleTag(STATE.fieldVehicle):''}</div>
+      <div class="grid3" style="text-align:center">
+        <div><div style="font-size:16px;font-weight:700">${weekKm.toFixed(1)}</div><div class="text-xs">Total KMs</div></div>
+        <div><div style="font-size:16px;font-weight:700;color:var(--amber)">${STATE.onField?'₹'+kmRate(STATE.fieldVehicle)+'/km':'—'}</div><div class="text-xs">Today's rate</div></div>
+        <div><div style="font-size:16px;font-weight:700;color:var(--emerald)">${fmtINR(weekTA)}</div><div class="text-xs">TA earned</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px">Quick actions</div>
+      <div class="row" style="flex-wrap:wrap;gap:6px">
+        <button class="btn btn-primary btn-sm" onclick="navigate('plan')"><i class="ti ti-calendar-plus"></i> Plan visits</button>
+        <button class="btn btn-sm" style="border-color:rgba(139,92,246,.3);color:var(--purple)" onclick="navigate('cal')"><i class="ti ti-calendar"></i> Calendar</button>
+        <button class="btn btn-sm" onclick="navigate('gps')"><i class="ti ti-map-pin"></i> GPS / TA</button>
+        <button class="btn btn-sm" onclick="openCardScanner()"><i class="ti ti-camera"></i> Scan card</button>
+      </div>
+    </div>`;
+}
+function renderMgrHome(el) {
+  const reps = myReps();
+  const pend = STATE.approvals.filter(a=>a.status==='pending').length + STATE.pos.filter(p=>p.status==='pending').length;
+  const myTodayV = STATE.visits.filter(v=>v.repId===STATE.user.id&&v.date===todayStr());
+  const myPlan = STATE.planItems.filter(p=>p.repId===STATE.user.id&&p.date===todayStr());
+  const myT = STATE.targets.filter(t=>t.repId===STATE.user.id&&t.period==='monthly');
+  const myMthTgt = myT.reduce((s,t)=>s+Number(t.saleTarget||0),0);
+  const myMthAch = STATE.pos.filter(p=>p.repId===STATE.user.id&&p.status==='verified').reduce((s,p)=>s+Number(p.amount||0),0);
+  el.innerHTML = `
+    <div style="margin-bottom:14px"><div style="font-size:16px;font-weight:600;letter-spacing:-.3px">Manager Dashboard</div><div class="text-sm">Good morning, ${STATE.user.name.split(' ')[0]} 👋 · ${new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'short'})}</div></div>
+
+    <!-- Manager's own field activity -->
+    ${myMthTgt>0||myPlan.length>0?`<div class="card" style="border-color:rgba(99,102,241,.3);margin-bottom:10px">
+      <div class="row-between" style="margin-bottom:8px"><span class="text-label" style="color:var(--indigo2)">My field activity today</span><button class="btn btn-primary btn-sm" onclick="navigate('plan')">Open my plan →</button></div>
+      ${myPlan.length?myPlan.map(p=>{const c=co(p.companyId);return`<div class="row-between" style="padding:6px 0;border-bottom:1px solid var(--border)"><div class="row">${dot(p.status||'planned')}<div><div style="font-size:11px;font-weight:500">${c.name||'Unknown'}</div><div class="text-xs">${p.time} · ${p.meetingWith||'TBD'}</div></div></div>${sbg(p.status||'planned')}</div>`}).join(''):`<div class="text-sm" style="color:var(--text3);text-align:center;padding:8px 0">No visits planned for today — <span style="color:var(--indigo2);cursor:pointer" onclick="navigate('plan')">plan your visits</span></div>`}
+    </div>`:''}
+
+    <div class="grid2 desk-grid2" style="margin-bottom:10px">
+      <div class="card" style="padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--indigo2)">${reps.length}</div><div class="text-xs">Sales reps</div></div>
+      <div class="card" style="padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--indigo2)">${STATE.companies.length}</div><div class="text-xs">Companies</div></div>
+      <div class="card" style="padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--amber)">${pend}</div><div class="text-xs">Pending actions</div></div>
+      <div class="card" style="padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--emerald)">${STATE.visits.filter(v=>v.date===todayStr()).length}</div><div class="text-xs">Visits today</div></div>
+    </div>
+    <div class="card">
+      <div style="font-size:13px;font-weight:600;margin-bottom:12px">Team performance — ${new Date().toLocaleString('default',{month:'long'})}</div>
+      ${reps.map(r=>{
+        const myPOs=STATE.pos.filter(p=>p.repId===r.id&&p.status==='verified');
+        const ac=myPOs.reduce((s,p)=>s+Number(p.amount||0),0);
+        const mt=STATE.targets.filter(t=>t.repId===r.id&&t.period==='monthly').reduce((s,t)=>s+Number(t.saleTarget||0),0);
+        const pc=mt?Math.round(ac/mt*100):0;
+        return `<div style="margin-bottom:12px"><div class="row-between" style="margin-bottom:4px"><div class="row"><div style="width:24px;height:24px;border-radius:50%;background:var(--emerald);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:#fff">${r.avatar||r.name.slice(0,2)}</div><span style="font-size:12px;font-weight:500">${r.name}</span></div><span class="text-sm">${fmt(ac)} / ${fmt(mt)}</span></div>${pb(pc,4)}<div class="text-xs" style="margin-top:2px">${pc}% · Incentive: ${fmt(calcInc(ac))}</div></div>`;
+      }).join('')}
+    </div>
+    <div class="card">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px">Weekly TA summary</div>
+      ${reps.map(r=>{
+        const wk=weekRange(todayStr());
+        const logs=STATE.gpsLogs.filter(g=>g.repId===r.id&&g.date>=wk.start&&g.date<=wk.end);
+        const km=logs.reduce((s,g)=>s+Number(g.totalKm||0),0);
+        const ta=logs.reduce((s,g)=>s+Number(g.taAmount||0),0);
+        const claim=STATE.taClaims.find(c=>c.repId===r.id&&c.weekStart===wk.start);
+        return `<div class="row-between" style="padding:7px 0;border-bottom:1px solid var(--border)"><div class="row"><div style="width:20px;height:20px;border-radius:50%;background:var(--emerald);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;color:#fff">${r.avatar||r.name.slice(0,2)}</div><span style="font-size:11px;font-weight:500">${r.name.split(' ')[0]}</span></div><div class="row"><span style="font-size:10px;color:var(--indigo2)">${km.toFixed(1)} km</span><span style="font-size:10px;color:var(--emerald);font-weight:600">${fmtINR(ta)}</span><span class="badge ${claim?.status==='approved'?'badge-green':'badge-amber'}" style="font-size:8px">${claim?.status==='approved'?'Paid':'Pending'}</span></div></div>`;
+      }).join('')}
+    </div>
+    ${pend>0?`<div class="card" style="border-color:rgba(245,158,11,.3)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px"><i class="ti ti-bell" style="color:var(--amber);vertical-align:-2px"></i> Pending actions</div>
+      ${STATE.approvals.filter(a=>a.status==='pending').map(ar=>`<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:16px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Company removal request</div><div class="text-sm">${rep(ar.repId).name} · ${co(ar.companyId).name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="resolveApproval('${ar.id}','approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="resolveApproval('${ar.id}','rejected')">Reject</button></div></div></div>`).join('')}
+      ${STATE.pos.filter(p=>p.status==='pending').map(po=>`<div class="info-box"><i class="ti ti-file-invoice" style="color:var(--blue);font-size:16px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:#93C5FD">PO Verification · ${fmt(po.amount)}</div><div class="text-sm">${rep(po.repId).name} · ${co(po.companyId).name}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="verifyPO('${po.id}')">Verify</button><button class="btn btn-danger btn-sm" onclick="rejectPO('${po.id}')">Reject</button></div></div></div>`).join('')}
+    </div>`:''}`;
+}
+
+// ── COMPANIES ─────────────────────────────────────────────────────────────────
+// HIERARCHY: Annual = all companies. Monthly ⊂ Annual. Weekly ⊂ Monthly ⊂ Annual.
+// "period" stored on the target row = the HIGHEST priority period for that company.
+// weekly implies monthly implies annual.
+// So: Annual tab = all; Monthly tab = companies with monthly OR weekly target; Weekly tab = companies with weekly target.
+
+function coIsInPeriod(cId, myT, period) {
+  const t = myT.filter(t=>t.companyId===cId);
+  if(!t.length) return false;
+  if(period==='annual'||period==='all') return true;
+  if(period==='monthly') return t.some(x=>x.period==='monthly'||x.period==='weekly');
+  if(period==='weekly') return t.some(x=>x.period==='weekly');
+  return false;
+}
+
+function renderCompanies() {
+  const el = document.getElementById('page-companies');
+  const isM = STATE.user.role==='manager';
+
+  // Filter targets based on coView
+  let myT;
+  if(!isM) {
+    myT = STATE.targets.filter(t=>t.repId===STATE.user.id);
+  } else if(STATE.coView==='mine') {
+    myT = STATE.targets.filter(t=>t.repId===STATE.user.id);
+  } else if(STATE.coView==='all') {
+    myT = STATE.targets;
+  } else {
+    myT = STATE.targets.filter(t=>t.repId===STATE.coView);
+  }
+
+  // All companies assigned to this user
+  const allCIds = [...new Set(myT.map(t=>t.companyId))];
+  let allCos = allCIds.map(id=>STATE.companies.find(c=>c.id===id)).filter(Boolean);
+
+  // Filter by period using hierarchy
+  let cos = STATE.period==='annual'||STATE.period==='all'
+    ? allCos
+    : allCos.filter(c=>coIsInPeriod(c.id, myT, STATE.period));
+
+  // Filter by priority chip
+  if(STATE.cpf!=='all') cos=cos.filter(c=>c.priority===STATE.cpf);
+
+  // Summary figures — for the selected period, use the most specific target
+  // Annual target for a company = the annual target row; Monthly = monthly row; Weekly = weekly row
+  function getBestTarget(cId, period) {
+    const t = myT.filter(t=>t.companyId===cId);
+    if(period==='annual'||period==='all') {
+      // prefer annual row, fallback to any
+      return t.find(x=>x.period==='annual') || t[0];
+    }
+    if(period==='monthly') return t.find(x=>x.period==='monthly') || t.find(x=>x.period==='weekly') || t[0];
+    if(period==='weekly') return t.find(x=>x.period==='weekly');
+    return t[0];
+  }
+
+  const summaryTargets = cos.map(c=>getBestTarget(c.id,STATE.period)).filter(Boolean);
+  const tot = summaryTargets.reduce((s,t)=>s+Number(t?.saleTarget||0),0);
+  const achT = summaryTargets.reduce((s,t)=>s+Number(t?.achieved||0),0);
+  const pct = tot?Math.round(achT/tot*100):0;
+
+  const periodLabel = {
+    annual:`Annual 2025`,
+    monthly:new Date().toLocaleString('default',{month:'long'})+' '+new Date().getFullYear(),
+    weekly:`Week of ${weekRange(todayStr()).start}`,
+    all:'All companies'
+  }[STATE.period];
+
+  const periodDesc = {
+    annual:'All your target companies',
+    monthly:'Companies you are targeting this month',
+    weekly:'Companies you are focusing on this week',
+    all:'All your target companies'
+  }[STATE.period];
+
+  el.innerHTML = `
+    <div class="row-between" style="margin-bottom:12px">
+      <div style="font-size:16px;font-weight:600">Target Companies</div>
+      <div class="row" style="gap:6px">
+        ${isM?viewSwitcherHtml('coView', STATE.coView||'all', 'renderCompanies()'):''}
+        <button class="btn btn-primary btn-sm" onclick="openAddCompanyPanel()"><i class="ti ti-plus"></i> Add</button>
+      </div>
+    </div>
+    <div class="seg-tabs">
+      <button class="seg-tab${STATE.period==='annual'?' active':''}" onclick="STATE.period='annual';STATE.exp=null;renderCompanies()">Annual</button>
+      <button class="seg-tab${STATE.period==='monthly'?' active':''}" onclick="STATE.period='monthly';STATE.exp=null;renderCompanies()">Monthly</button>
+      <button class="seg-tab${STATE.period==='weekly'?' active':''}" onclick="STATE.period='weekly';STATE.exp=null;renderCompanies()">Weekly</button>
+      <button class="seg-tab${STATE.period==='all'?' active':''}" onclick="STATE.period='all';STATE.exp=null;renderCompanies()">All</button>
+    </div>
+    <div class="card" style="border-color:rgba(99,102,241,.3);padding:12px;margin-bottom:10px">
+      <div class="row-between" style="margin-bottom:2px">
+        <span class="text-label" style="color:var(--indigo2)">${periodLabel}</span>
+        <span class="badge badge-blue">${pct}%</span>
+      </div>
+      <div class="text-xs" style="margin-bottom:8px;color:var(--text3)">${periodDesc} · ${cos.length} companies</div>
+      <div class="row-between" style="margin-bottom:6px">
+        <div><div style="font-size:16px;font-weight:700">${fmt(achT)}</div><div class="text-xs">achieved</div></div>
+        <div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--text2)">${fmt(tot)}</div><div class="text-xs">target</div></div>
+      </div>
+      ${pb(pct,6)}
+    </div>
+    <div class="chip-row">
+      ${['all','A','B','C'].map(f=>`<span class="chip${STATE.cpf===f?' active':''}" onclick="STATE.cpf='${f}';renderCompanies()">${f==='all'?'All':'Priority '+f}</span>`).join('')}
+    </div>
+    ${cos.length===0
+      ? `<div class="empty">
+          <i class="ti ti-building-off"></i>
+          <p>${STATE.period==='weekly'?'No companies in weekly focus':'No companies in monthly focus'}</p>
+          <small>Go to a company → Full details → Mark as ${STATE.period} focus</small>
+        </div>`
+      : `<div class="co-list">${cos.map((c,i)=>{
+          const allT = myT.filter(t=>t.companyId===c.id);
+          const bestT = getBestTarget(c.id, STATE.period);
+          const tg = Number(bestT?.saleTarget||0);
+          const ac = Number(bestT?.achieved||0);
+          const pc = tg?Math.round(ac/tg*100):0;
+          const ov = dsi(c.lastVisited)!==null&&dsi(c.lastVisited)>30;
+          const ex = STATE.exp===c.id;
+
+          // Which period badges does this company have?
+          const hasMonthly = allT.some(t=>t.period==='monthly');
+          const hasWeekly = allT.some(t=>t.period==='weekly');
+
+          return `<div class="co-row">
+            <div class="co-row-head" onclick="STATE.exp=STATE.exp==='${c.id}'?null:'${c.id}';renderCompanies()">
+              <div class="co-num">${i+1}</div>
+              <div class="co-info">
+                <div class="co-name">${pri(c.priority)} ${c.name}${ov?' <span class="badge badge-red" style="font-size:8px">OD</span>':''}</div>
+                <div class="co-sub">${c.address?.split(',').slice(0,2).join(',')} · ${c.industry}</div>
+              </div>
+              <div class="co-meta">
+                <div class="co-ach">
+                  <div class="co-ach-val" style="color:${tg?pbc(pc):'var(--text3)'}">${fmt(ac)}</div>
+                  <div class="co-ach-tgt">${tg?fmt(tg):'—'}</div>
+                </div>
+                <i class="ti ti-chevron-${ex?'up':'down'}" style="font-size:14px;color:var(--text3)"></i>
+              </div>
+            </div>
+            <div class="co-expand${ex?' open':''}">
+              ${pb(pc,5)}
+              <div class="text-xs" style="margin-top:4px;margin-bottom:6px">${pc}% · ${dsi(c.lastVisited)===null?'Never visited':dsi(c.lastVisited)+'d since last visit'}</div>
+
+              <!-- Period focus badges -->
+              <div class="row" style="gap:4px;flex-wrap:wrap;margin-bottom:8px">
+                <span class="badge badge-blue">Annual</span>
+                ${hasMonthly?'<span class="badge badge-amber">Monthly</span>':''}
+                ${hasWeekly?'<span class="badge badge-green">Weekly</span>':''}
+              </div>
+
+              ${bestT?.items?`<div class="text-sm" style="margin-bottom:3px">${bestT.items.substring(0,55)}${bestT.items.length>55?'…':''}</div>`:''}
+              ${bestT?.goals?`<div style="font-size:9px;color:var(--indigo2);background:rgba(99,102,241,.08);border-radius:4px;padding:2px 6px;display:inline-block;margin-bottom:6px">🎯 ${bestT.goals.substring(0,45)}${bestT.goals.length>45?'…':''}</div>`:''}
+
+              <!-- Quick focus toggle buttons -->
+              <div class="row" style="gap:5px;margin-top:4px;flex-wrap:wrap">
+                ${!hasMonthly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(245,158,11,.3);color:var(--amber)" onclick="addFocusPeriod('${c.id}','monthly');event.stopPropagation()"><i class="ti ti-plus" style="font-size:10px"></i> Add to Monthly</button>`:''}
+                ${!hasWeekly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(16,185,129,.3);color:var(--emerald)" onclick="addFocusPeriod('${c.id}','weekly');event.stopPropagation()"><i class="ti ti-plus" style="font-size:10px"></i> Add to Weekly</button>`:''}
+                <button class="btn btn-sm" style="font-size:9px" onclick="openCoDetail('${c.id}');event.stopPropagation()"><i class="ti ti-arrow-right" style="font-size:10px"></i> Full details</button>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}</div>`}`;
+}
+
+async function addFocusPeriod(coId, period) {
+  const isM = STATE.user.role==='manager';
+  const repId = isM ? STATE.viewRep||STATE.user.id : STATE.user.id;
+  // Copy target details from annual target
+  const annualT = STATE.targets.find(t=>t.companyId===coId&&t.repId===repId&&t.period==='annual');
+  const t = {
+    id:uid(), companyId:coId, repId,
+    period, periodValue: period==='weekly'?weekRange(todayStr()).start:new Date().toISOString().slice(0,7),
+    saleTarget: annualT?.saleTarget||0,
+    items: annualT?.items||'',
+    goals: annualT?.goals||'',
+    achieved:0, approvedBy: isM?STATE.user.id:''
+  };
+  showToast('Adding to '+period+' targets...','');
+  const ok = await apiWrite('Targets',t);
+  if(ok){
+    STATE.targets.push(t);
+    // if adding to weekly, also ensure monthly exists
+    if(period==='weekly'){
+      const hasMonthly = STATE.targets.some(x=>x.companyId===coId&&x.repId===repId&&x.period==='monthly');
+      if(!hasMonthly){
+        const mt={...t,id:uid(),period:'monthly',periodValue:new Date().toISOString().slice(0,7)};
+        await apiWrite('Targets',mt);
+        STATE.targets.push(mt);
+      }
+    }
+    showToast(`Added to ${period} targets ✓`,'success');
+    renderCompanies();
+  }
+}
+
+function openCoDetail(cId) {
+  const c = STATE.companies.find(x=>x.id===cId)||{};
+  const ts = STATE.targets.filter(t=>t.companyId===cId&&(STATE.user.role==='manager'||t.repId===STATE.user.id));
+  const d = dsi(c.lastVisited);
+  const isM = STATE.user.role==='manager';
+  const tblk = (list,lbl,col) => list.map(t=>{
+    const p=Math.round(Number(t.achieved||0)/Number(t.saleTarget||1)*100);
+    return `<div style="padding:9px;background:var(--bg3);border-radius:8px;border-left:3px solid ${col};margin-bottom:7px">
+      <div class="row-between" style="margin-bottom:3px"><span style="font-size:11px;font-weight:500">${lbl}${isM?' · '+rep(t.repId).name:''}</span><span class="text-xs">${p}% · ${fmt(t.achieved)}/${fmt(t.saleTarget)}</span></div>
+      ${pb(p,4)}<div class="text-xs" style="margin-top:3px">${t.items}</div>
+      ${t.goals?`<div style="font-size:9px;color:${col};margin-top:2px">🎯 ${t.goals}</div>`:''}
+    </div>`;}).join('');
+  const panel = document.getElementById('panel-co');
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('co')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">${c.name}</span>
+    </div>
+    <div class="row" style="flex-wrap:wrap;gap:4px;margin-bottom:10px">${pri(c.priority)}<span class="badge badge-blue">${c.industry}</span><span class="badge badge-gray">${c.region}</span></div>
+    <div class="text-xs" style="margin-bottom:12px"><i class="ti ti-map-pin" style="font-size:11px"></i> ${c.address}</div>
+    <div class="grid2" style="margin-bottom:14px">
+      <div class="card-sm"><div class="text-xs">Total business</div><div style="font-size:14px;font-weight:700;color:var(--emerald)">${fmt(c.totalBusiness)}</div></div>
+      <div class="card-sm"><div class="text-xs">Last visited</div><div style="font-size:14px;font-weight:700">${d===null?'Never':d+'d ago'}</div></div>
+    </div>
+    <div class="text-label" style="margin-bottom:8px">Targets</div>
+    ${tblk(ts.filter(t=>t.period==='annual'),'Annual 2025','var(--indigo2)')}
+    ${tblk(ts.filter(t=>t.period==='monthly'),'Monthly','var(--amber)')}
+    ${tblk(ts.filter(t=>t.period==='weekly'),'Weekly','var(--emerald)')}
+    ${!ts.length?'<div class="text-sm" style="text-align:center;padding:12px;color:var(--text3)">No targets set yet</div>':''}
+
+    <!-- Contacts section -->
+    <div class="text-label" style="margin-top:6px;margin-bottom:8px">Contacts
+      <button class="btn btn-sm" style="margin-left:8px;padding:2px 8px;font-size:10px" onclick="showAddContactToCompany('${c.id}')"><i class="ti ti-plus"></i> Add</button>
+    </div>
+    ${getCompanyContacts(c.id).length
+      ? getCompanyContacts(c.id).map(ct=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--indigo);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;flex-shrink:0">${ct.name.slice(0,2).toUpperCase()}</div>
+          <div style="flex:1">
+            <div style="font-size:11px;font-weight:500">${ct.name}</div>
+            <div class="text-xs">${ct.designation||'—'}</div>
+            ${ct.phone?`<div class="text-xs" style="color:var(--indigo2)"><i class="ti ti-phone" style="font-size:9px"></i> ${ct.phone}</div>`:''}
+            ${ct.email?`<div class="text-xs" style="color:var(--text3)"><i class="ti ti-mail" style="font-size:9px"></i> ${ct.email}</div>`:''}
+          </div>
+        </div>`).join('')
+      : '<div class="text-sm" style="color:var(--text3);padding:8px 0">No contacts added yet</div>'}
+    <div id="add-contact-form-${c.id}" style="display:none;margin-top:10px;background:var(--bg3);border-radius:10px;padding:12px">
+      <div class="grid2" style="gap:8px;margin-bottom:8px">
+        <div><div class="inp-label">Name *</div><input class="inp" id="nc-name-${c.id}" placeholder="e.g. Suresh Kumar" style="font-size:11px;padding:7px 10px"></div>
+        <div><div class="inp-label">Designation</div><input class="inp" id="nc-desig-${c.id}" placeholder="e.g. Purchase Manager" style="font-size:11px;padding:7px 10px"></div>
+      </div>
+      <div class="grid2" style="gap:8px;margin-bottom:10px">
+        <div><div class="inp-label">Phone</div><input class="inp" type="tel" id="nc-phone-${c.id}" placeholder="e.g. 9876543210" style="font-size:11px;padding:7px 10px"></div>
+        <div><div class="inp-label">Email</div><input class="inp" type="email" id="nc-email-${c.id}" placeholder="e.g. name@co.com" style="font-size:11px;padding:7px 10px"></div>
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="btn btn-primary btn-sm" style="flex:1;justify-content:center" onclick="saveNewContactToCompany('${c.id}')">Save contact</button>
+        <button class="btn btn-sm" style="flex:1;justify-content:center" onclick="document.getElementById('add-contact-form-${c.id}').style.display='none'">Cancel</button>
+      </div>
+    </div>
+    ${isM?`
+      <div class="row" style="gap:8px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="openEditTargets('${c.id}')"><i class="ti ti-edit"></i> Edit targets</button>
+        <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="managerRemoveCompany('${c.id}')"><i class="ti ti-trash"></i> Remove</button>
+      </div>`:
+    `<div style="margin-top:14px">
+      <button class="btn btn-danger btn-full" onclick="requestRemoval('${c.id}')"><i class="ti ti-send"></i> Request removal from manager</button>
+      <div class="text-xs" style="text-align:center;margin-top:6px;color:var(--text3)">Your manager will be notified to approve this request</div>
+    </div>`}`;
+  openPanel('co');
+}
+
+function openAddCompanyPanel() {
+  const isM = STATE.user.role==='manager';
+  const panel = document.getElementById('panel-addco');
+  const reps = myReps();
+
+  if(isM) {
+    // MANAGER FLOW — simplified, two sections: company info + rep assignment
+    panel.innerHTML = `
+      <div class="panel-head">
+        <button class="panel-back" onclick="closePanel('addco')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+        <span class="panel-title">Add target company</span>
+      </div>
+
+      <!-- SECTION 1: Company basics -->
+      <div class="text-label" style="margin-bottom:10px">Company details</div>
+
+      <div class="inp-group"><div class="inp-label">Company name *</div><input class="inp" id="aco-name" placeholder="e.g. ABC Industries Pvt Ltd"></div>
+      <div class="inp-group"><div class="inp-label">Address *</div><input class="inp" id="aco-addr" placeholder="e.g. Sector 62, Noida, UP"></div>
+      <div class="grid2" style="gap:8px;margin-bottom:12px">
+        <div><div class="inp-label">City / Region *</div><input class="inp" id="aco-region" placeholder="e.g. Noida"></div>
+        <div><div class="inp-label">Priority *</div>
+          <select class="inp" id="aco-pri">
+            <option value="A">A — High</option>
+            <option value="B" selected>B — Medium</option>
+            <option value="C">C — Low</option>
+          </select>
+        </div>
+      </div>
+      <div class="inp-group">
+        <div class="inp-label">Industry *</div>
+        <select class="inp" id="aco-ind" onchange="document.getElementById('aco-ind-other').style.display=this.value==='Other'?'block':'none'">
+          <option value="">Select industry…</option>
+          ${INDUSTRIES.map(i=>`<option value="${i}">${i}</option>`).join('')}
+        </select>
+      </div>
+      <div id="aco-ind-other" style="display:none;margin-bottom:12px">
+        <div class="inp-label">Describe the industry</div>
+        <input class="inp" id="aco-ind-desc" placeholder="Brief description…">
+      </div>
+
+      <!-- SECTION 2: Assign reps -->
+      <div class="text-label" style="margin-top:4px;margin-bottom:10px">Assign to</div>
+      <div style="background:var(--bg3);border-radius:10px;margin-bottom:14px;border:1px solid var(--border)">
+        <label style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:10px 10px 0 0">
+          <input type="checkbox" name="aco-reps" value="${STATE.user.id}" style="accent-color:var(--indigo);width:16px;height:16px;flex-shrink:0" onchange="toggleRepTarget('${STATE.user.id}',this.checked)">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--indigo);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0">${STATE.user.avatar||STATE.user.name.slice(0,2)}</div>
+          <div style="flex:1"><div style="font-size:12px;font-weight:500">${STATE.user.name} <span style="font-size:10px;color:var(--indigo2)">(myself)</span></div><div class="text-xs">Manager</div></div>
+        </label>
+        <div id="aco-target-${STATE.user.id}" style="display:none;background:rgba(99,102,241,.06);border-bottom:1px solid var(--border);padding:10px 14px 12px 42px">
+          <div class="grid2" style="gap:8px;margin-bottom:8px">
+            <div><div class="inp-label">Period</div>
+              <select class="inp" id="aco-period-${STATE.user.id}" style="font-size:11px;padding:6px 8px">
+                <option value="annual">Annual</option><option value="monthly">Monthly</option><option value="weekly">Weekly</option>
+              </select>
+            </div>
+            <div><div class="inp-label">Sale target (₹)</div>
+              <input class="inp" type="number" id="aco-tgt-${STATE.user.id}" placeholder="e.g. 500000" style="font-size:11px;padding:6px 8px">
+            </div>
+          </div>
+          <div style="margin-bottom:6px"><div class="inp-label">Items to sell</div>
+            <input class="inp" id="aco-items-${STATE.user.id}" placeholder="e.g. Industrial Pumps" style="font-size:11px;padding:6px 8px">
+          </div>
+          <div><div class="inp-label">Goal</div>
+            <input class="inp" id="aco-goals-${STATE.user.id}" placeholder="e.g. First order by Q2" style="font-size:11px;padding:6px 8px">
+          </div>
+        </div>
+        ${reps.map(r=>`
+          <label style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer" id="rep-row-${r.id}">
+            <input type="checkbox" name="aco-reps" value="${r.id}" style="accent-color:var(--indigo);width:16px;height:16px;flex-shrink:0" onchange="toggleRepTarget('${r.id}',this.checked)">
+            <div style="width:32px;height:32px;border-radius:50%;background:var(--emerald);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0">${r.avatar||r.name.slice(0,2)}</div>
+            <div style="flex:1"><div style="font-size:12px;font-weight:500">${r.name}</div><div class="text-xs">Sales Rep</div></div>
+          </label>
+          <div id="aco-target-${r.id}" style="display:none;background:rgba(99,102,241,.06);border-bottom:1px solid var(--border);padding:10px 14px 12px 42px">
+            <div class="grid2" style="gap:8px;margin-bottom:8px">
+              <div><div class="inp-label">Target period</div>
+                <select class="inp" id="aco-period-${r.id}" style="font-size:11px;padding:6px 8px">
+                  <option value="annual">Annual</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="weekly">Weekly</option>
+                </select>
+              </div>
+              <div><div class="inp-label">Sale target (₹)</div>
+                <input class="inp" type="number" id="aco-tgt-${r.id}" placeholder="e.g. 500000" style="font-size:11px;padding:6px 8px">
+              </div>
+            </div>
+            <div style="margin-bottom:6px"><div class="inp-label">Items to sell</div>
+              <input class="inp" id="aco-items-${r.id}" placeholder="e.g. Industrial Pumps, Valves" style="font-size:11px;padding:6px 8px">
+            </div>
+            <div><div class="inp-label">Goal for this rep</div>
+              <input class="inp" id="aco-goals-${r.id}" placeholder="e.g. First order by Q2" style="font-size:11px;padding:6px 8px">
+            </div>
+          </div>`).join('')}
+      </div>
+      <div class="text-xs" style="color:var(--text3);margin-bottom:14px">Target details are optional — can be filled in later</div>
+
+      <!-- Contacts section -->
+      <div class="text-label" style="margin-bottom:10px">Key contacts <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(optional)</span></div>
+      <div id="aco-contacts-list"></div>
+      <button type="button" class="btn btn-sm" style="width:100%;justify-content:center;border-style:dashed;margin-bottom:14px" onclick="addContactRow('aco-contacts-list')">
+        <i class="ti ti-plus"></i> Add contact person
+      </button>
+
+      <button class="btn btn-primary btn-full" onclick="saveCompanyManager()"><i class="ti ti-check"></i> Add company</button>`;
+
+  } else {
+    // REP FLOW — assign to self, simple form
+    panel.innerHTML = `
+      <div class="panel-head">
+        <button class="panel-back" onclick="closePanel('addco')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+        <span class="panel-title">Add target company</span>
+      </div>
+      <div class="info-box" style="margin-bottom:14px">
+        <i class="ti ti-info-circle" style="color:var(--blue);font-size:16px;flex-shrink:0"></i>
+        <div class="text-xs" style="color:#93C5FD">This company will be added to your target list immediately. To remove it later, you'll need manager approval.</div>
+      </div>
+      <div class="inp-group"><div class="inp-label">Company name *</div><input class="inp" id="aco-name" placeholder="e.g. ABC Industries Pvt Ltd"></div>
+      <div class="inp-group"><div class="inp-label">Address *</div><input class="inp" id="aco-addr" placeholder="e.g. Sector 62, Noida, UP"></div>
+      <div class="grid2" style="gap:8px;margin-bottom:12px">
+        <div><div class="inp-label">City / Region</div><input class="inp" id="aco-region" placeholder="e.g. Noida"></div>
+        <div><div class="inp-label">Priority</div>
+          <select class="inp" id="aco-pri">
+            <option value="A">A — High</option>
+            <option value="B" selected>B — Medium</option>
+            <option value="C">C — Low</option>
+          </select>
+        </div>
+      </div>
+      <div class="inp-group">
+        <div class="inp-label">Industry</div>
+        <select class="inp" id="aco-ind" onchange="document.getElementById('aco-ind-other').style.display=this.value==='Other'?'block':'none'">
+          <option value="">Select industry…</option>
+          ${INDUSTRIES.map(i=>`<option value="${i}">${i}</option>`).join('')}
+        </select>
+      </div>
+      <div id="aco-ind-other" style="display:none;margin-bottom:12px">
+        <div class="inp-label">Describe the industry</div>
+        <input class="inp" id="aco-ind-desc" placeholder="Brief description…">
+      </div>
+      <div class="text-label" style="margin-bottom:10px">Target details <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(optional)</span></div>
+      <div class="info-box" style="margin-bottom:10px">
+        <i class="ti ti-info-circle" style="color:var(--blue);font-size:14px;flex-shrink:0"></i>
+        <div class="text-xs" style="color:#93C5FD">This company will be added to your <strong>Annual</strong> targets automatically. You can also add it to Monthly or Weekly focus below.</div>
+      </div>
+      <div class="grid2" style="gap:8px;margin-bottom:8px">
+        <div><div class="inp-label">Also add to</div>
+          <select class="inp" id="aco-period">
+            <option value="annual">Annual only</option>
+            <option value="monthly">Annual + Monthly</option>
+            <option value="weekly">Annual + Monthly + Weekly</option>
+          </select>
+        </div>
+        <div><div class="inp-label">Sale target (₹)</div><input class="inp" type="number" id="aco-tgt" placeholder="e.g. 500000"></div>
+      </div>
+      <div class="inp-group"><div class="inp-label">Items to sell</div><input class="inp" id="aco-items" placeholder="e.g. Industrial Pumps, Valves"></div>
+      <div class="inp-group"><div class="inp-label">Goals</div><input class="inp" id="aco-goals" placeholder="e.g. First order by Q3"></div>
+
+      <!-- Contacts section -->
+      <div class="text-label" style="margin-top:4px;margin-bottom:10px">Key contacts <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">(optional)</span></div>
+      <div id="aco-contacts-list"></div>
+      <button type="button" class="btn btn-sm" style="width:100%;justify-content:center;border-style:dashed;margin-bottom:14px" onclick="addContactRow('aco-contacts-list')">
+        <i class="ti ti-plus"></i> Add contact person
+      </button>
+
+      <button class="btn btn-primary btn-full" style="margin-top:4px" onclick="saveCompanyRep()"><i class="ti ti-check"></i> Add company</button>`;
+  }
+  openPanel('addco');
+}
+
+function toggleRepTarget(repId, checked) {
+  document.getElementById('aco-target-'+repId).style.display = checked ? 'block' : 'none';
+}
+
+async function saveCompanyManager() {
+  const name = document.getElementById('aco-name').value.trim();
+  const addr = document.getElementById('aco-addr').value.trim();
+  if(!name||!addr){showToast('Company name and address are required','error');return;}
+
+  let industry = document.getElementById('aco-ind').value;
+  if(!industry){showToast('Please select an industry','error');return;}
+  if(industry==='Other'){
+    const desc = document.getElementById('aco-ind-desc')?.value.trim();
+    if(desc) industry = `Other — ${desc}`;
+  }
+
+  // Get checked reps
+  const checkedReps = [...document.querySelectorAll('input[name="aco-reps"]:checked')].map(el=>el.value);
+  if(!checkedReps.length){showToast('Please assign at least one rep','error');return;}
+
+  showToast('Saving...','');
+  const cId = uid();
+  const coObj = {
+    id:cId, name, address:addr,
+    region:document.getElementById('aco-region').value,
+    industry,
+    priority:document.getElementById('aco-pri').value,
+    assignedReps:checkedReps.join(','),
+    lastVisited:'', totalBusiness:0,
+    addedBy:STATE.user.id, active:'TRUE'
+  };
+  const ok = await apiWrite('Companies', coObj);
+  if(!ok){showToast('Failed to save company','error');return;}
+  STATE.companies.push(coObj);
+
+  // Save targets for each checked rep that has a target amount
+  for(const rId of checkedReps){
+    const tgt = document.getElementById('aco-tgt-'+rId)?.value;
+    const items = document.getElementById('aco-items-'+rId)?.value||'';
+    const goals = document.getElementById('aco-goals-'+rId)?.value||'';
+    const period = document.getElementById('aco-period-'+rId)?.value||'annual';
+    const t = {
+      id:uid(), companyId:cId, repId:rId,
+      period, periodValue:'2025',
+      saleTarget:tgt||0, items, goals,
+      achieved:0, approvedBy:STATE.user.id
+    };
+    await apiWrite('Targets',t);
+    STATE.targets.push(t);
+  }
+
+  showToast(`${name} added — ${checkedReps.length} rep${checkedReps.length>1?'s':''} assigned ✓`,'success');
+  // Save contacts
+  const contacts = getContactRows('aco-contacts-list');
+  if(contacts.length) await saveContactsForCompany(cId, contacts);
+  closePanel('addco');
+  renderCompanies();
+}
+
+async function saveCompanyRep() {
+  const name = document.getElementById('aco-name').value.trim();
+  const addr = document.getElementById('aco-addr').value.trim();
+  if(!name||!addr){showToast('Company name and address are required','error');return;}
+
+  let industry = document.getElementById('aco-ind').value||'';
+  if(industry==='Other'){
+    const desc = document.getElementById('aco-ind-desc')?.value.trim();
+    if(desc) industry = `Other — ${desc}`;
+  }
+
+  showToast('Saving...','');
+  const cId = uid();
+  const coObj = {
+    id:cId, name, address:addr,
+    region:document.getElementById('aco-region').value,
+    industry,
+    priority:document.getElementById('aco-pri').value,
+    assignedReps:STATE.user.id,
+    lastVisited:'', totalBusiness:0,
+    addedBy:STATE.user.id, active:'TRUE'
+  };
+  const ok = await apiWrite('Companies',coObj);
+  if(!ok){showToast('Failed to save company','error');return;}
+  STATE.companies.push(coObj);
+
+  // Always create annual target (every company is in annual)
+  const selectedPeriod = document.getElementById('aco-period').value;
+  const tgt = document.getElementById('aco-tgt')?.value;
+  const items = document.getElementById('aco-items').value;
+  const goals = document.getElementById('aco-goals').value;
+
+  // Annual target — always created
+  const annualT = {
+    id:uid(), companyId:cId, repId:STATE.user.id,
+    period:'annual', periodValue:'2025',
+    saleTarget:tgt||0, items, goals, achieved:0, approvedBy:''
+  };
+  await apiWrite('Targets',annualT);
+  STATE.targets.push(annualT);
+
+  // If rep selected monthly or weekly, create those too (hierarchy)
+  if(selectedPeriod==='monthly'||selectedPeriod==='weekly'){
+    const mt={...annualT,id:uid(),period:'monthly',periodValue:new Date().toISOString().slice(0,7)};
+    await apiWrite('Targets',mt);STATE.targets.push(mt);
+  }
+  if(selectedPeriod==='weekly'){
+    const wt={...annualT,id:uid(),period:'weekly',periodValue:weekRange(todayStr()).start};
+    await apiWrite('Targets',wt);STATE.targets.push(wt);
+  }
+
+  showToast(`${name} added ✓`,'success');
+  // Save contacts
+  const contacts = getContactRows('aco-contacts-list');
+  if(contacts.length) await saveContactsForCompany(cId, contacts);
+  closePanel('addco');
+  renderCompanies();
+}
+
+function showAddContactToCompany(coId) {
+  const form = document.getElementById('add-contact-form-'+coId);
+  if(form) form.style.display = form.style.display==='none'?'block':'none';
+}
+
+async function saveNewContactToCompany(coId) {
+  const name = document.getElementById('nc-name-'+coId)?.value?.trim();
+  if(!name){showToast('Name is required','error');return;}
+  await saveContactsForCompany(coId,[{
+    name,
+    designation: document.getElementById('nc-desig-'+coId)?.value?.trim()||'',
+    phone: document.getElementById('nc-phone-'+coId)?.value?.trim()||'',
+    email: document.getElementById('nc-email-'+coId)?.value?.trim()||'',
+  }]);
+  showToast('Contact saved ✓','success');
+  // Refresh the company detail panel
+  openCoDetail(coId);
+}
+
+async function requestRemoval(coId) {
+  const reason=prompt('Reason for removal request:');
+  if(!reason)return;
+  const ar={id:uid(),type:'remove_company',repId:STATE.user.id,companyId:coId,poId:'',reason,status:'pending',requestDate:todayStr(),resolvedBy:'',resolvedDate:''};
+  await apiWrite('Approvals',ar);
+  STATE.approvals.push(ar);
+  showToast('Removal request sent to manager ✓','success');
+  closePanel('co');
+}
+
+async function managerRemoveCompany(coId) {
+  if(!confirm('Remove this company from all target lists? This cannot be undone.'))return;
+  await apiUpdate('Companies',{id:coId,active:'FALSE'});
+  STATE.companies=STATE.companies.filter(c=>c.id!==coId);
+  STATE.targets=STATE.targets.filter(t=>t.companyId!==coId);
+  showToast('Company removed ✓','success');
+  closePanel('co');
+  renderCompanies();
+}
+
+function openEditTargets(coId) {
+  const c=STATE.companies.find(x=>x.id===coId)||{};
+  const ts=STATE.targets.filter(t=>t.companyId===coId);
+  const panel=document.getElementById('panel-co');
+  panel.innerHTML=`
+    <div class="panel-head"><button class="panel-back" onclick="openCoDetail('${coId}')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">Edit targets — ${c.name}</span></div>
+    <div class="text-label" style="margin-bottom:10px">Current targets</div>
+    ${ts.map(t=>`<div class="card" style="margin-bottom:8px">
+      <div class="row-between" style="margin-bottom:6px"><span style="font-size:11px;font-weight:500">${t.period} · ${rep(t.repId).name||'All reps'}</span><span class="badge badge-gray">${fmt(t.saleTarget)}</span></div>
+      <div class="text-xs" style="margin-bottom:6px">${t.items||'—'}</div>
+      <div class="row" style="gap:6px">
+        <input class="inp" placeholder="New target (₹)" id="et-tgt-${t.id}" style="flex:1;font-size:11px;padding:6px 8px">
+        <button class="btn btn-primary btn-sm" onclick="updateTarget('${t.id}')">Update</button>
+      </div>
+    </div>`).join('')}
+    <div style="margin-top:14px"><div class="text-label" style="margin-bottom:10px">Add new target</div>
+    <div class="grid2" style="gap:8px;margin-bottom:8px">
+      <div><div class="inp-label">Period</div><select class="inp" id="nt-period"><option value="annual">Annual</option><option value="monthly">Monthly</option><option value="weekly">Weekly</option></select></div>
+      <div><div class="inp-label">Assign to rep</div><select class="inp" id="nt-rep"><option value="">Select rep</option>${myReps().map(r=>`<option value="${r.id}">${r.name}</option>`).join('')}</select></div>
+    </div>
+    <div class="inp-group"><div class="inp-label">Sale target (₹)</div><input class="inp" type="number" id="nt-tgt" placeholder="e.g. 500000"></div>
+    <div class="inp-group"><div class="inp-label">Items</div><input class="inp" id="nt-items" placeholder="e.g. Industrial Pumps"></div>
+    <div class="inp-group"><div class="inp-label">Goals</div><input class="inp" id="nt-goals" placeholder="e.g. Annual contract by Q3"></div>
+    <button class="btn btn-primary btn-full" onclick="addTarget('${coId}')">Add target</button></div>`;
+}
+
+async function updateTarget(tId) {
+  const newTgt=document.getElementById('et-tgt-'+tId).value;
+  if(!newTgt){showToast('Enter a target amount','error');return;}
+  await apiUpdate('Targets',{id:tId,saleTarget:newTgt});
+  const t=STATE.targets.find(x=>x.id===tId);if(t)t.saleTarget=newTgt;
+  showToast('Target updated ✓','success');
+}
+
+async function addTarget(coId) {
+  const repId=document.getElementById('nt-rep').value;
+  if(!repId){showToast('Select a rep','error');return;}
+  const t={id:uid(),companyId:coId,repId,period:document.getElementById('nt-period').value,periodValue:'2025',saleTarget:document.getElementById('nt-tgt').value||0,items:document.getElementById('nt-items').value,goals:document.getElementById('nt-goals').value,achieved:0,approvedBy:STATE.user.id};
+  await apiWrite('Targets',t);STATE.targets.push(t);
+  showToast('Target added ✓','success');openEditTargets(coId);
+}
+
+// ── VISIT PLAN ─────────────────────────────────────────────────────────────────
+function renderPlan() {
+  const el = document.getElementById('page-plan');
+  const isM = STATE.user.role==='manager';
+  const dates=[];
+  for(let i=0;i<7;i++){const d=new Date();d.setDate(d.getDate()+i);dates.push(d.toISOString().slice(0,10));}
+
+  // Determine whose plan to show
+  const planRepId = (!isM || STATE.planView==='mine') ? STATE.user.id : STATE.planView;
+  const viewingMyOwn = !isM || STATE.planView==='mine';
+
+  const ce = STATE.calEvents.filter(e=>String(e.repId||'').trim()===planRepId&&e.date===STATE.pld);
+  const mp = STATE.planItems.filter(p=>String(p.repId||'').trim()===planRepId&&p.date===STATE.pld&&p.source==='manual');
+  const isToday = STATE.pld === todayStr();
+
+  // For today's visits, show status-aware cards with update prompts
+  const todayVisitCards = isToday ? mp.map(p=>{
+    const c=co(p.companyId);
+    const st=p.status||'planned';
+    const visitLog = STATE.visits.find(v=>
+      (v.id===p.linkedVisitId) ||
+      (v.companyId===p.companyId && v.date===p.date && String(v.repId||'').trim()===planRepId)
+    );
+    const hasRemarks = visitLog && visitLog.remarks && visitLog.remarks.trim()!=='';
+    const notVisited = st==='not-visited';
+    const effectiveSt = (visitLog && visitLog.remarks && visitLog.remarks.trim()!=='') ? 'completed' : st;
+    const borderCol = effectiveSt==='completed'?'rgba(16,185,129,.3)':effectiveSt==='in-progress'?'rgba(245,158,11,.3)':notVisited?'rgba(239,68,68,.2)':'var(--border)';
+
+    // If manager viewing rep's plan — show read-only card
+    if(!viewingMyOwn) {
+      return `<div class="card" style="margin-bottom:10px;border-color:${borderCol}">
+        <div class="row-between" style="margin-bottom:6px">
+          <div class="row">${dot(notVisited?'cancelled':effectiveSt)}<div>
+            <div style="font-size:13px;font-weight:600">${c.name||'Unknown'}</div>
+            <div class="text-xs">${p.time} · ${p.meetingWith||'TBD'}</div>
+          </div></div>
+          ${notVisited?'<span class="badge badge-red">Not visited</span>':sbg(effectiveSt)}
+        </div>
+        <div class="text-xs" style="margin-bottom:6px;color:var(--text3)">${p.itemsToPitch||'—'}</div>
+        ${hasRemarks?`<div class="rmk-box">${visitLog.remarks.substring(0,80)}${visitLog.remarks.length>80?'…':''}</div>`:''}
+        ${notVisited?`<div class="text-xs" style="color:#FCA5A5;margin-top:4px">${p.notVisitedReason||'Reason not specified'}</div>`:''}
+      </div>`;
+    }
+
+    return `<div class="card" style="margin-bottom:10px;border-color:${borderCol}">
+      <div class="row-between" style="margin-bottom:8px">
+        <div class="row">${dot(notVisited?'cancelled':effectiveSt)}<div>
+          <div style="font-size:13px;font-weight:600">${c.name||'Unknown'}</div>
+          <div class="text-xs">${p.time} · ${p.meetingWith||'TBD'}</div>
+        </div></div>
+        ${notVisited?'<span class="badge badge-red">Not visited</span>':sbg(effectiveSt)}
+      </div>
+      <div class="text-xs" style="margin-bottom:10px;color:var(--text3)">${p.itemsToPitch||'Items not specified'}</div>
+
+      ${effectiveSt==='planned'?`
+        <div class="row" style="gap:6px;margin-bottom:0">
+          <button class="btn btn-success btn-sm" style="flex:1;justify-content:center" onclick="checkIn('${p.id}')"><i class="ti ti-map-pin"></i> Check in</button>
+          <button class="btn btn-sm" style="flex:1;justify-content:center" onclick="capturePhoto('${p.id}')"><i class="ti ti-camera"></i> Photo</button>
+          <button class="btn btn-danger btn-sm" style="padding:5px 8px" onclick="deletePlanItem('${p.id}')"><i class="ti ti-trash"></i></button>
+        </div>`:''}
+
+      ${effectiveSt==='in-progress'?`
+        <div class="row" style="gap:6px">
+          <button class="btn btn-danger btn-sm" style="flex:1;justify-content:center" onclick="checkOut('${p.id}')"><i class="ti ti-door-exit"></i> Check out</button>
+          <button class="btn btn-sm" style="flex:1;justify-content:center" onclick="capturePhoto('${p.id}')"><i class="ti ti-camera"></i> Photo</button>
+        </div>`:''}
+
+      ${effectiveSt==='completed'&&!hasRemarks?`
+        <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:12px;margin-top:2px">
+          <div style="font-size:12px;font-weight:600;color:var(--amber);margin-bottom:6px">Did you visit this company?</div>
+          <div class="row" style="gap:8px">
+            <button class="btn btn-success" style="flex:1;justify-content:center" onclick="openPostVisitForm('${p.id}','${visitLog?.id||''}')">
+              <i class="ti ti-check"></i> Yes, I visited
+            </button>
+            <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="openNotVisitedForm('${p.id}')">
+              <i class="ti ti-x"></i> Couldn't visit
+            </button>
+          </div>
+        </div>`:''}
+
+      ${effectiveSt==='completed'&&hasRemarks?`
+        <div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:9px 12px;margin-top:2px">
+          <div style="font-size:10px;font-weight:600;color:var(--emerald);margin-bottom:4px">✓ Visit updated</div>
+          <div class="rmk-box" style="background:transparent;padding:0;margin-bottom:6px">${visitLog.remarks.substring(0,80)}${visitLog.remarks.length>80?'…':''}</div>
+          <button class="btn btn-sm" onclick="openPostVisitForm('${p.id}','${visitLog?.id||''}')"><i class="ti ti-edit"></i> Edit update</button>
+        </div>`:''}
+
+      ${notVisited?`
+        <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.15);border-radius:8px;padding:9px 12px">
+          <div style="font-size:10px;font-weight:600;color:#FCA5A5;margin-bottom:3px">Visit not completed</div>
+          <div class="text-xs">${p.notVisitedReason||'Reason not specified'}</div>
+          <button class="btn btn-sm" style="margin-top:7px" onclick="openRescheduleForm('${p.id}')"><i class="ti ti-calendar-plus"></i> Reschedule</button>
+        </div>`:''}
+    </div>`;
+  }).join('') : '';
+
+  el.innerHTML = `
+    <div class="row-between" style="margin-bottom:12px">
+      <div style="font-size:16px;font-weight:600">Daily Visit Plan</div>
+      <div class="row" style="gap:6px">
+        ${viewSwitcherHtml('planView', STATE.planView, 'renderPlan()')}
+        ${viewingMyOwn?`<button class="btn btn-sm" style="border-color:rgba(139,92,246,.3);color:var(--purple)" onclick="STATE.showAI=!STATE.showAI;renderPlan()"><i class="ti ti-sparkles"></i> AI</button>
+        <button class="btn btn-primary btn-sm" onclick="openAddVisitPanel()"><i class="ti ti-plus"></i> Add</button>`:''}
+      </div>
+    </div>
+
+    <div class="card" style="padding:12px;margin-bottom:12px">
+      <div class="text-label" style="margin-bottom:8px">Planning for</div>
+      <div class="chip-row" style="margin-bottom:0">${dates.map(d=>{
+        const dt=new Date(d);
+        const lbl=d===todayStr()?'Today':d===new Date(Date.now()+86400000).toISOString().slice(0,10)?'Tomorrow':dt.toLocaleDateString('en-IN',{weekday:'short',day:'numeric'});
+        return `<span class="chip${STATE.pld===d?' active':''}" onclick="STATE.pld='${d}';renderPlan()">${lbl}</span>`;
+      }).join('')}</div>
+    </div>
+
+    ${isToday&&mp.length?`
+      <div class="text-label" style="margin-bottom:8px">
+        <i class="ti ti-clock" style="font-size:11px;color:var(--amber);vertical-align:-1px"></i>
+        Today's visits — tap to check in, update after each meeting
+      </div>
+      ${todayVisitCards}
+    `:''}
+
+    ${!isToday&&ce.length?`<div class="text-label" style="margin-bottom:6px"><i class="ti ti-calendar-event" style="font-size:11px;color:var(--blue);vertical-align:-1px"></i> Auto-added from calendar</div>${ce.map(e=>{const c=co(e.companyId);return`<div class="cal-ev"><div style="flex:1"><div style="font-size:11px;font-weight:500">${c.name||'Unknown'}</div><div class="text-xs">${e.time} · ${e.type}</div></div><span class="badge badge-blue">${e.type}</span></div>`;}).join('')}`:''}
+
+    ${!isToday&&mp.length?`
+      <div class="text-label" style="margin-bottom:6px"><i class="ti ti-pencil" style="font-size:11px;vertical-align:-1px"></i> Planned visits</div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--card-radius);overflow:hidden">
+      ${mp.map(p=>{const c=co(p.companyId);return`<div class="plan-item" style="padding:10px 14px">
+        <div class="plan-time">${p.time}</div>
+        <div class="plan-body">
+          <div class="plan-co">${c.name||'Unknown'}</div>
+          <div class="plan-meta">${p.meetingWith||'TBD'} · ${(p.itemsToPitch||'').substring(0,32)}${(p.itemsToPitch||'').length>32?'…':''}</div>
+          ${p.notes?`<div style="font-size:9px;color:var(--indigo2);background:rgba(99,102,241,.08);border-radius:4px;padding:2px 6px;display:inline-block;margin-top:3px">📌 ${p.notes}</div>`:''}
+        </div>
+        <div class="row" style="gap:4px">
+          <button class="btn btn-danger btn-sm" style="padding:3px 6px;font-size:10px" onclick="deletePlanItem('${p.id}')"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>`;}).join('')}</div>`:''}
+
+    ${!mp.length&&!ce.length?`
+      <div class="empty">
+        <i class="ti ti-calendar-plus"></i>
+        <p>No visits planned for this day</p>
+        <small>Add companies you plan to visit, or use AI for suggestions</small>
+        <div class="row" style="justify-content:center;gap:8px;margin-top:12px">
+          <button class="btn btn-primary btn-sm" onclick="openAddVisitPanel()"><i class="ti ti-plus"></i> Add visit</button>
+          <button class="btn btn-sm" style="border-color:rgba(139,92,246,.3);color:var(--purple)" onclick="STATE.showAI=true;renderPlan()"><i class="ti ti-sparkles"></i> AI suggest</button>
+        </div>
+        ${isToday?`<div style="margin-top:10px"><button class="btn btn-sm" style="border-color:rgba(16,185,129,.3);color:var(--emerald)" onclick="openUnplannedVisitForm()"><i class="ti ti-walk"></i> Log unplanned visit</button></div>`:''}
+      </div>`:`
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+        <div class="row" style="gap:8px">
+          <button class="btn btn-primary" style="flex:1;justify-content:center;font-size:12px" onclick="openAddVisitPanel()"><i class="ti ti-plus"></i> Add another visit</button>
+          <button class="btn btn-sm" style="border-color:rgba(139,92,246,.3);color:var(--purple)" onclick="STATE.showAI=!STATE.showAI;renderPlan()"><i class="ti ti-sparkles"></i> AI</button>
+        </div>
+        ${isToday?`<button class="btn btn-full" style="border-color:rgba(16,185,129,.3);color:var(--emerald);font-size:12px" onclick="openUnplannedVisitForm()"><i class="ti ti-walk"></i> Log an unplanned visit</button>`:''}
+      </div>`}
+
+    ${STATE.showAI?renderAISuggestions():''}`;
+}
+
+function renderAISuggestions() {
+  const myId = STATE.user.id;
+  const myT = STATE.targets.filter(t=>t.repId===myId);
+  const plannedToday = STATE.planItems.filter(p=>p.repId===myId&&p.date===STATE.pld).map(p=>p.companyId);
+
+  // Get regions of today's planned visits to prioritise nearby companies
+  const todayRegions = plannedToday
+    .map(cId=>co(cId).region||co(cId).address?.split(',').slice(-2).join(','))
+    .filter(Boolean)
+    .map(r=>r.toLowerCase().trim());
+
+  // All assigned companies not yet in today's plan
+  const candidates = myT
+    .map(t=>STATE.companies.find(c=>c.id===t.companyId))
+    .filter(Boolean)
+    .filter(c=>!plannedToday.includes(c.id));
+
+  // Score each company: higher = better suggestion
+  function score(c) {
+    let s = 0;
+    const cRegion = (c.region||c.address||'').toLowerCase();
+    // Same region as today's visits = highest priority
+    if(todayRegions.some(r=>cRegion.includes(r)||r.includes(cRegion.split(',')[0]))) s+=100;
+    // Priority A > B > C
+    if(c.priority==='A') s+=30;
+    if(c.priority==='B') s+=20;
+    if(c.priority==='C') s+=10;
+    // Never visited = urgent
+    if(!c.lastVisited||c.lastVisited==='') s+=40;
+    // Long since visited
+    const d=dsi(c.lastVisited);
+    if(d!==null){if(d>60)s+=30;else if(d>30)s+=20;else if(d>14)s+=10;}
+    return s;
+  }
+
+  const sugs = candidates.sort((a,b)=>score(b)-score(a)).slice(0,4);
+
+  if(!sugs.length) return `<div class="text-sm" style="text-align:center;padding:12px;color:var(--text3)">No more companies to suggest for today</div>`;
+
+  return `<div class="text-label" style="margin-top:10px;margin-bottom:6px"><i class="ti ti-sparkles" style="font-size:11px;color:var(--purple);vertical-align:-1px"></i> AI suggestions</div>
+  <div style="background:rgba(139,92,246,.06);border:1px solid rgba(139,92,246,.2);border-radius:8px;padding:8px 10px;margin-bottom:8px">
+    <div class="text-xs" style="color:#C4B5FD">
+      ${todayRegions.length
+        ? `Showing companies near <strong>${todayRegions[0]}</strong> — sorted by priority and last visit date`
+        : 'Sorted by priority and last visit date — add today\'s first visit to get location-based suggestions'}
+    </div>
+  </div>
+  ${sugs.map(c=>{
+    const d=dsi(c.lastVisited);
+    const cRegion=(c.region||c.address?.split(',').slice(0,2).join(',')||'').trim();
+    const sameRegion=todayRegions.some(r=>(c.region||'').toLowerCase().includes(r.split(',')[0])||r.includes((c.region||'').toLowerCase()));
+    const rs=d===null?'Never visited — high priority':d>60?`${d}d without a visit — overdue`:d>30?`${d}d since last visit — good time to follow up`:'Recently visited';
+    return`<div class="ai-ev">
+      <i class="ti ti-sparkles" style="color:var(--purple);font-size:14px;flex-shrink:0;margin-top:1px"></i>
+      <div style="flex:1">
+        <div style="font-size:11px;font-weight:500">${c.name} ${pri(c.priority)}</div>
+        <div class="text-xs" style="margin-bottom:2px">${cRegion}${sameRegion?' <span style="color:#C4B5FD;font-weight:500">· Same area ✓</span>':''}</div>
+        <div style="font-size:10px;color:#C4B5FD">${rs}</div>
+        <button class="btn btn-primary btn-sm" style="margin-top:6px;font-size:10px" onclick="addAISuggestion('${c.id}')">+ Add to plan</button>
+      </div>
+    </div>`;
+  }).join('')}`;
+}
+
+async function addAISuggestion(coId) {
+  const item={id:uid(),repId:STATE.user.id,companyId:coId,date:STATE.pld,time:'12:00',meetingWith:'TBD',designation:'',itemsToPitch:'As per AI suggestion',notes:'AI recommended — nearby location',source:'manual',status:'planned'};
+  await apiWrite('VisitPlan',item);
+  STATE.planItems.push(item);
+  STATE.showAI=false;
+  renderPlan();
+  showToast('Added to visit plan','success');
+}
+
+// ── CONTACTS HELPERS ──────────────────────────────────────────────────────────
+let contactRowCount = 0;
+
+function addContactRow(containerId, prefill) {
+  const id = ++contactRowCount;
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  const div = document.createElement('div');
+  div.id = `cr-${id}`;
+  div.style.cssText = 'background:var(--bg3);border-radius:10px;padding:12px;margin-bottom:10px;border:1px solid var(--border)';
+  div.innerHTML = `
+    <div class="row-between" style="margin-bottom:10px">
+      <span style="font-size:11px;font-weight:600;color:var(--text2)">Contact person</span>
+      <button type="button" onclick="document.getElementById('cr-${id}').remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:2px"><i class="ti ti-x" style="font-size:14px"></i></button>
+    </div>
+    <div class="grid2" style="gap:8px;margin-bottom:8px">
+      <div><div class="inp-label">Name *</div><input class="inp" id="cr-${id}-name" placeholder="e.g. Suresh Kumar" value="${prefill?.name||''}" style="font-size:11px;padding:7px 10px"></div>
+      <div><div class="inp-label">Designation</div><input class="inp" id="cr-${id}-desig" placeholder="e.g. Purchase Manager" value="${prefill?.designation||''}" style="font-size:11px;padding:7px 10px"></div>
+    </div>
+    <div class="grid2" style="gap:8px">
+      <div><div class="inp-label">Phone</div><input class="inp" type="tel" id="cr-${id}-phone" placeholder="e.g. 9876543210" value="${prefill?.phone||''}" style="font-size:11px;padding:7px 10px"></div>
+      <div><div class="inp-label">Email</div><input class="inp" type="email" id="cr-${id}-email" placeholder="e.g. suresh@co.com" value="${prefill?.email||''}" style="font-size:11px;padding:7px 10px"></div>
+    </div>`;
+  container.appendChild(div);
+}
+
+function getContactRows(containerId) {
+  const container = document.getElementById(containerId);
+  if(!container) return [];
+  const contacts = [];
+  container.querySelectorAll('[id^="cr-"]').forEach(div => {
+    const rowId = div.id.replace('cr-','');
+    const name = document.getElementById(`cr-${rowId}-name`)?.value?.trim();
+    if(name) {
+      contacts.push({
+        name,
+        designation: document.getElementById(`cr-${rowId}-desig`)?.value?.trim()||'',
+        phone: document.getElementById(`cr-${rowId}-phone`)?.value?.trim()||'',
+        email: document.getElementById(`cr-${rowId}-email`)?.value?.trim()||'',
+      });
+    }
+  });
+  return contacts;
+}
+
+async function saveContactsForCompany(coId, contacts) {
+  for(const ct of contacts) {
+    const contact = {
+      id: uid(), companyId: coId,
+      name: ct.name, designation: ct.designation,
+      phone: ct.phone, email: ct.email,
+      addedBy: STATE.user.id, addedDate: todayStr(), cardPhotoUrl: ''
+    };
+    await apiWrite('Contacts', contact);
+    STATE.contacts.push(contact);
+  }
+}
+
+function getCompanyContacts(coId) {
+  return STATE.contacts.filter(c=>c.companyId===coId);
+}
+
+function contactPickerHtml(coId, selectedName, selectedDesig) {
+  const contacts = getCompanyContacts(coId);
+  if(!contacts.length) return '';
+  return `<div class="text-label" style="margin-bottom:6px">Known contacts at this company</div>
+  <div style="background:var(--bg3);border-radius:8px;overflow:hidden;margin-bottom:8px">
+    ${contacts.map(ct=>`<div onclick="fillContact('${ct.name}','${ct.designation}','${ct.phone}','${ct.email}')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='transparent'">
+      <div style="width:28px;height:28px;border-radius:50%;background:var(--indigo);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;flex-shrink:0">${ct.name.slice(0,2).toUpperCase()}</div>
+      <div style="flex:1">
+        <div style="font-size:11px;font-weight:500">${ct.name}</div>
+        <div class="text-xs">${ct.designation}${ct.phone?' · '+ct.phone:''}</div>
+      </div>
+      <i class="ti ti-arrow-right" style="font-size:12px;color:var(--text3)"></i>
+    </div>`).join('')}
+  </div>
+  <div class="text-xs" style="color:var(--text3);margin-bottom:8px">Or fill in a different person below:</div>`;
+}
+
+function fillContact(name, desig, phone, email) {
+  const nf=document.getElementById('av-wt')||document.getElementById('pv-name');
+  const df=document.getElementById('av-dg')||document.getElementById('pv-desig');
+  const pf=document.getElementById('av-ph')||document.getElementById('pv-phone');
+  const ef=document.getElementById('av-em')||document.getElementById('pv-email');
+  if(nf) nf.value=name;
+  if(df) df.value=desig;
+  if(pf) pf.value=phone;
+  if(ef) ef.value=email;
+  showToast(`${name} selected`,'success');
+}
+
+function openAddVisitPanel() {
+  const panel = document.getElementById('panel-addvisit');
+  const myCos = STATE.user.role==='rep'
+    ? STATE.companies.filter(c=>c.assignedReps&&c.assignedReps.includes(STATE.user.id))
+    : STATE.companies;
+  panel.innerHTML = `
+    <div class="panel-head"><button class="panel-back" onclick="closePanel('addvisit')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">Add visit to plan</span></div>
+    <div class="inp-group"><div class="inp-label">Company</div>
+      <select class="inp" id="av-co" onchange="updateVisitContactPicker(this.value)">
+        <option value="">Select company…</option>
+        ${myCos.map(c=>`<option value="${c.id}">${c.name} — ${c.address?.split(',')[0]}</option>`).join('')}
+      </select>
+    </div>
+    <div class="grid2" style="gap:8px;margin-bottom:12px">
+      <div><div class="inp-label">Date</div><input type="date" class="inp" id="av-dt" value="${STATE.pld}"></div>
+      <div><div class="inp-label">Time</div><input type="time" class="inp" id="av-tm" value="10:00"></div>
+    </div>
+    <div id="av-contact-picker"></div>
+    <div class="inp-group"><div class="inp-label">Meeting with (name)</div><input class="inp" id="av-wt" placeholder="e.g. Suresh Kumar"></div>
+    <div class="grid2" style="gap:8px;margin-bottom:12px">
+      <div><div class="inp-label">Designation</div><input class="inp" id="av-dg" placeholder="e.g. Purchase Manager"></div>
+      <div><div class="inp-label">Phone</div><input class="inp" type="tel" id="av-ph" placeholder="e.g. 9876543210"></div>
+    </div>
+    <div class="inp-group"><div class="inp-label">Email</div><input class="inp" type="email" id="av-em" placeholder="e.g. name@company.com"></div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
+      <input type="checkbox" id="av-save-contact" style="accent-color:var(--indigo);width:15px;height:15px" checked>
+      <span style="font-size:11px;color:var(--text2)">Save this person to company contacts</span>
+    </label>
+    <div class="inp-group"><div class="inp-label">Items to pitch</div><input class="inp" id="av-it" placeholder="e.g. Industrial Pumps, Gate Valves"></div>
+    <div class="inp-group"><div class="inp-label">Visit goal / notes</div><input class="inp" id="av-nt" placeholder="e.g. Convert RFQ to PO this visit"></div>
+    <button class="btn btn-primary btn-full" style="margin-top:4px" onclick="saveVisitPlan()">Add to visit plan</button>`;
+  openPanel('addvisit');
+}
+
+function updateVisitContactPicker(coId) {
+  const el = document.getElementById('av-contact-picker');
+  if(!el||!coId) return;
+  el.innerHTML = contactPickerHtml(coId,'','');
+}
+
+async function saveVisitPlan() {
+  const coId=document.getElementById('av-co').value;
+  const dt=document.getElementById('av-dt').value;
+  if(!coId||!dt){showToast('Select a company and date','error');return;}
+  const meetingWith = document.getElementById('av-wt').value||'TBD';
+  const designation = document.getElementById('av-dg').value||'';
+  const phone = document.getElementById('av-ph')?.value||'';
+  const email = document.getElementById('av-em')?.value||'';
+  const saveContact = document.getElementById('av-save-contact')?.checked;
+
+  const item={id:uid(),repId:STATE.user.id,companyId:coId,date:dt,time:document.getElementById('av-tm').value,meetingWith,designation,itemsToPitch:document.getElementById('av-it').value,notes:document.getElementById('av-nt').value,source:'manual',status:'planned'};
+  showToast('Saving...','');
+  const ok=await apiWrite('VisitPlan',item);
+  if(ok){
+    STATE.planItems.push(item);
+    // Save contact if name filled and checkbox checked
+    if(saveContact && meetingWith && meetingWith!=='TBD') {
+      const existing = STATE.contacts.find(c=>c.companyId===coId&&c.name.toLowerCase()===meetingWith.toLowerCase());
+      if(!existing) {
+        await saveContactsForCompany(coId,[{name:meetingWith,designation,phone,email}]);
+      }
+    }
+    STATE.pld=dt;
+    showToast('Added to plan ✓','success');
+    closePanel('addvisit');
+    renderPlan();
+  }
+}
+
+async function deletePlanItem(id) {
+  if(!confirm('Remove this visit from plan?'))return;
+  STATE.planItems=STATE.planItems.filter(p=>p.id!==id);
+  await apiUpdate('VisitPlan',{id,status:'cancelled'});
+  renderPlan();
+  showToast('Removed','');
+}
+
+function openNotVisitedForm(planId) {
+  const plan = STATE.planItems.find(p=>p.id===planId)||{};
+  const c = co(plan.companyId);
+  const panel = document.getElementById('panel-visit');
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('visit');renderPlan()"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">Visit not completed — ${c.name||''}</span>
+    </div>
+    <div class="warn-box" style="margin-bottom:16px">
+      <i class="ti ti-info-circle" style="color:var(--amber);font-size:16px;flex-shrink:0"></i>
+      <div class="text-xs" style="color:var(--amber)">This will mark the visit as "Not visited". You can optionally reschedule it to a future date.</div>
+    </div>
+    <div class="inp-group">
+      <div class="inp-label">Reason for not visiting</div>
+      <select class="inp" id="nv-reason">
+        <option value="">Select reason…</option>
+        <option value="Person unavailable / not in office">Person unavailable / not in office</option>
+        <option value="Meeting cancelled by client">Meeting cancelled by client</option>
+        <option value="I was unwell / sick">I was unwell / sick</option>
+        <option value="Travel issue / vehicle breakdown">Travel issue / vehicle breakdown</option>
+        <option value="Company closed / holiday">Company closed / holiday</option>
+        <option value="Rescheduled at client's request">Rescheduled at client's request</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+    <div class="inp-group">
+      <div class="inp-label">Additional notes (optional)</div>
+      <input class="inp" id="nv-notes" placeholder="Any additional context…">
+    </div>
+    <div class="inp-group">
+      <div class="inp-label">Reschedule to (optional)</div>
+      <input type="date" class="inp" id="nv-reschedule">
+    </div>
+    <button class="btn btn-danger btn-full" style="margin-bottom:8px" onclick="saveNotVisited('${planId}')">
+      <i class="ti ti-x"></i> Mark as not visited
+    </button>
+    <button class="btn btn-full" onclick="closePanel('visit');renderPlan()">Cancel — go back</button>`;
+  openPanel('visit');
+}
+
+async function saveNotVisited(planId) {
+  const reason = document.getElementById('nv-reason').value;
+  if(!reason){showToast('Please select a reason','error');return;}
+  const notes = document.getElementById('nv-notes').value;
+  const rescheduleDate = document.getElementById('nv-reschedule').value;
+  const plan = STATE.planItems.find(p=>p.id===planId)||{};
+  const fullReason = notes ? `${reason} — ${notes}` : reason;
+  showToast('Saving...','');
+  await apiUpdate('VisitPlan',{id:planId,status:'not-visited',notVisitedReason:fullReason});
+  const p = STATE.planItems.find(x=>x.id===planId);
+  if(p){p.status='not-visited';p.notVisitedReason=fullReason;}
+  if(rescheduleDate){
+    const ce={id:uid(),repId:STATE.user.id,companyId:plan.companyId,title:`Rescheduled: ${co(plan.companyId).name||'Visit'}`,date:rescheduleDate,time:plan.time||'10:00',type:'visit',confirmed:'FALSE',linkedVisitId:planId};
+    await apiWrite('CalendarEvents',ce);
+    STATE.calEvents.push(ce);
+    showToast('Marked not visited + rescheduled in calendar ✓','success');
+  } else {
+    showToast('Marked as not visited ✓','success');
+  }
+  closePanel('visit');
+  renderPlan();
+}
+
+function openRescheduleForm(planId) {
+  const plan = STATE.planItems.find(p=>p.id===planId)||{};
+  const c = co(plan.companyId);
+  const panel = document.getElementById('panel-visit');
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('visit');renderPlan()"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">Reschedule — ${c.name||''}</span>
+    </div>
+    <div class="inp-group"><div class="inp-label">New date</div><input type="date" class="inp" id="rs-date"></div>
+    <div class="inp-group"><div class="inp-label">New time</div><input type="time" class="inp" id="rs-time" value="${plan.time||'10:00'}"></div>
+    <div class="inp-group"><div class="inp-label">Notes</div><input class="inp" id="rs-notes" placeholder="e.g. Call ahead before visiting"></div>
+    <button class="btn btn-primary btn-full" onclick="saveReschedule('${planId}')"><i class="ti ti-calendar-plus"></i> Reschedule</button>`;
+  openPanel('visit');
+}
+
+async function saveReschedule(planId) {
+  const date = document.getElementById('rs-date').value;
+  if(!date){showToast('Please select a date','error');return;}
+  const plan = STATE.planItems.find(p=>p.id===planId)||{};
+  const ce={id:uid(),repId:STATE.user.id,companyId:plan.companyId,title:`Rescheduled: ${co(plan.companyId).name||'Visit'}`,date,time:document.getElementById('rs-time').value,type:'visit',confirmed:'FALSE',linkedVisitId:planId};
+  await apiWrite('CalendarEvents',ce);
+  STATE.calEvents.push(ce);
+  showToast('Rescheduled in calendar ✓','success');
+  closePanel('visit');
+  renderPlan();
+}
+
+function openUnplannedVisitForm() {
+  const panel = document.getElementById('panel-addvisit');
+  const myCos = STATE.user.role==='rep'
+    ? STATE.companies.filter(c=>c.assignedReps&&c.assignedReps.includes(STATE.user.id))
+    : STATE.companies;
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('addvisit')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">Log unplanned visit</span>
+    </div>
+    <div class="success-box" style="margin-bottom:14px">
+      <i class="ti ti-walk" style="color:var(--emerald);font-size:16px;flex-shrink:0"></i>
+      <div class="text-xs" style="color:#6EE7B7">Visited a company that wasn't in your plan? Log it here — it will be saved as a completed visit immediately.</div>
+    </div>
+    <div class="inp-group"><div class="inp-label">Company visited</div>
+      <select class="inp" id="uv-co" onchange="document.getElementById('uv-newco').style.display=this.value==='__new__'?'block':'none'">
+        <option value="">Select company…</option>
+        ${myCos.map(c=>`<option value="${c.id}">${c.name} — ${c.address?.split(',')[0]}</option>`).join('')}
+        <option value="__new__">+ New company (not in my list)</option>
+      </select>
+    </div>
+    <div id="uv-newco" style="display:none">
+      <div class="inp-group"><div class="inp-label">Company name</div><input class="inp" id="uv-newname" placeholder="e.g. XYZ Industries Pvt Ltd"></div>
+      <div class="inp-group"><div class="inp-label">Address</div><input class="inp" id="uv-newaddr" placeholder="Sector, City"></div>
+    </div>
+    <div class="grid2" style="gap:8px;margin-bottom:12px">
+      <div><div class="inp-label">Time of visit</div><input type="time" class="inp" id="uv-time" value="${nowStr()}"></div>
+      <div><div class="inp-label">Approx. duration</div><select class="inp" id="uv-dur"><option value="30">30 min</option><option value="60" selected>1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option></select></div>
+    </div>
+    <div class="grid2" style="gap:8px;margin-bottom:12px">
+      <div><div class="inp-label">Met with (name)</div><input class="inp" id="uv-wt" placeholder="e.g. Rajesh Gupta"></div>
+      <div><div class="inp-label">Designation</div><input class="inp" id="uv-dg" placeholder="e.g. Purchase Manager"></div>
+    </div>
+    <div class="inp-group"><div class="inp-label">Items pitched</div><input class="inp" id="uv-items" placeholder="e.g. Industrial Pumps, Gate Valves"></div>
+    <div class="inp-group">
+      <div class="inp-label">What was discussed? *</div>
+      <textarea class="inp" id="uv-remarks" rows="3" placeholder="Meeting summary, client interest, feedback, outcomes…" style="resize:none;line-height:1.6"></textarea>
+    </div>
+    <div class="grid2" style="gap:8px;margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:7px;padding:10px;background:var(--bg3);border-radius:8px;cursor:pointer">
+        <input type="checkbox" id="uv-rfq" style="accent-color:var(--purple);width:15px;height:15px">
+        <span style="font-size:11px;font-weight:500">RFQ shared</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:7px;padding:10px;background:var(--bg3);border-radius:8px;cursor:pointer">
+        <input type="checkbox" id="uv-smp" style="accent-color:var(--amber);width:15px;height:15px">
+        <span style="font-size:11px;font-weight:500">Sample needed</span>
+      </label>
+    </div>
+    <div class="inp-group"><div class="inp-label">Next action</div><input class="inp" id="uv-na" placeholder="e.g. Send quotation by Friday"></div>
+    <div class="inp-group"><div class="inp-label">Next action date</div><input type="date" class="inp" id="uv-nd"></div>
+    <button class="btn btn-success btn-full" style="margin-top:4px" onclick="saveUnplannedVisit()">
+      <i class="ti ti-check"></i> Save visit
+    </button>`;
+  openPanel('addvisit');
+}
+
+async function saveUnplannedVisit() {
+  let coId = document.getElementById('uv-co').value;
+  const remarks = document.getElementById('uv-remarks').value.trim();
+  if(!coId){showToast('Please select a company','error');return;}
+  if(!remarks){showToast('Please add what was discussed','error');return;}
+  showToast('Saving...','');
+  if(coId==='__new__'){
+    const newName = document.getElementById('uv-newname').value.trim();
+    if(!newName){showToast('Please enter company name','error');return;}
+    const newCo={id:uid(),name:newName,address:document.getElementById('uv-newaddr').value,region:'',industry:'',priority:'B',assignedReps:STATE.user.id,lastVisited:todayStr(),totalBusiness:0,addedBy:STATE.user.id,active:'TRUE'};
+    await apiWrite('Companies',newCo);
+    STATE.companies.push(newCo);
+    coId=newCo.id;
+  }
+  const startTime = document.getElementById('uv-time').value;
+  const dur = parseInt(document.getElementById('uv-dur').value)||60;
+  const [h,m] = startTime.split(':').map(Number);
+  const endTime = `${String(Math.floor((h*60+m+dur)/60)%24).padStart(2,'0')}:${String((m+dur)%60).padStart(2,'0')}`;
+  const planItem={id:uid(),repId:STATE.user.id,companyId:coId,date:todayStr(),time:startTime,meetingWith:document.getElementById('uv-wt').value||'TBD',designation:document.getElementById('uv-dg').value,itemsToPitch:document.getElementById('uv-items').value,notes:'Unplanned visit',source:'unplanned',status:'completed',notVisitedReason:''};
+  await apiWrite('VisitPlan',planItem);
+  STATE.planItems.push(planItem);
+  const na=document.getElementById('uv-na').value;
+  const nd=document.getElementById('uv-nd').value;
+  const visit={id:uid(),repId:STATE.user.id,companyId:coId,date:todayStr(),time:startTime,meetingWith:document.getElementById('uv-wt').value||'TBD',designation:document.getElementById('uv-dg').value,status:'completed',checkinTime:startTime,checkoutTime:endTime,itemsPitched:document.getElementById('uv-items').value,remarks,rfqShared:document.getElementById('uv-rfq').checked?'TRUE':'FALSE',sampleRequired:document.getElementById('uv-smp').checked?'TRUE':'FALSE',gpsVerified:'FALSE',nextAction:na,nextActionDate:nd,photoUrl:''};
+  await apiWrite('Visits',visit);
+  STATE.visits.push(visit);
+  await apiUpdate('Companies',{id:coId,lastVisited:todayStr()});
+  const c=STATE.companies.find(x=>x.id===coId);if(c)c.lastVisited=todayStr();
+  if(nd&&na){
+    const ce={id:uid(),repId:STATE.user.id,companyId:coId,title:na,date:nd,time:'10:00',type:'followup',confirmed:'TRUE',linkedVisitId:planItem.id};
+    await apiWrite('CalendarEvents',ce);
+    STATE.calEvents.push(ce);
+    showToast('Unplanned visit saved + follow-up added to calendar ✓','success');
+  } else {
+    showToast('Unplanned visit saved ✓','success');
+  }
+  closePanel('addvisit');
+  renderPlan();
+}
+
+// ── VIEW SWITCHER (manager dropdown) ─────────────────────────────────────────
+function viewSwitcherHtml(stateKey, currentVal, onChange) {
+  const isM = STATE.user.role==='manager';
+  if(!isM) return '';
+  const reps = myReps();
+  const labels = {
+    logView: {mine:'My Visit Log', rep:"'s Log", all:'All team visits'},
+    planView: {mine:'My Daily Plan', rep:"'s Plan", all:'All plans'},
+    coView: {mine:'My companies', rep:"'s companies", all:'All companies'},
+  };
+  const lb = labels[stateKey]||labels.logView;
+  const options = [
+    {val:'mine', label:`My ${stateKey==='coView'?'companies':stateKey==='planView'?'plan':'visit log'}`},
+    ...reps.map(r=>({val:r.id, label:`${r.name.split(' ')[0]}'s ${stateKey==='coView'?'companies':stateKey==='planView'?'plan':'log'}`})),
+    {val:'all', label:`All ${stateKey==='coView'?'companies':'visits'}`},
+  ];
+  const current = options.find(o=>o.val===currentVal)||options[0];
+  return `<div style="position:relative;display:inline-block">
+    <button onclick="event.stopPropagation();toggleDropdown('${stateKey}')" style="display:flex;align-items:center;gap:6px;padding:5px 12px;background:var(--indigo);color:#fff;border:none;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">
+      <i class="ti ti-selector" style="font-size:12px"></i>${current.label}
+    </button>
+    <div id="dd-${stateKey}" style="display:none;position:absolute;top:32px;left:0;background:var(--bg2);border:1px solid var(--border);border-radius:10px;min-width:180px;z-index:100;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.4)">
+      ${options.map(o=>`<div onclick="event.stopPropagation();STATE.${stateKey}='${o.val}';toggleDropdown('${stateKey}');${onChange}" style="padding:10px 14px;font-size:12px;cursor:pointer;color:${currentVal===o.val?'var(--indigo2)':'var(--text)'};background:${currentVal===o.val?'rgba(99,102,241,.1)':'transparent'}">
+        ${currentVal===o.val?'<i class="ti ti-check" style="font-size:11px;color:var(--indigo2);margin-right:4px"></i>':'<span style="display:inline-block;width:19px"></span>'}${o.label}
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+function toggleDropdown(id) {
+  const dd = document.getElementById('dd-'+id);
+  if(!dd) return;
+  const isOpen = dd.style.display==='block';
+  // Close all dropdowns first
+  document.querySelectorAll('[id^="dd-"]').forEach(d=>d.style.display='none');
+  if(!isOpen) dd.style.display='block';
+}
+// Close dropdowns on outside click
+document.addEventListener('click', e=>{
+  if(!e.target.closest('[id^="dd-"]')&&!e.target.closest('button[onclick*="toggleDropdown"]')) {
+    document.querySelectorAll('[id^="dd-"]').forEach(d=>d.style.display='none');
+  }
+});
+
+// ── VISIT LOG ─────────────────────────────────────────────────────────────────
+function renderLog() {
+  const el = document.getElementById('page-log');
+  const dates=[];
+  for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);dates.push(d.toISOString().slice(0,10));}
+  const isM = STATE.user.role==='manager';
+
+  // Determine whose visits to show based on logView
+  const myId = String(STATE.user.id||'').trim().toLowerCase();
+  let allV;
+  if(!isM) {
+    allV = STATE.visits.filter(v=>String(v.repId||'').trim().toLowerCase()===myId);
+  } else if(STATE.logView==='mine') {
+    allV = STATE.visits.filter(v=>String(v.repId||'').trim().toLowerCase()===myId);
+  } else if(STATE.logView==='all') {
+    allV = STATE.visits;
+  } else {
+    // specific rep selected
+    allV = STATE.visits.filter(v=>String(v.repId||'').trim().toLowerCase()===STATE.logView.toLowerCase());
+  }
+
+  const viewingRepId = STATE.logView==='mine' ? STATE.user.id : STATE.logView==='all' ? null : STATE.logView;
+  const viewingMyOwn = STATE.logView==='mine' || !isM;
+
+  const todayPlanned = viewingMyOwn && STATE.vd===todayStr()
+    ? STATE.planItems.filter(p=>
+        String(p.repId||'').trim().toLowerCase()===myId &&
+        p.date===STATE.vd &&
+        !allV.some(v=>v.companyId===p.companyId&&v.date===STATE.vd)
+      )
+    : (STATE.logView!=='mine'&&STATE.logView!=='all'&&STATE.vd===todayStr())
+    ? STATE.planItems.filter(p=>
+        String(p.repId||'').trim().toLowerCase()===STATE.logView.toLowerCase() &&
+        p.date===STATE.vd &&
+        !allV.some(v=>v.companyId===p.companyId&&v.date===STATE.vd)
+      )
+    : [];
+
+  const myV = allV.filter(v=>v.date===STATE.vd);
+
+  el.innerHTML = `
+    <div class="row-between" style="margin-bottom:12px">
+      <div style="font-size:16px;font-weight:600">Visit Log</div>
+      ${viewSwitcherHtml('logView', STATE.logView, 'renderLog()')}
+    </div>
+    <div class="chip-row">${dates.map(d=>{
+      const dt=new Date(d);
+      const lbl=d===todayStr()?'Today':dt.toLocaleDateString('en-IN',{weekday:'short',day:'numeric'});
+      return`<span class="chip${STATE.vd===d?' active':''}" onclick="STATE.vd='${d}';renderLog()">${lbl}</span>`;
+    }).join('')}</div>
+
+    ${todayPlanned.length?`
+      <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:var(--card-radius);padding:12px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:600;color:var(--amber);margin-bottom:4px">⚠️ ${todayPlanned.length} visit${todayPlanned.length>1?'s':''} need post-visit update</div>
+        <div class="text-xs" style="margin-bottom:8px">Fill in what happened after each meeting</div>
+        ${todayPlanned.map(p=>{const c=co(p.companyId);return`<div class="row-between" style="padding:6px 0;border-bottom:1px solid rgba(245,158,11,.1)"><div><div style="font-size:11px;font-weight:500">${c.name||'Unknown'}</div><div class="text-xs">${p.time} · ${p.meetingWith||'TBD'}</div></div><button class="btn btn-primary btn-sm" onclick="openPostVisitForm('${p.id}','')"><i class="ti ti-notes"></i> Update</button></div>`;}).join('')}
+      </div>`:''}
+
+    ${myV.length?myV.map(v=>{
+      const c=co(v.companyId);
+      const rp = (STATE.logView==='all' || (!isM&&false)) ? rep(v.repId) : null;
+      const needsUpdate = viewingMyOwn && (!v.remarks||v.remarks==='');
+      const planItem = STATE.planItems.find(p=>p.companyId===v.companyId&&p.date===v.date&&String(p.repId||'').trim()===String(v.repId||'').trim());
+      return`<div class="card" style="margin-bottom:8px;border-color:${needsUpdate?'rgba(245,158,11,.3)':'var(--border)'}">
+        <div class="row-between" style="margin-bottom:6px">
+          <div class="row">${dot(v.status)}<div><div style="font-size:12px;font-weight:600">${c.name||'Unknown'}</div>${rp?`<div class="text-xs" style="color:var(--indigo2)">${rp.name}</div>`:''}</div></div>
+          ${sbg(v.status)}
+        </div>
+        <div class="text-xs" style="margin-bottom:4px"><i class="ti ti-clock" style="font-size:10px"></i> ${v.time} · ${v.meetingWith}${v.designation?', '+v.designation:''}</div>
+        ${v.checkinTime?`<div class="text-xs" style="margin-bottom:4px;color:var(--emerald)"><i class="ti ti-map-pin" style="font-size:10px"></i> Checked in ${v.checkinTime}${v.checkoutTime?' · Out '+v.checkoutTime:''}</div>`:''}
+        ${v.itemsPitched?`<div class="text-xs" style="margin-bottom:6px;color:var(--text3)">${v.itemsPitched}</div>`:''}
+        ${v.remarks?`<div class="rmk-box" style="margin-bottom:8px">${v.remarks}</div>`:''}
+        <div class="row" style="gap:4px;flex-wrap:wrap;margin-bottom:${needsUpdate||v.remarks?'8px':'0'}">
+          ${v.rfqShared==='TRUE'?'<span class="badge badge-purple">RFQ shared</span>':''}
+          ${v.sampleRequired==='TRUE'?'<span class="badge badge-amber">Sample needed</span>':''}
+          ${v.gpsVerified==='TRUE'?'<span class="badge badge-green">GPS ✓</span>':''}
+        </div>
+        ${v.nextAction?`<div class="info-box" style="margin-bottom:8px"><i class="ti ti-arrow-right" style="color:var(--blue);font-size:14px;flex-shrink:0"></i><div><div style="font-size:10px;font-weight:500;color:#93C5FD">Next action · ${v.nextActionDate}</div><div class="text-xs">${v.nextAction}</div></div></div>`:''}
+        ${!isM&&needsUpdate?`<button class="btn btn-primary btn-full" onclick="openPostVisitForm('${planItem?.id||''}','${v.id}')"><i class="ti ti-notes"></i> Add post-visit update</button>`:''}
+        ${!isM&&v.remarks?`<button class="btn btn-sm" onclick="openPostVisitForm('${planItem?.id||''}','${v.id}')"><i class="ti ti-edit"></i> Edit update</button>`:''}
+      </div>`;
+    }).join(''):`<div class="empty"><i class="ti ti-clipboard-off"></i><p>No visits on this day</p><small>Visits you log will appear here</small></div>`}`;
+}
+
+function openVisitDetail(id) {
+  const v=STATE.visits.find(x=>x.id===id)||STATE.planItems.find(x=>x.id===id);
+  if(!v)return;
+  const c=co(v.companyId);
+  const panel=document.getElementById('panel-visit');
+  panel.innerHTML=`
+    <div class="panel-head"><button class="panel-back" onclick="closePanel('visit')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">${c.name||'Visit detail'}</span></div>
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="card-sm"><div class="text-xs">Time</div><div style="font-weight:600;font-family:'DM Mono',monospace">${v.time}</div></div>
+      <div class="card-sm"><div class="text-xs">Status</div>${sbg(v.status)}</div>
+      <div class="card-sm"><div class="text-xs">Meeting with</div><div style="font-weight:500;font-size:12px">${v.meetingWith}</div></div>
+      <div class="card-sm"><div class="text-xs">Designation</div><div style="font-weight:500;font-size:12px">${v.designation||'—'}</div></div>
+    </div>
+    ${v.checkinTime?`<div class="row" style="gap:8px;margin-bottom:10px"><div class="card-sm" style="flex:1;text-align:center"><div class="text-xs">Check-in</div><div style="font-weight:700;color:var(--emerald);font-family:'DM Mono',monospace">${v.checkinTime}</div></div>${v.checkoutTime?`<div class="card-sm" style="flex:1;text-align:center"><div class="text-xs">Check-out</div><div style="font-weight:700;color:var(--red);font-family:'DM Mono',monospace">${v.checkoutTime}</div></div>`:''}</div>`:''}
+    <div style="margin-bottom:10px"><div class="text-label" style="margin-bottom:5px">Items pitched</div><div class="rmk-box">${v.itemsPitched||v.itemsToPitch||'—'}</div></div>
+    ${v.remarks?`<div style="margin-bottom:10px"><div class="text-label" style="margin-bottom:5px">Remarks</div><div class="rmk-box">${v.remarks}</div></div>`:''}
+    <div class="row" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">
+      ${v.rfqShared==='TRUE'||v.rfqShared===true?'<span class="badge badge-purple">RFQ shared</span>':''}
+      ${v.sampleRequired==='TRUE'||v.sampleRequired===true?'<span class="badge badge-amber">Sample needed</span>':''}
+      ${v.gpsVerified==='TRUE'||v.gpsVerified===true?'<span class="badge badge-green">GPS verified</span>':''}
+    </div>
+    ${v.nextAction?`<div class="info-box"><i class="ti ti-arrow-right" style="color:var(--blue);font-size:16px;flex-shrink:0"></i><div><div style="font-size:11px;font-weight:500;color:#93C5FD">Next action</div><div class="text-sm">${v.nextAction} · ${v.nextActionDate}</div></div></div>`:''}
+    ${STATE.user.role==='rep'&&v.status==='planned'?`
+      <div class="row" style="gap:8px;margin-bottom:8px">
+        <button class="btn btn-success" style="flex:1;justify-content:center" onclick="checkIn('${v.id}')"><i class="ti ti-map-pin"></i> Check in</button>
+        <button class="btn" style="flex:1;justify-content:center" onclick="capturePhoto('${v.id}')"><i class="ti ti-camera"></i> Photo</button>
+      </div>
+      <button class="btn btn-full" style="margin-bottom:8px" onclick="openRemarksForm('${v.id}')"><i class="ti ti-notes"></i> Add remarks</button>`:''}
+    ${STATE.user.role==='rep'&&v.status==='in-progress'?`
+      <button class="btn btn-danger btn-full" style="margin-bottom:8px" onclick="checkOut('${v.id}')"><i class="ti ti-door-exit"></i> Check out</button>
+      <button class="btn btn-full" style="margin-bottom:8px" onclick="openRemarksForm('${v.id}')"><i class="ti ti-notes"></i> Add remarks</button>`:''}`;
+  openPanel('visit');
+}
+
+async function checkIn(id) {
+  const v=STATE.planItems.find(x=>x.id===id);if(!v)return;
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(async pos=>{
+      const update={id,status:'in-progress',checkinTime:nowStr(),gpsVerified:'TRUE'};
+      await apiUpdate('VisitPlan',update);
+      Object.assign(v,update);
+      // also write to Visits sheet
+      const visit={id:uid(),repId:STATE.user.id,companyId:v.companyId,date:v.date,time:v.time,meetingWith:v.meetingWith,designation:v.designation,status:'in-progress',checkinTime:nowStr(),checkoutTime:'',itemsPitched:v.itemsToPitch,remarks:'',rfqShared:'FALSE',sampleRequired:'FALSE',gpsVerified:'TRUE',nextAction:'',nextActionDate:'',photoUrl:''};
+      await apiWrite('Visits',visit);
+      STATE.visits.push(visit);
+      showToast('Checked in ✓','success');
+      closePanel('visit');
+      renderLog();
+    },()=>{showToast('Location unavailable — checking in without GPS','');});
+  }
+}
+
+async function checkOut(id) {
+  const update={id,status:'completed',checkoutTime:nowStr()};
+  await apiUpdate('VisitPlan',update);
+  const v=STATE.planItems.find(x=>x.id===id);if(v)Object.assign(v,update);
+  const visit=STATE.visits.find(x=>x.companyId===v?.companyId&&x.status==='in-progress');
+  if(visit){await apiUpdate('Visits',{id:visit.id,status:'completed',checkoutTime:nowStr()});visit.status='completed';visit.checkoutTime=nowStr();}
+  showToast('Checked out ✓','success');closePanel('visit');renderLog();
+}
+
+function openPostVisitForm(planId, visitId) {
+  // Find existing visit log if any
+  const plan = STATE.planItems.find(p=>p.id===planId)||{};
+  const existing = visitId ? STATE.visits.find(v=>v.id===visitId) : null;
+  const c = co(plan.companyId);
+  const panel = document.getElementById('panel-visit');
+
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('visit');renderPlan()"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">Update visit — ${c.name||'Visit'}</span>
+    </div>
+
+    <!-- Meeting details confirmation -->
+    <div class="card" style="margin-bottom:14px;border-color:rgba(99,102,241,.3)">
+      <div class="text-label" style="margin-bottom:6px">Visit details</div>
+      <div class="grid2">
+        <div><div class="text-xs">Company</div><div style="font-size:12px;font-weight:500">${c.name||'—'}</div></div>
+        <div><div class="text-xs">Date & time</div><div style="font-size:12px;font-weight:500">${plan.date} · ${plan.time}</div></div>
+      </div>
+    </div>
+
+    <!-- Who was actually met -->
+    <div class="text-label" style="margin-bottom:10px">Who did you meet?</div>
+    ${contactPickerHtml(plan.companyId, existing?.meetingWith||plan.meetingWith, existing?.designation||plan.designation)}
+    <div class="grid2" style="gap:8px;margin-bottom:8px">
+      <div><div class="inp-label">Name</div><input class="inp" id="pv-name" placeholder="e.g. Suresh Kumar" value="${existing?.meetingWith||plan.meetingWith||''}"></div>
+      <div><div class="inp-label">Designation</div><input class="inp" id="pv-desig" placeholder="e.g. Purchase Manager" value="${existing?.designation||plan.designation||''}"></div>
+    </div>
+    <div class="grid2" style="gap:8px;margin-bottom:8px">
+      <div><div class="inp-label">Phone</div><input class="inp" type="tel" id="pv-phone" placeholder="e.g. 9876543210"></div>
+      <div><div class="inp-label">Email</div><input class="inp" type="email" id="pv-email" placeholder="e.g. name@company.com"></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
+      <input type="checkbox" id="pv-save-contact" style="accent-color:var(--indigo);width:15px;height:15px" checked>
+      <span style="font-size:11px;color:var(--text2)">Save to company contacts</span>
+    </label>
+
+    <!-- What was discussed -->
+    <div class="inp-group">
+      <div class="inp-label">What was discussed?</div>
+      <textarea class="inp" id="pv-remarks" rows="4" placeholder="Summarise the meeting — client's interest, feedback, concerns, what products were shown, their budget…" style="resize:none;line-height:1.6">${existing?.remarks||''}</textarea>
+    </div>
+
+    <!-- Outcomes -->
+    <div class="text-label" style="margin-bottom:10px">Outcomes</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      <label style="display:flex;align-items:center;gap:8px;padding:11px;background:var(--bg3);border-radius:8px;cursor:pointer;border:1px solid ${existing?.rfqShared==='TRUE'?'rgba(139,92,246,.4)':'var(--border)'}">
+        <input type="checkbox" id="pv-rfq" ${existing?.rfqShared==='TRUE'?'checked':''} style="accent-color:var(--purple);width:16px;height:16px">
+        <div><div style="font-size:11px;font-weight:500">RFQ shared</div><div class="text-xs">Customer gave an RFQ</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;padding:11px;background:var(--bg3);border-radius:8px;cursor:pointer;border:1px solid ${existing?.sampleRequired==='TRUE'?'rgba(245,158,11,.4)':'var(--border)'}">
+        <input type="checkbox" id="pv-smp" ${existing?.sampleRequired==='TRUE'?'checked':''} style="accent-color:var(--amber);width:16px;height:16px">
+        <div><div style="font-size:11px;font-weight:500">Sample needed</div><div class="text-xs">They want product samples</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;padding:11px;background:var(--bg3);border-radius:8px;cursor:pointer">
+        <input type="checkbox" id="pv-po" style="accent-color:var(--emerald);width:16px;height:16px">
+        <div><div style="font-size:11px;font-weight:500">PO discussed</div><div class="text-xs">Purchase order talked about</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;padding:11px;background:var(--bg3);border-radius:8px;cursor:pointer">
+        <input type="checkbox" id="pv-revisit" style="accent-color:var(--blue);width:16px;height:16px">
+        <div><div style="font-size:11px;font-weight:500">Need to revisit</div><div class="text-xs">Follow-up visit required</div></div>
+      </label>
+    </div>
+
+    <!-- Items pitched (editable) -->
+    <div class="inp-group">
+      <div class="inp-label">Items actually pitched</div>
+      <input class="inp" id="pv-items" placeholder="e.g. Industrial Pumps 50HP, Gate Valves" value="${existing?.itemsPitched||plan.itemsToPitch||''}">
+    </div>
+
+    <!-- Next action -->
+    <div class="text-label" style="margin-bottom:10px">Next action</div>
+    <div class="inp-group">
+      <div class="inp-label">What needs to happen next?</div>
+      <input class="inp" id="pv-na" placeholder="e.g. Send quotation, Follow up on RFQ, Submit samples" value="${existing?.nextAction||''}">
+    </div>
+    <div class="inp-group">
+      <div class="inp-label">By when? (date)</div>
+      <input type="date" class="inp" id="pv-nd" value="${existing?.nextActionDate||''}">
+    </div>
+
+    <button class="btn btn-primary btn-full" style="margin-top:4px" onclick="savePostVisit('${planId}','${visitId||''}')">
+      <i class="ti ti-check"></i> Save visit update
+    </button>`;
+  openPanel('visit');
+}
+
+async function savePostVisit(planId, visitId) {
+  const plan = STATE.planItems.find(p=>p.id===planId)||{};
+  const remarks = document.getElementById('pv-remarks').value.trim();
+  if(!remarks){showToast('Please add what was discussed','error');return;}
+
+  const meetingWith = document.getElementById('pv-name').value;
+  const designation = document.getElementById('pv-desig').value;
+  const phone = document.getElementById('pv-phone')?.value||'';
+  const email = document.getElementById('pv-email')?.value||'';
+  const saveContact = document.getElementById('pv-save-contact')?.checked;
+  const items = document.getElementById('pv-items').value;
+  const rfq = document.getElementById('pv-rfq').checked?'TRUE':'FALSE';
+  const smp = document.getElementById('pv-smp').checked?'TRUE':'FALSE';
+  const na = document.getElementById('pv-na').value;
+  const nd = document.getElementById('pv-nd').value;
+
+  showToast('Saving...','');
+
+  if(visitId && STATE.visits.find(v=>v.id===visitId)) {
+    const update = {id:visitId,meetingWith,designation,itemsPitched:items,remarks,rfqShared:rfq,sampleRequired:smp,nextAction:na,nextActionDate:nd,status:'completed'};
+    await apiUpdate('Visits',update);
+    const v=STATE.visits.find(x=>x.id===visitId);if(v)Object.assign(v,update);
+  } else {
+    const visit = {id:uid(),repId:STATE.user.id,companyId:plan.companyId,date:plan.date,time:plan.time,meetingWith,designation,status:'completed',checkinTime:plan.checkinTime||'',checkoutTime:nowStr(),itemsPitched:items,remarks,rfqShared:rfq,sampleRequired:smp,gpsVerified:plan.gpsVerified||'FALSE',nextAction:na,nextActionDate:nd,photoUrl:''};
+    await apiWrite('Visits',visit);
+    STATE.visits.push(visit);
+  }
+
+  // Save contact if new person
+  if(saveContact && meetingWith && meetingWith!=='TBD') {
+    const existing = STATE.contacts.find(c=>c.companyId===plan.companyId&&c.name.toLowerCase()===meetingWith.toLowerCase());
+    if(!existing) {
+      await saveContactsForCompany(plan.companyId,[{name:meetingWith,designation,phone,email}]);
+    } else if(phone&&!existing.phone) {
+      // Update phone if we have new info
+      await apiUpdate('Contacts',{id:existing.id,phone,email});
+      existing.phone=phone; existing.email=email;
+    }
+  }
+
+  await apiUpdate('VisitPlan',{id:planId,status:'completed'});
+  const p=STATE.planItems.find(x=>x.id===planId);if(p)p.status='completed';
+  await apiUpdate('Companies',{id:plan.companyId,lastVisited:plan.date});
+  const c=STATE.companies.find(x=>x.id===plan.companyId);if(c)c.lastVisited=plan.date;
+
+  if(nd&&na){
+    const ce={id:uid(),repId:STATE.user.id,companyId:plan.companyId,title:na,date:nd,time:'10:00',type:'followup',confirmed:'TRUE',linkedVisitId:planId};
+    await apiWrite('CalendarEvents',ce);
+    STATE.calEvents.push(ce);
+    showToast('Visit saved + follow-up added to calendar ✓','success');
+  } else {
+    showToast('Visit update saved ✓','success');
+  }
+
+  closePanel('visit');
+  renderPlan();
+}
+
+// ── TARGETS ────────────────────────────────────────────────────────────────────
+function renderTargets() {
+  const el = document.getElementById('page-targets');
+  const isM = STATE.user.role==='manager';
+  const rId = isM ? STATE.viewRep : STATE.user.id;
+  const r = rep(rId);
+  const myPOs = STATE.pos.filter(p=>p.repId===rId);
+  const verified = myPOs.filter(p=>p.status==='verified');
+  const ach = verified.reduce((s,p)=>s+Number(p.amount||0),0);
+  const mt = STATE.targets.filter(t=>t.repId===rId&&t.period==='monthly').reduce((s,t)=>s+Number(t.saleTarget||0),0);
+  const pc = mt ? Math.round(ach/mt*100) : 0;
+  const inc = calcInc(ach);
+
+  el.innerHTML = `
+    <div class="row-between" style="margin-bottom:12px">
+      <div style="font-size:16px;font-weight:600">Target Tracking</div>
+      ${!isM?`<button class="btn btn-primary btn-sm" onclick="openUplPanel()"><i class="ti ti-upload"></i> Upload PO</button>`:''}
+    </div>
+    ${isM?`<div class="chip-row">${myReps().map(r2=>`<span class="chip${STATE.viewRep===r2.id?' active':''}" onclick="STATE.viewRep='${r2.id}';renderTargets()">${r2.name.split(' ')[0]}</span>`).join('')}</div>`:''}
+    <div class="card" style="border-color:rgba(99,102,241,.3)">
+      <div class="text-label" style="color:var(--indigo2);margin-bottom:6px">${new Date().toLocaleString('default',{month:'long',year:'numeric'})} — ${r.name}</div>
+      <div class="row-between" style="margin-bottom:8px">
+        <div><div style="font-size:22px;font-weight:700">${fmt(ach)}</div><div class="text-sm">of ${fmt(mt)}</div></div>
+        <div style="text-align:right"><div style="font-size:22px;font-weight:700;color:${pbc(pc)}">${pc}%</div><div style="font-size:10px;color:#34D399">Incentive: ${fmt(inc)}</div></div>
+      </div>
+      ${pb(pc,6)}
+      <div class="grid3" style="margin-top:10px;text-align:center">
+        <div class="card-sm"><div style="font-size:11px;font-weight:700;color:var(--emerald)">${fmt(ach)}</div><div class="text-xs">Achieved</div></div>
+        <div class="card-sm"><div style="font-size:11px;font-weight:700;color:var(--amber)">${fmt(Math.max(0,mt-ach))}</div><div class="text-xs">Remaining</div></div>
+        <div class="card-sm"><div style="font-size:11px;font-weight:700;color:var(--indigo2)">${fmt(inc)}</div><div class="text-xs">Incentive</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px">Incentive slabs</div>
+      ${[{l:'Below ₹10L',d:'No incentive',mn:0,mx:1e6},{l:'₹10L – ₹30L',d:'1% on amount above ₹10L',mn:1e6,mx:3e6},{l:'Above ₹30L',d:'1.5% on amount above ₹30L',mn:3e6,mx:Infinity}].map((s,i)=>{
+        const active=ach>=s.mn&&ach<s.mx,past=ach>=s.mx;
+        return `<div class="slab${active?' active-slab':past?' done-slab':''}">
+          <div class="slab-circle" style="${past?'background:var(--emerald);color:#fff':active?'background:var(--indigo);color:#fff':'background:var(--bg3);color:var(--text2)'}">${past?'<i class="ti ti-check" style="font-size:12px"></i>':`<span>${i+1}</span>`}</div>
+          <div style="flex:1"><div style="font-size:11px;font-weight:500">${s.l}</div><div class="text-xs">${s.d}</div></div>
+          ${active?'<span class="badge badge-blue">Current</span>':''}${past?'<span class="badge badge-green">Cleared</span>':''}
+        </div>`;}).join('')}
+    </div>
+    <div class="card">
+      <div class="row-between" style="margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600">POs & Invoices</span>
+        ${isM&&myPOs.filter(p=>p.status==='pending').length?`<span class="badge badge-amber">${myPOs.filter(p=>p.status==='pending').length} pending</span>`:''}
+      </div>
+      ${myPOs.map(po=>{const c=co(po.companyId);return`<div class="list-item"><div style="color:${po.status==='verified'?'var(--emerald)':'var(--amber)'}"><i class="ti ti-${po.status==='verified'?'circle-check':'clock'}" style="font-size:20px"></i></div><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:500">${po.description}</div><div class="text-xs">${c.name} · ${po.date}</div></div><div style="text-align:right"><div style="font-size:11px;font-weight:600">${fmt(po.amount)}</div><span class="badge ${po.status==='verified'?'badge-green':'badge-amber'}">${po.status==='verified'?'Verified':'Pending'}</span>${isM&&po.status==='pending'?`<div class="row" style="gap:4px;margin-top:4px"><button class="btn btn-success btn-sm" style="font-size:8px;padding:2px 6px" onclick="verifyPO('${po.id}')">Verify</button><button class="btn btn-danger btn-sm" style="font-size:8px;padding:2px 6px" onclick="rejectPO('${po.id}')">Reject</button></div>`:''}</div></div>`;}).join('')}
+      ${!myPOs.length?'<div class="text-sm" style="text-align:center;color:var(--text3);padding:12px">No POs uploaded yet</div>':''}
+    </div>`;
+}
+
+function openUplPanel() {
+  const panel=document.getElementById('panel-upl');
+  panel.innerHTML=`
+    <div class="panel-head"><button class="panel-back" onclick="closePanel('upl')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">Upload PO / Invoice</span></div>
+    <div class="row" style="gap:8px;margin-bottom:14px">
+      <button class="btn btn-primary" id="utp-po" style="flex:1;justify-content:center" onclick="document.getElementById('utp-po').classList.add('btn-primary');document.getElementById('utp-inv').classList.remove('btn-primary')">Purchase Order</button>
+      <button class="btn" id="utp-inv" style="flex:1;justify-content:center" onclick="document.getElementById('utp-inv').classList.add('btn-primary');document.getElementById('utp-po').classList.remove('btn-primary')">Invoice</button>
+    </div>
+    <div class="inp-group"><div class="inp-label">Company</div><select class="inp" id="upl-co"><option value="">Select company…</option>${STATE.companies.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
+    <div class="inp-group"><div class="inp-label">Amount (₹)</div><input type="number" class="inp" id="upl-am" placeholder="e.g. 250000"></div>
+    <div class="inp-group"><div class="inp-label">Description</div><input class="inp" id="upl-ds" placeholder="e.g. Industrial Pump Order — Q2 2025"></div>
+    <div class="upload-zone" style="margin-bottom:14px" onclick="document.getElementById('upl-file').click()">
+      <i class="ti ti-upload" style="font-size:28px;color:var(--text3);display:block;margin-bottom:8px"></i>
+      <div style="font-size:12px;color:var(--text2)">Tap to upload document</div>
+      <div class="text-xs" style="margin-top:4px">PDF, JPG, PNG supported</div>
+      <input type="file" id="upl-file" accept=".pdf,.jpg,.jpeg,.png" style="display:none">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="submitPO()">Submit for verification</button>`;
+  openPanel('upl');
+}
+
+async function submitPO() {
+  const coId=document.getElementById('upl-co').value;
+  const am=document.getElementById('upl-am').value;
+  const ds=document.getElementById('upl-ds').value;
+  if(!coId||!am){showToast('Please fill company and amount','error');return;}
+  const po={id:uid(),repId:STATE.user.id,companyId:coId,type:document.getElementById('utp-po').classList.contains('btn-primary')?'PO':'Invoice',amount:am,description:ds,date:todayStr(),status:'pending',verifiedBy:'',fileUrl:''};
+  showToast('Uploading...','');
+  const ok=await apiWrite('POs',po);
+  if(ok){STATE.pos.push(po);showToast('PO submitted for verification ✓','success');closePanel('upl');navigate('targets');}
+}
+
+async function verifyPO(id) {
+  await apiUpdate('POs',{id,status:'verified',verifiedBy:STATE.user.id});
+  const po=STATE.pos.find(p=>p.id===id);if(po){po.status='verified';po.verifiedBy=STATE.user.id;}
+  showToast('PO verified ✓','success');renderTargets();renderHome();
+}
+async function rejectPO(id) {
+  await apiUpdate('POs',{id,status:'rejected'});
+  const po=STATE.pos.find(p=>p.id===id);if(po)po.status='rejected';
+  showToast('PO rejected','');renderTargets();
+}
+
+// ── GPS & TRAVEL ──────────────────────────────────────────────────────────────
+function renderGPS() {
+  const el=document.getElementById('page-gps');
+  const isM=STATE.user.role==='manager';
+  const rId=isM?STATE.viewRep:STATE.user.id;
+  const r=rep(rId);
+  const wk=weekRange(todayStr());
+  const logs=STATE.gpsLogs.filter(g=>g.repId===rId&&g.date>=wk.start&&g.date<=wk.end);
+  const weekKm=logs.reduce((s,g)=>s+Number(g.totalKm||0),0);
+  const weekTA=logs.reduce((s,g)=>s+Number(g.taAmount||0),0);
+  const claim=STATE.taClaims.find(c=>c.repId===rId&&c.weekStart===wk.start);
+
+  el.innerHTML=`
+    <div style="font-size:16px;font-weight:600;margin-bottom:12px">GPS & Travel</div>
+    ${isM?`<div class="chip-row">${myReps().map(r2=>`<span class="chip${STATE.viewRep===r2.id?' active':''}" onclick="STATE.viewRep='${r2.id}';renderGPS()">${r2.name.split(' ')[0]}</span>`).join('')}</div>`:''}
+    ${!isM?`<div class="on-field-banner${STATE.onField?' active':''}">
+      <div class="field-dot${STATE.onField?' active':''}"></div>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:500">${STATE.onField?'On field — GPS active':'Off field'}</div>
+        <div class="text-xs">${STATE.onField?`Tracking via browser GPS · Today: ${STATE.currentDayKm.toFixed(1)} km · ${vehicleTag(STATE.fieldVehicle)}`:'Mark yourself on field to start GPS tracking'}</div>
+      </div>
+      <button class="btn btn-sm ${STATE.onField?'btn-danger':''}" onclick="${STATE.onField?'stopField()':'showVehicleSelector()'}">${STATE.onField?'Mark Off Field':'Mark On Field'}</button>
+    </div>`:''}
+    ${!isM&&STATE.onField?`<div class="card" style="border-color:rgba(16,185,129,.3);margin-bottom:10px">
+      <div class="text-label" style="color:var(--emerald);margin-bottom:6px">Today's tracking</div>
+      <div class="grid3" style="text-align:center">
+        <div><div style="font-size:18px;font-weight:700">${STATE.currentDayKm.toFixed(1)}</div><div class="text-xs">KMs so far</div></div>
+        <div><div style="font-size:18px;font-weight:700;color:var(--amber)">₹${kmRate(STATE.fieldVehicle)}/km</div><div class="text-xs">Rate</div></div>
+        <div><div style="font-size:18px;font-weight:700;color:var(--emerald)">${fmtINR(STATE.currentDayKm*kmRate(STATE.fieldVehicle))}</div><div class="text-xs">Earned today</div></div>
+      </div>
+    </div>`:''}
+    <div class="card">
+      <div class="row-between" style="margin-bottom:10px"><span style="font-size:13px;font-weight:600">Daily KM log — ${r.name}</span></div>
+      ${logs.length?logs.map(g=>`<div class="list-item">
+        <div style="flex:1"><div style="font-size:11px;font-weight:500">${g.date}</div><div class="text-xs">${vehicleTag(g.vehicle)}</div></div>
+        <div style="text-align:right"><div style="font-size:12px;font-weight:700;color:var(--indigo2)">${Number(g.totalKm||0).toFixed(1)} km</div><div style="font-size:11px;font-weight:600;color:var(--emerald)">${fmtINR(g.taAmount)}</div></div>
+      </div>`).join(''):`<div class="text-sm" style="text-align:center;padding:12px;color:var(--text3)">No logs this week</div>`}
+    </div>
+    <div class="card" style="border-color:rgba(245,158,11,.3)">
+      <div class="row-between" style="margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600">Weekly TA — ${wk.start} to ${wk.end}</span>
+        <span class="badge ${claim?.status==='approved'?'badge-green':claim?.status==='submitted'?'badge-amber':'badge-gray'}">${claim?.status==='approved'?'Approved ✓':claim?.status==='submitted'?'Submitted':'Not submitted'}</span>
+      </div>
+      <div class="grid3" style="text-align:center;margin-bottom:12px">
+        <div><div style="font-size:18px;font-weight:700">${weekKm.toFixed(1)}</div><div class="text-xs">Total KMs</div></div>
+        <div><div style="font-size:18px;font-weight:700;color:var(--amber)">Mixed</div><div class="text-xs">Rates</div></div>
+        <div><div style="font-size:18px;font-weight:700;color:var(--emerald)">${fmtINR(weekTA)}</div><div class="text-xs">TA amount</div></div>
+      </div>
+      ${!isM&&!claim?`<button class="btn btn-primary btn-full" onclick="submitTAClaim('${rId}','${wk.start}','${wk.end}',${weekKm},${weekTA})">Submit TA claim for approval</button>`:''}
+      ${isM&&claim?.status==='submitted'?`<div class="row" style="gap:8px"><button class="btn btn-success" style="flex:1;justify-content:center" onclick="approveTA('${claim.id}')">Approve TA</button><button class="btn btn-danger" style="flex:1;justify-content:center" onclick="rejectTA('${claim.id}')">Flag issue</button></div>`:''}
+      ${claim?.status==='approved'?`<div class="text-xs" style="color:var(--text3);text-align:center">Approved by ${claim.approvedBy} · Payment by Monday</div>`:''}
+    </div>
+    <div class="info-box">
+      <i class="ti ti-info-circle" style="color:var(--blue);font-size:16px;flex-shrink:0"></i>
+      <div class="text-xs" style="color:#93C5FD"><strong>GPS tracking active via browser.</strong> For background tracking, connect Airtel IoT Locate API. Rates: Two-wheeler / Public transport ₹3.5/km · Four-wheeler ₹8/km.</div>
+    </div>`;
+}
+
+function showVehicleSelector() {
+  const panel=document.getElementById('panel-vehicle');
+  panel.innerHTML=`
+    <div class="panel-head"><button class="panel-back" onclick="closePanel('vehicle')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">How are you travelling today?</span></div>
+    <div class="vehicle-opts">
+      <div class="vehicle-opt" id="vopt-tw" onclick="selectVehicle('two-wheeler')"><i class="ti ti-motorbike" style="color:var(--amber)"></i><span>Two-wheeler</span><div class="rate">₹3.5/km</div></div>
+      <div class="vehicle-opt" id="vopt-fw" onclick="selectVehicle('four-wheeler')"><i class="ti ti-car" style="color:var(--blue)"></i><span>Four-wheeler</span><div class="rate">₹8/km</div></div>
+      <div class="vehicle-opt" id="vopt-pt" onclick="selectVehicle('public-transport')"><i class="ti ti-bus" style="color:var(--emerald)"></i><span>Public transport</span><div class="rate">₹3.5/km</div></div>
+    </div>
+    <div class="text-sm" style="text-align:center;color:var(--text3);margin-bottom:20px">Your selection determines today's TA rate</div>
+    <button class="btn btn-primary btn-full" onclick="startField()">Confirm & Start Day</button>`;
+  openPanel('vehicle');
+}
+function selectVehicle(v) {
+  document.querySelectorAll('.vehicle-opt').forEach(x=>x.classList.remove('selected'));
+  const map={'two-wheeler':'vopt-tw','four-wheeler':'vopt-fw','public-transport':'vopt-pt'};
+  document.getElementById(map[v])?.classList.add('selected');
+  STATE.fieldVehicle=v;
+}
+function startField() {
+  if(!STATE.fieldVehicle){showToast('Please select vehicle type','error');return;}
+  STATE.onField=true;
+  startGPS();
+  closePanel('vehicle');
+  showToast('GPS tracking started ✓','success');
+  navigate('gps');
+}
+async function stopField() {
+  if(!confirm('Mark yourself off field? This will save today\'s KM log.'))return;
+  stopGPS();
+  STATE.onField=false;
+  // Save GPS log
+  const log={id:uid(),repId:STATE.user.id,date:todayStr(),dayOfWeek:new Date().toLocaleDateString('en-IN',{weekday:'short'}),totalKm:STATE.currentDayKm.toFixed(2),vehicle:STATE.fieldVehicle,kmRate:kmRate(STATE.fieldVehicle),taAmount:taAmt(STATE.currentDayKm,STATE.fieldVehicle),onFieldStart:'',onFieldEnd:nowStr()};
+  await apiWrite('GPSLogs',log);
+  STATE.gpsLogs.push(log);
+  STATE.currentDayKm=0;STATE.gpsTrail=[];STATE.fieldVehicle=null;
+  showToast('Off field. KM log saved ✓','success');
+  renderGPS();
+}
+function startGPS() {
+  if(!navigator.geolocation)return;
+  let lastPos=null;
+  STATE.gpsWatcher=navigator.geolocation.watchPosition(pos=>{
+    if(lastPos){STATE.currentDayKm+=haversineKm(lastPos.latitude,lastPos.longitude,pos.coords.latitude,pos.coords.longitude);}
+    lastPos=pos.coords;
+    STATE.gpsTrail.push({lat:pos.coords.latitude,lng:pos.coords.longitude,t:nowStr()});
+  },{enableHighAccuracy:true,maximumAge:30000,timeout:10000});
+}
+function stopGPS() {if(STATE.gpsWatcher&&navigator.geolocation){navigator.geolocation.clearWatch(STATE.gpsWatcher);STATE.gpsWatcher=null;}}
+async function submitTAClaim(rId,start,end,km,ta) {
+  const claim={id:uid(),repId:rId,weekStart:start,weekEnd:end,totalKm:km.toFixed(2),taAmount:Math.round(ta),status:'submitted',submittedDate:todayStr(),approvedBy:'',approvedDate:'',paidDate:''};
+  await apiWrite('TAClaims',claim);STATE.taClaims.push(claim);
+  showToast('TA claim submitted ✓','success');renderGPS();
+}
+async function approveTA(id) {
+  await apiUpdate('TAClaims',{id,status:'approved',approvedBy:STATE.user.name,approvedDate:todayStr()});
+  const c=STATE.taClaims.find(x=>x.id===id);if(c){c.status='approved';c.approvedBy=STATE.user.name;}
+  showToast('TA approved ✓','success');renderGPS();renderHome();
+}
+async function rejectTA(id) {
+  await apiUpdate('TAClaims',{id,status:'flagged'});
+  const c=STATE.taClaims.find(x=>x.id===id);if(c)c.status='flagged';
+  showToast('TA flagged','');renderGPS();
+}
+
+// ── TEAM VIEW ─────────────────────────────────────────────────────────────────
+function renderTeam() {
+  const el=document.getElementById('page-team');
+  const reps=myReps();
+  const wk=weekRange(todayStr());
+  el.innerHTML=`
+    <div style="font-size:16px;font-weight:600;margin-bottom:12px">Team Overview</div>
+    ${reps.map(r=>{
+      const myPOs=STATE.pos.filter(p=>p.repId===r.id&&p.status==='verified');
+      const ach=myPOs.reduce((s,p)=>s+Number(p.amount||0),0);
+      const mt=STATE.targets.filter(t=>t.repId===r.id&&t.period==='monthly').reduce((s,t)=>s+Number(t.saleTarget||0),0);
+      const pc=mt?Math.round(ach/mt*100):0;
+      const tv=STATE.visits.filter(v=>v.repId===r.id&&v.date===todayStr());
+      const done=tv.filter(v=>v.status==='completed').length;
+      const logs=STATE.gpsLogs.filter(g=>g.repId===r.id&&g.date>=wk.start&&g.date<=wk.end);
+      const wkTA=logs.reduce((s,g)=>s+Number(g.taAmount||0),0);
+      const cos=STATE.targets.filter(t=>t.repId===r.id&&t.period==='annual').length;
+      return `<div class="card">
+        <div class="row-between" style="margin-bottom:10px">
+          <div class="row"><div style="width:32px;height:32px;border-radius:50%;background:var(--emerald);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff">${r.avatar||r.name.slice(0,2)}</div><div><div style="font-size:12px;font-weight:500">${r.name}</div></div></div>
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--emerald)"></div>
+        </div>
+        <div class="row-between" style="margin-bottom:3px"><span class="text-xs">Monthly achievement</span><span class="text-xs">${pc}% · ${fmt(ach)}</span></div>
+        ${pb(pc,4)}
+        <div class="grid3" style="margin-top:10px;text-align:center">
+          <div class="card-sm"><div style="font-size:13px;font-weight:700;color:var(--indigo2)">${cos}</div><div class="text-xs">Annual cos</div></div>
+          <div class="card-sm"><div style="font-size:13px;font-weight:700;color:var(--emerald)">${done}/${tv.length}</div><div class="text-xs">Today</div></div>
+          <div class="card-sm"><div style="font-size:13px;font-weight:700;color:var(--amber)">${fmtINR(wkTA)}</div><div class="text-xs">Week TA</div></div>
+        </div>
+        <div class="row" style="gap:6px;margin-top:10px">
+          <button class="btn btn-sm" style="flex:1;justify-content:center;font-size:10px" onclick="STATE.viewRep='${r.id}';navigate('targets')"><i class="ti ti-target"></i> Targets</button>
+          <button class="btn btn-sm" style="flex:1;justify-content:center;font-size:10px" onclick="STATE.viewRep='${r.id}';navigate('gps')"><i class="ti ti-truck"></i> Travel</button>
+        </div>
+      </div>`;
+    }).join('')}
+    ${STATE.approvals.filter(a=>a.status==='pending').length?`<div class="card" style="border-color:rgba(245,158,11,.3)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px"><i class="ti ti-bell" style="color:var(--amber);vertical-align:-2px"></i> Approval queue</div>
+      ${STATE.approvals.filter(a=>a.status==='pending').map(ar=>`<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:15px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Company removal request</div><div class="text-sm">${rep(ar.repId).name} · ${co(ar.companyId).name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="resolveApproval('${ar.id}','approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="resolveApproval('${ar.id}','rejected')">Reject</button></div></div></div>`).join('')}
+    </div>`:''}`;
+}
+async function resolveApproval(id, status) {
+  await apiUpdate('Approvals',{id,status,resolvedBy:STATE.user.id,resolvedDate:todayStr()});
+  const a=STATE.approvals.find(x=>x.id===id);
+  if(a){a.status=status;a.resolvedBy=STATE.user.id;}
+
+  if(status==='approved' && a?.type==='remove_company' && a?.companyId) {
+    // Check if this company is assigned to other reps too
+    const otherRepsWithCompany = STATE.targets.filter(t=>
+      t.companyId===a.companyId &&
+      t.repId!==a.repId
+    );
+
+    if(otherRepsWithCompany.length > 0) {
+      // Other reps still have this company — only remove for requesting rep
+      const repTargets = STATE.targets.filter(t=>t.companyId===a.companyId&&t.repId===a.repId);
+      for(const t of repTargets) {
+        await apiUpdate('Targets',{id:t.id,active:'FALSE'});
+      }
+      STATE.targets = STATE.targets.filter(t=>!(t.companyId===a.companyId&&t.repId===a.repId));
+      showToast('Approved — removed from rep\'s list ✓','success');
+    } else {
+      // No other reps have this company — remove entirely
+      await apiUpdate('Companies',{id:a.companyId,active:'FALSE'});
+      STATE.companies = STATE.companies.filter(c=>c.id!==a.companyId);
+      STATE.targets = STATE.targets.filter(t=>t.companyId!==a.companyId);
+      showToast('Approved — company removed ✓','success');
+    }
+  } else {
+    showToast(status==='approved'?'Approved ✓':'Rejected','success');
+  }
+
+  renderTeam();
+  renderHome();
+  // If on companies page, refresh it too
+  if(STATE.page==='companies') renderCompanies();
+}
+
+// ── CALENDAR ───────────────────────────────────────────────────────────────────
+function renderCal() {
+  const el=document.getElementById('page-cal');
+  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const {y,m}=STATE.calMonth;
+  const first=new Date(y,m,1).getDay();
+  const total=new Date(y,m+1,0).getDate();
+  const evDates=new Set(STATE.calEvents.filter(e=>e.repId===STATE.user.id||STATE.user.role==='manager').map(e=>e.date));
+  const todayDate=new Date().getDate();const todayMonth=new Date().getMonth();const todayYear=new Date().getFullYear();
+  el.innerHTML=`
+    <div style="font-size:16px;font-weight:600;margin-bottom:12px">Calendar</div>
+    <div class="card">
+      <div class="row-between" style="margin-bottom:12px">
+        <button class="btn btn-sm" onclick="S.calMonth.m--;if(STATE.calMonth.m<0){STATE.calMonth.m=11;STATE.calMonth.y--;}renderCal()"><i class="ti ti-chevron-left"></i></button>
+        <span style="font-size:14px;font-weight:600">${months[m]} ${y}</span>
+        <button class="btn btn-sm" onclick="STATE.calMonth.m++;if(STATE.calMonth.m>11){STATE.calMonth.m=0;STATE.calMonth.y++;}renderCal()"><i class="ti ti-chevron-right"></i></button>
+      </div>
+      <div class="cal-grid">${days.map(d=>`<div class="cal-day-hdr">${d}</div>`).join('')}${Array(first).fill('<div></div>').join('')}${Array.from({length:total},(_,i)=>{const d=i+1;const dt=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;const isT=d===todayDate&&m===todayMonth&&y===todayYear;const hasE=evDates.has(dt);const isSun=new Date(y,m,d).getDay()===0;return`<div class="cal-day${isT?' today':''}${hasE?' has-ev':''}${isSun?' sunday':''}" onclick="showDayEvents('${dt}')">${d}</div>`;}).join('')}</div>
+    </div>
+    <div class="card">
+      <div class="row-between" style="margin-bottom:10px"><span style="font-size:13px;font-weight:600">Upcoming events</span><button class="btn btn-primary btn-sm" onclick="openAddCalPanel()"><i class="ti ti-plus"></i> Add</button></div>
+      ${STATE.calEvents.filter(e=>(e.repId===STATE.user.id||STATE.user.role==='manager')&&e.date>=todayStr()).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,10).map(e=>{const c=co(e.companyId);return`<div class="list-item"><div style="width:28px;flex-shrink:0;text-align:center"><div style="font-size:12px;font-weight:700;color:var(--indigo2)">${e.date.split('-')[2]}</div><div style="font-size:9px;color:var(--text3)">${months[parseInt(e.date.split('-')[1])-1].slice(0,3)}</div></div><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:500">${e.title}</div><div class="text-xs">${e.time} · ${c.address?.split(',')[0]||''}</div></div><span class="badge badge-blue">${e.type}</span></div>`;}).join('')}
+      ${!STATE.calEvents.filter(e=>e.repId===STATE.user.id||STATE.user.role==='manager').length?'<div class="text-sm" style="text-align:center;color:var(--text3);padding:12px">No upcoming events</div>':''}
+    </div>`;
+}
+function showDayEvents(dt) {
+  const evs=STATE.calEvents.filter(e=>(e.repId===STATE.user.id||STATE.user.role==='manager')&&e.date===dt);
+  if(!evs.length){showToast('No events on '+dt,'');return;}
+  alert(evs.map(e=>`${e.time} — ${e.title} (${e.type})`).join('\n'));
+}
+function openAddCalPanel() {
+  const panel=document.getElementById('panel-addcal');
+  panel.innerHTML=`
+    <div class="panel-head"><button class="panel-back" onclick="closePanel('addcal')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">Add calendar event</span></div>
+    <div class="inp-group"><div class="inp-label">Company</div><select class="inp" id="ce-co"><option value="">Select company…</option>${STATE.companies.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
+    <div class="grid2" style="gap:8px;margin-bottom:12px">
+      <div><div class="inp-label">Date</div><input type="date" class="inp" id="ce-dt"></div>
+      <div><div class="inp-label">Time</div><input type="time" class="inp" id="ce-tm" value="10:00"></div>
+    </div>
+    <div class="inp-group"><div class="inp-label">Event type</div><select class="inp" id="ce-tp"><option value="visit">Visit</option><option value="followup">Follow-up</option><option value="meeting">Meeting</option></select></div>
+    <div class="inp-group"><div class="inp-label">Title / Description</div><input class="inp" id="ce-tt" placeholder="e.g. Initial visit — ABC Industries"></div>
+    <button class="btn btn-primary btn-full" style="margin-top:4px" onclick="saveCalEvent()">Add to calendar</button>`;
+  openPanel('addcal');
+}
+async function saveCalEvent() {
+  const cId=document.getElementById('ce-co').value;
+  const dt=document.getElementById('ce-dt').value;
+  const title=document.getElementById('ce-tt').value;
+  if(!dt||!title){showToast('Please fill date and title','error');return;}
+  const ce={id:uid(),repId:STATE.user.id,companyId:cId,title,date:dt,time:document.getElementById('ce-tm').value,type:document.getElementById('ce-tp').value,confirmed:'TRUE',linkedVisitId:''};
+  await apiWrite('CalendarEvents',ce);STATE.calEvents.push(ce);
+  showToast('Event added ✓','success');closePanel('addcal');renderCal();
+}
+
+// ── VISITING CARD OCR ─────────────────────────────────────────────────────────
+function openCardScanner() {
+  const panel=document.getElementById('panel-card');
+  panel.innerHTML=`
+    <div class="panel-head"><button class="panel-back" onclick="closePanel('card')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">Scan visiting card</span></div>
+    <div class="upload-zone" style="margin-bottom:14px" onclick="document.getElementById('card-img').click()">
+      <i class="ti ti-camera" style="font-size:32px;color:var(--indigo2);display:block;margin-bottom:8px"></i>
+      <div style="font-size:13px;font-weight:500">Tap to take photo or upload</div>
+      <div class="text-xs" style="margin-top:4px">AI will extract contact details automatically</div>
+      <input type="file" id="card-img" accept="image/*" capture="environment" style="display:none" onchange="processCard(this)">
+    </div>
+    <div id="card-result" style="display:none">
+      <div class="text-label" style="margin-bottom:10px">Extracted details — verify and save</div>
+      <div class="inp-group"><div class="inp-label">Name</div><input class="inp" id="cr-name"></div>
+      <div class="inp-group"><div class="inp-label">Designation</div><input class="inp" id="cr-desig"></div>
+      <div class="inp-group"><div class="inp-label">Company</div><input class="inp" id="cr-company"></div>
+      <div class="inp-group"><div class="inp-label">Phone</div><input class="inp" id="cr-phone" type="tel"></div>
+      <div class="inp-group"><div class="inp-label">Email</div><input class="inp" id="cr-email" type="email"></div>
+      <div class="inp-group"><div class="inp-label">Link to company in system</div><select class="inp" id="cr-co"><option value="">Select company…</option>${STATE.companies.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
+      <button class="btn btn-primary btn-full" onclick="saveContact()">Save contact</button>
+    </div>
+    <div id="card-loading" style="display:none" class="loading"><div class="spinner"></div><span class="text-sm">Reading card with AI…</span></div>
+    ${!CLAUDE_KEY?'<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:16px;flex-shrink:0"></i><div class="text-xs" style="color:var(--amber)">Add your Claude API key to enable AI card reading. You can still enter details manually below.</div></div>':''}`
+  ;
+  openPanel('card');
+}
+
+async function processCard(input) {
+  const file=input.files[0];if(!file)return;
+  document.getElementById('card-loading').style.display='flex';
+  if(CLAUDE_KEY){
+    try {
+      const b64=await fileToBase64(file);
+      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':CLAUDE_KEY,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:file.type,data:b64}},{type:'text',text:'Extract contact details from this visiting card. Return ONLY a JSON object with keys: name, designation, company, phone, email. If a field is not visible, use empty string.'}]}]})});
+      const data=await res.json();
+      const text=data.content?.[0]?.text||'{}';
+      const clean=text.replace(/```json|```/g,'').trim();
+      const info=JSON.parse(clean);
+      document.getElementById('cr-name').value=info.name||'';
+      document.getElementById('cr-desig').value=info.designation||'';
+      document.getElementById('cr-company').value=info.company||'';
+      document.getElementById('cr-phone').value=info.phone||'';
+      document.getElementById('cr-email').value=info.email||'';
+    } catch(e){ showToast('AI reading failed — fill manually','error'); }
+  }
+  document.getElementById('card-loading').style.display='none';
+  document.getElementById('card-result').style.display='block';
+}
+function fileToBase64(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=()=>rej(new Error('Read failed'));r.readAsDataURL(file);});}
+async function saveContact() {
+  const coId=document.getElementById('cr-co').value;
+  const contact={id:uid(),companyId:coId,name:document.getElementById('cr-name').value,designation:document.getElementById('cr-desig').value,phone:document.getElementById('cr-phone').value,email:document.getElementById('cr-email').value,addedBy:STATE.user.id,addedDate:todayStr(),cardPhotoUrl:''};
+  await apiWrite('Contacts',contact);STATE.contacts.push(contact);
+  showToast('Contact saved ✓','success');closePanel('card');
+}
+
+// ── CAPTURE PHOTO ─────────────────────────────────────────────────────────────
+function capturePhoto(visitId) {
+  const input=document.createElement('input');
+  input.type='file';input.accept='image/*';input.capture='environment';
+  input.onchange=async()=>{
+    showToast('Photo saved ✓','success');
+    await apiUpdate('Visits',{id:visitId,photoUrl:'captured_'+Date.now()});
+  };
+  input.click();
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+initLogin();
+</script>
+</body>
+</html>
