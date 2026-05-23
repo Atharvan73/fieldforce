@@ -512,6 +512,7 @@ let STATE = {
   users: [], companies: [], targets: [], visits: [], planItems: [],
   contacts: [], pos: [], gpsLogs: [], taClaims: [], calEvents: [], approvals: [],
   rfqs: [], tasks: [],
+  rfqSearch: '', rfqCatFilter: 'all', rfqRepFilter: 'all',
   page: 'home', period: 'annual', cpf: 'all', pld: todayStr(), vd: todayStr(),
   exp: null, showAI: false, onField: false, fieldVehicle: null, viewRep: null,
   logView: 'mine', planView: 'mine', coView: 'all',
@@ -2972,20 +2973,42 @@ function renderRFQ() {
   const isM = STATE.user.role==='manager';
   if(!STATE.rfqView) STATE.rfqView = 'open';
   if(!STATE.rfqFilter) STATE.rfqFilter = 'all';
+  if(!STATE.rfqSearch) STATE.rfqSearch = '';
+  if(!STATE.rfqCatFilter) STATE.rfqCatFilter = 'all';
+  if(!STATE.rfqRepFilter) STATE.rfqRepFilter = 'all';
 
   const myRfqs = getMyRFQs();
   const openRFQs = myRfqs.filter(r=>r.status==='New Lead'||r.status==='Quoted');
   const closedRFQs = myRfqs.filter(r=>r.status==='Order Received'||r.status==='Order Lost');
-  const unmatched = myRfqs.filter(r=>r.status==='Unmatched PO');
 
   const notQuoted = openRFQs.filter(r=>r.status==='New Lead').length;
   const quoted = openRFQs.filter(r=>r.status==='Quoted').length;
   const ordered = closedRFQs.filter(r=>r.status==='Order Received').length;
   const lost = closedRFQs.filter(r=>r.status==='Order Lost').length;
 
-  // Filter displayed RFQs
+  // Get linked company for each RFQ via contacts
+  function rfqCompany(rfq) {
+    if(rfq.companyId) return co(rfq.companyId);
+    const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===String(rfq.customerEmail||'').toLowerCase());
+    if(contact) return co(contact.companyId);
+    return null;
+  }
+
+  // Filter pipeline: view → status → category → rep → search
   let displayRFQs = STATE.rfqView==='open' ? openRFQs : STATE.rfqView==='closed' ? closedRFQs : myRfqs;
   if(STATE.rfqFilter!=='all') displayRFQs = displayRFQs.filter(r=>r.status===STATE.rfqFilter);
+  if(STATE.rfqCatFilter!=='all') displayRFQs = displayRFQs.filter(r=>(r.category||'')===STATE.rfqCatFilter);
+  if(isM && STATE.rfqRepFilter!=='all') displayRFQs = displayRFQs.filter(r=>r.repId===STATE.rfqRepFilter);
+  if(STATE.rfqSearch.trim()) {
+    const q = STATE.rfqSearch.trim().toLowerCase();
+    displayRFQs = displayRFQs.filter(r=>{
+      const cmp = rfqCompany(r);
+      return (r.rfqSubject||r.subject||'').toLowerCase().includes(q)
+        || (r.customerName||'').toLowerCase().includes(q)
+        || (cmp?.name||'').toLowerCase().includes(q)
+        || (r.customerEmail||'').toLowerCase().includes(q);
+    });
+  }
 
   // Sort: high urgency first, then by date
   displayRFQs = [...displayRFQs].sort((a,b)=>{
@@ -2995,13 +3018,11 @@ function renderRFQ() {
     return (rfqDaysAgo(b.rfqDate)||0)-(rfqDaysAgo(a.rfqDate)||0);
   });
 
-  // Get linked company for each RFQ via contacts
-  function rfqCompany(rfq) {
-    if(rfq.companyId) return co(rfq.companyId);
-    const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===String(rfq.customerEmail||'').toLowerCase());
-    if(contact) return co(contact.companyId);
-    return null;
-  }
+  // Count active secondary filters for badge
+  const activeFilters = (STATE.rfqCatFilter!=='all'?1:0) + (isM&&STATE.rfqRepFilter!=='all'?1:0);
+
+  // Build category list from actual data
+  const allCats = [...new Set(myRfqs.map(r=>r.category).filter(Boolean))].sort();
 
   el.innerHTML = `
     <div class="row-between" style="margin-bottom:14px">
@@ -3043,8 +3064,8 @@ function renderRFQ() {
       <button class="seg-tab${STATE.rfqView==='all'?' active':''}" onclick="STATE.rfqView='all';STATE.rfqFilter='all';renderRFQ()">All (${myRfqs.length})</button>
     </div>
 
-    <!-- Filter chips -->
-    <div class="chip-row" style="margin-bottom:12px">
+    <!-- Status filter chips -->
+    <div class="chip-row" style="margin-bottom:10px">
       <span class="chip${STATE.rfqFilter==='all'?' active':''}" onclick="STATE.rfqFilter='all';renderRFQ()">All</span>
       <span class="chip${STATE.rfqFilter==='New Lead'?' active':''}" onclick="STATE.rfqFilter='New Lead';renderRFQ()" style="border-color:rgba(239,68,68,.3);color:#FCA5A5">Not Quoted</span>
       <span class="chip${STATE.rfqFilter==='Quoted'?' active':''}" onclick="STATE.rfqFilter='Quoted';renderRFQ()" style="border-color:rgba(245,158,11,.3);color:#FCD34D">Quoted</span>
@@ -3052,9 +3073,47 @@ function renderRFQ() {
       <span class="chip${STATE.rfqFilter==='Order Lost'?' active':''}" onclick="STATE.rfqFilter='Order Lost';renderRFQ()">Lost</span>
     </div>
 
+    <!-- Search + Filter row -->
+    <div class="row" style="gap:8px;margin-bottom:12px">
+      <div class="search-wrap" style="flex:1;margin-bottom:0">
+        <i class="ti ti-search"></i>
+        <input class="search-inp" id="rfq-search-inp" placeholder="Search company, customer, subject…" value="${STATE.rfqSearch.replace(/"/g,'&quot;')}"
+          oninput="STATE.rfqSearch=this.value;renderRFQ()" />
+      </div>
+      <button class="btn btn-sm" onclick="toggleRFQFilterDrawer()" style="flex-shrink:0;gap:5px;position:relative;${activeFilters>0?'border-color:var(--indigo);color:var(--indigo2);background:rgba(99,102,241,.1)':''}">
+        <i class="ti ti-adjustments-horizontal"></i> Filter
+        ${activeFilters>0?`<span style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;background:var(--indigo);border-radius:50%;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;color:#fff">${activeFilters}</span>`:''}
+      </button>
+    </div>
+
+    <!-- Filter drawer (hidden by default) -->
+    <div id="rfq-filter-drawer" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
+      <div class="row-between" style="margin-bottom:12px">
+        <div style="font-size:12px;font-weight:600">Filters</div>
+        <button class="btn btn-sm" style="font-size:10px;padding:3px 8px" onclick="STATE.rfqCatFilter='all';STATE.rfqRepFilter='all';renderRFQ()">Clear all</button>
+      </div>
+
+      <div class="text-label" style="margin-bottom:8px">Category</div>
+      <div class="chip-row" style="flex-wrap:wrap;margin-bottom:${isM?'12px':'0'}">
+        <span class="chip${STATE.rfqCatFilter==='all'?' active':''}" onclick="STATE.rfqCatFilter='all';renderRFQ()" style="font-size:10px">All</span>
+        ${allCats.map(c=>`<span class="chip${STATE.rfqCatFilter===c?' active':''}" onclick="STATE.rfqCatFilter='${c}';renderRFQ()" style="font-size:10px">${c}</span>`).join('')}
+      </div>
+
+      ${isM?`
+      <div class="text-label" style="margin-bottom:8px">Rep</div>
+      <div class="chip-row" style="flex-wrap:wrap">
+        <span class="chip${STATE.rfqRepFilter==='all'?' active':''}" onclick="STATE.rfqRepFilter='all';renderRFQ()" style="font-size:10px">All reps</span>
+        ${myReps().map(r=>`<span class="chip${STATE.rfqRepFilter===r.id?' active':''}" onclick="STATE.rfqRepFilter='${r.id}';renderRFQ()" style="font-size:10px">${r.name.split(' ')[0]}</span>`).join('')}
+      </div>`:''}
+    </div>
+
+    <!-- Results count when filters active -->
+    ${(STATE.rfqSearch.trim()||STATE.rfqCatFilter!=='all'||(isM&&STATE.rfqRepFilter!=='all'))?`
+    <div class="text-label" style="margin-bottom:8px">${displayRFQs.length} result${displayRFQs.length!==1?'s':''}</div>`:''}
+
     <!-- RFQ tiles -->
     ${displayRFQs.length===0
-      ? `<div class="empty"><i class="ti ti-file-invoice"></i><p>No RFQs in this view</p><small>RFQs from your contacts appear here automatically</small></div>`
+      ? `<div class="empty"><i class="ti ti-file-search"></i><p>No RFQs match your filters</p><small><span style="color:var(--indigo2);cursor:pointer" onclick="STATE.rfqSearch='';STATE.rfqCatFilter='all';STATE.rfqRepFilter='all';renderRFQ()">Clear filters</span></small></div>`
       : displayRFQs.map(rfq=>{
           const urg = rfqUrgency(rfq);
           const days = rfqDaysAgo(rfq.rfqDate||rfq.rfqdate);
@@ -3085,6 +3144,18 @@ function renderRFQ() {
             </div>
           </div>`;
         }).join('')}`;
+
+  // Restore search focus if user was typing
+  if(STATE.rfqSearch) {
+    const inp = document.getElementById('rfq-search-inp');
+    if(inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  }
+}
+
+function toggleRFQFilterDrawer() {
+  const d = document.getElementById('rfq-filter-drawer');
+  if(!d) return;
+  d.style.display = d.style.display==='none' ? 'block' : 'none';
 }
 
 function openRFQDetail(id) {
