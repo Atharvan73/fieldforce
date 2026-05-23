@@ -343,7 +343,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v2.7</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v2.8</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -515,6 +515,7 @@ let STATE = {
   contacts: [], pos: [], gpsLogs: [], taClaims: [], calEvents: [], approvals: [],
   rfqs: [], tasks: [],
   rfqSearch: '', rfqCatFilter: 'all', rfqRepFilter: 'all', rfqCoFilter: '', rfqCustFilter: '',
+  coSearch: '', coIndustryFilter: 'all',
   page: 'home', period: 'annual', cpf: 'all', pld: todayStr(), vd: todayStr(),
   exp: null, showAI: false, onField: false, fieldVehicle: null, viewRep: null,
   logView: 'mine', planView: 'mine', coView: 'all',
@@ -891,6 +892,8 @@ function coIsInPeriod(cId, myT, period) {
 function renderCompanies() {
   const el = document.getElementById('page-companies');
   const isM = STATE.user.role==='manager';
+  if(!STATE.coSearch) STATE.coSearch='';
+  if(!STATE.coIndustryFilter) STATE.coIndustryFilter='all';
 
   // Filter targets based on coView
   let myT;
@@ -916,15 +919,19 @@ function renderCompanies() {
   // Filter by priority chip
   if(STATE.cpf!=='all') cos=cos.filter(c=>c.priority===STATE.cpf);
 
-  // Summary figures — for the selected period, use the most specific target
-  // Annual target for a company = the annual target row; Monthly = monthly row; Weekly = weekly row
+  // Filter by industry
+  if(STATE.coIndustryFilter!=='all') cos=cos.filter(c=>(c.industry||'')=== STATE.coIndustryFilter);
+
+  // Filter by search
+  if(STATE.coSearch.trim()) {
+    const q=STATE.coSearch.trim().toLowerCase();
+    cos=cos.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.address||'').toLowerCase().includes(q)||(c.industry||'').toLowerCase().includes(q));
+  }
+
   function getBestTarget(cId, period) {
     const t = myT.filter(t=>t.companyId===cId);
-    if(period==='annual'||period==='all') {
-      // prefer annual row, fallback to any
-      return t.find(x=>x.period==='annual') || t[0];
-    }
-    if(period==='monthly') return t.find(x=>x.period==='monthly') || t.find(x=>x.period==='weekly') || t[0];
+    if(period==='annual'||period==='all') return t.find(x=>x.period==='annual')||t[0];
+    if(period==='monthly') return t.find(x=>x.period==='monthly')||t.find(x=>x.period==='weekly')||t[0];
     if(period==='weekly') return t.find(x=>x.period==='weekly');
     return t[0];
   }
@@ -934,19 +941,12 @@ function renderCompanies() {
   const achT = summaryTargets.reduce((s,t)=>s+Number(t?.achieved||0),0);
   const pct = tot?Math.round(achT/tot*100):0;
 
-  const periodLabel = {
-    annual:`Annual 2025`,
-    monthly:new Date().toLocaleString('default',{month:'long'})+' '+new Date().getFullYear(),
-    weekly:`Week of ${weekRange(todayStr()).start}`,
-    all:'All companies'
-  }[STATE.period];
+  const periodLabel = {annual:`Annual 2025`,monthly:new Date().toLocaleString('default',{month:'long'})+' '+new Date().getFullYear(),weekly:`Week of ${weekRange(todayStr()).start}`,all:'All companies'}[STATE.period];
+  const periodDesc = {annual:'All your target companies',monthly:'Companies you are targeting this month',weekly:'Companies you are focusing on this week',all:'All your target companies'}[STATE.period];
 
-  const periodDesc = {
-    annual:'All your target companies',
-    monthly:'Companies you are targeting this month',
-    weekly:'Companies you are focusing on this week',
-    all:'All your target companies'
-  }[STATE.period];
+  // Build industry list from data
+  const allIndustries = [...new Set(allCos.map(c=>c.industry).filter(Boolean))].sort();
+  const activeSecondaryFilters = (STATE.coIndustryFilter!=='all'?1:0);
 
   el.innerHTML = `
     <div class="row-between" style="margin-bottom:12px">
@@ -956,12 +956,16 @@ function renderCompanies() {
         <button class="btn btn-primary btn-sm" onclick="openAddCompanyPanel()"><i class="ti ti-plus"></i> Add</button>
       </div>
     </div>
+
+    <!-- Period tabs -->
     <div class="seg-tabs">
       <button class="seg-tab${STATE.period==='annual'?' active':''}" onclick="STATE.period='annual';STATE.exp=null;renderCompanies()">Annual</button>
       <button class="seg-tab${STATE.period==='monthly'?' active':''}" onclick="STATE.period='monthly';STATE.exp=null;renderCompanies()">Monthly</button>
       <button class="seg-tab${STATE.period==='weekly'?' active':''}" onclick="STATE.period='weekly';STATE.exp=null;renderCompanies()">Weekly</button>
       <button class="seg-tab${STATE.period==='all'?' active':''}" onclick="STATE.period='all';STATE.exp=null;renderCompanies()">All</button>
     </div>
+
+    <!-- Summary card -->
     <div class="card" style="border-color:rgba(99,102,241,.3);padding:12px;margin-bottom:10px">
       <div class="row-between" style="margin-bottom:2px">
         <span class="text-label" style="color:var(--indigo2)">${periodLabel}</span>
@@ -974,14 +978,39 @@ function renderCompanies() {
       </div>
       ${pb(pct,6)}
     </div>
-    <div class="chip-row">
-      ${['all','A','B','C'].map(f=>`<span class="chip${STATE.cpf===f?' active':''}" onclick="STATE.cpf='${f}';renderCompanies()">${f==='all'?'All':'Priority '+f}</span>`).join('')}
+
+    <!-- Search bar -->
+    <div class="search-wrap" style="margin-bottom:10px">
+      <i class="ti ti-search"></i>
+      <input class="search-inp" id="co-search-inp" placeholder="Search by name, city, industry…"
+        value="${STATE.coSearch.replace(/"/g,'&quot;')}"
+        oninput="STATE.coSearch=this.value;renderCompanies()" />
     </div>
+
+    <!-- Filter row: priority chips + filter button -->
+    <div class="row" style="gap:6px;margin-bottom:12px;align-items:center">
+      <div class="chip-row" style="flex:1;margin-bottom:0">
+        ${['all','A','B','C'].map(f=>`<span class="chip${STATE.cpf===f?' active':''}" onclick="STATE.cpf='${f}';renderCompanies()">${f==='all'?'All':'Priority '+f}</span>`).join('')}
+      </div>
+      <button class="btn btn-sm" onclick="openCoFilterPanel()" style="flex-shrink:0;position:relative;${activeSecondaryFilters>0?'border-color:var(--indigo);color:var(--indigo2);background:rgba(99,102,241,.1)':''}">
+        <i class="ti ti-adjustments-horizontal"></i> Filter
+        ${activeSecondaryFilters>0?`<span style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;background:var(--indigo);border-radius:50%;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;color:#fff">${activeSecondaryFilters}</span>`:''}
+      </button>
+    </div>
+
+    <!-- Active filter tags -->
+    ${STATE.coIndustryFilter!=='all'||STATE.coSearch.trim()?`
+    <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      ${STATE.coIndustryFilter!=='all'?`<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(99,102,241,.12);color:var(--indigo2);border:1px solid rgba(99,102,241,.3);border-radius:20px;padding:3px 10px;font-size:10px;font-weight:500">${STATE.coIndustryFilter}<i class="ti ti-x" style="font-size:10px;cursor:pointer" onclick="STATE.coIndustryFilter='all';renderCompanies()"></i></span>`:''}
+      ${STATE.coSearch.trim()?`<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(99,102,241,.12);color:var(--indigo2);border:1px solid rgba(99,102,241,.3);border-radius:20px;padding:3px 10px;font-size:10px;font-weight:500">"${STATE.coSearch}"<i class="ti ti-x" style="font-size:10px;cursor:pointer" onclick="STATE.coSearch='';renderCompanies()"></i></span>`:''}
+      <span style="font-size:10px;color:var(--text3)">${cos.length} result${cos.length!==1?'s':''}</span>
+    </div>`:''}
+
     ${cos.length===0
       ? `<div class="empty">
-          <i class="ti ti-building-off"></i>
-          <p>${STATE.period==='weekly'?'No companies in weekly focus':'No companies in monthly focus'}</p>
-          <small>Go to a company → Full details → Mark as ${STATE.period} focus</small>
+          <i class="ti ti-building-search"></i>
+          <p>${STATE.coSearch||STATE.coIndustryFilter!=='all'?'No companies match your search':'No companies in '+STATE.period+' focus'}</p>
+          <small>${STATE.coSearch||STATE.coIndustryFilter!=='all'?`<span style="color:var(--indigo2);cursor:pointer" onclick="STATE.coSearch='';STATE.coIndustryFilter='all';renderCompanies()">Clear filters</span>`:'Go to a company → Full details → Mark as '+STATE.period+' focus'}</small>
         </div>`
       : `<div class="co-list">${cos.map((c,i)=>{
           const allT = myT.filter(t=>t.companyId===c.id);
@@ -991,8 +1020,6 @@ function renderCompanies() {
           const pc = tg?Math.round(ac/tg*100):0;
           const ov = dsi(c.lastVisited)!==null&&dsi(c.lastVisited)>30;
           const ex = STATE.exp===c.id;
-
-          // Which period badges does this company have?
           const hasMonthly = allT.some(t=>t.period==='monthly');
           const hasWeekly = allT.some(t=>t.period==='weekly');
 
@@ -1014,18 +1041,13 @@ function renderCompanies() {
             <div class="co-expand${ex?' open':''}">
               ${pb(pc,5)}
               <div class="text-xs" style="margin-top:4px;margin-bottom:6px">${pc}% · ${dsi(c.lastVisited)===null?'Never visited':dsi(c.lastVisited)+'d since last visit'}</div>
-
-              <!-- Period focus badges -->
               <div class="row" style="gap:4px;flex-wrap:wrap;margin-bottom:8px">
                 <span class="badge badge-blue">Annual</span>
                 ${hasMonthly?'<span class="badge badge-amber">Monthly</span>':''}
                 ${hasWeekly?'<span class="badge badge-green">Weekly</span>':''}
               </div>
-
               ${bestT?.items?`<div class="text-sm" style="margin-bottom:3px">${bestT.items.substring(0,55)}${bestT.items.length>55?'…':''}</div>`:''}
               ${bestT?.goals?`<div style="font-size:9px;color:var(--indigo2);background:rgba(99,102,241,.08);border-radius:4px;padding:2px 6px;display:inline-block;margin-bottom:6px">🎯 ${bestT.goals.substring(0,45)}${bestT.goals.length>45?'…':''}</div>`:''}
-
-              <!-- Quick focus toggle buttons -->
               <div class="row" style="gap:5px;margin-top:4px;flex-wrap:wrap">
                 ${!hasMonthly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(245,158,11,.3);color:var(--amber)" onclick="addFocusPeriod('${c.id}','monthly');event.stopPropagation()"><i class="ti ti-plus" style="font-size:10px"></i> Add to Monthly</button>`:''}
                 ${!hasWeekly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(16,185,129,.3);color:var(--emerald)" onclick="addFocusPeriod('${c.id}','weekly');event.stopPropagation()"><i class="ti ti-plus" style="font-size:10px"></i> Add to Weekly</button>`:''}
@@ -1034,6 +1056,57 @@ function renderCompanies() {
             </div>
           </div>`;
         }).join('')}</div>`}`;
+
+  // Restore search focus
+  if(STATE.coSearch) {
+    const inp = document.getElementById('co-search-inp');
+    if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}
+  }
+}
+
+function openCoFilterPanel() {
+  const isM = STATE.user.role==='manager';
+  // Get industries from current view's companies
+  const myT = STATE.targets.filter(t=>isM?true:t.repId===STATE.user.id);
+  const allCIds = [...new Set(myT.map(t=>t.companyId))];
+  const allCos = allCIds.map(id=>STATE.companies.find(c=>c.id===id)).filter(Boolean);
+  const allIndustries = [...new Set(allCos.map(c=>c.industry).filter(Boolean))].sort();
+
+  const panel = document.getElementById('panel-rfq-filter'); // reuse same panel slot
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('rfq-filter')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">Filter Companies</span>
+      <button class="btn btn-sm" style="font-size:10px;margin-left:auto" onclick="STATE.coIndustryFilter='all';STATE.cpf='all';closePanel('rfq-filter');renderCompanies()">Clear all</button>
+    </div>
+
+    <div class="inp-group">
+      <div class="inp-label" style="margin-bottom:8px">Priority</div>
+      <div class="chip-row" style="flex-wrap:wrap">
+        ${['all','A','B','C'].map(f=>`<span class="chip${STATE.cpf===f?' active':''}" onclick="STATE.cpf='${f}';document.querySelectorAll('.flt-pri').forEach(x=>x.classList.remove('active'));this.classList.add('active')" style="font-size:10px">${f==='all'?'All priorities':'Priority '+f}</span>`).join('')}
+      </div>
+    </div>
+
+    <div class="inp-group">
+      <div class="inp-label" style="margin-bottom:8px">Industry</div>
+      <div style="display:flex;flex-direction:column;gap:2px;max-height:400px;overflow-y:auto">
+        <div onclick="STATE.coIndustryFilter='all';document.querySelectorAll('.flt-ind').forEach(x=>x.style.fontWeight='400');this.style.fontWeight='600'" 
+          style="padding:10px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${STATE.coIndustryFilter==='all'?'600':'400'};color:${STATE.coIndustryFilter==='all'?'var(--indigo2)':'var(--text)'};background:${STATE.coIndustryFilter==='all'?'rgba(99,102,241,.08)':'transparent'};display:flex;align-items:center;justify-content:space-between">
+          All industries ${STATE.coIndustryFilter==='all'?'<i class="ti ti-check" style="color:var(--indigo2);font-size:12px"></i>':''}
+        </div>
+        ${allIndustries.map(ind=>`
+        <div class="flt-ind" onclick="STATE.coIndustryFilter='${ind.replace(/'/g,"\\'")}';document.querySelectorAll('.flt-ind').forEach(x=>{x.style.fontWeight='400';x.style.color='var(--text)';x.style.background='transparent'});this.style.fontWeight='600';this.style.color='var(--indigo2)';this.style.background='rgba(99,102,241,.08)'"
+          style="padding:10px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:${STATE.coIndustryFilter===ind?'600':'400'};color:${STATE.coIndustryFilter===ind?'var(--indigo2)':'var(--text)'};background:${STATE.coIndustryFilter===ind?'rgba(99,102,241,.08)':'transparent'};display:flex;align-items:center;justify-content:space-between">
+          ${ind} <span style="font-size:10px;color:var(--text3)">${allCos.filter(c=>c.industry===ind).length}</span>
+          ${STATE.coIndustryFilter===ind?'<i class="ti ti-check" style="color:var(--indigo2);font-size:12px"></i>':''}
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="closePanel('rfq-filter');renderCompanies()">
+      <i class="ti ti-check"></i> Apply Filters
+    </button>`;
+  openPanel('rfq-filter');
 }
 
 async function addFocusPeriod(coId, period) {
