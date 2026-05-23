@@ -343,7 +343,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v2.6</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v2.7</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -396,6 +396,8 @@ select.inp { cursor: pointer; }
       <div class="panel" id="panel-vehicle"></div>
       <div class="panel" id="panel-rfq-detail"></div>
       <div class="panel" id="panel-add-rfq"></div>
+      <div class="panel" id="panel-rfq-filter"></div>
+      <div class="panel" id="panel-rfq-add-from"></div>
     </div>
 
   </div>
@@ -512,7 +514,7 @@ let STATE = {
   users: [], companies: [], targets: [], visits: [], planItems: [],
   contacts: [], pos: [], gpsLogs: [], taClaims: [], calEvents: [], approvals: [],
   rfqs: [], tasks: [],
-  rfqSearch: '', rfqCatFilter: 'all', rfqRepFilter: 'all',
+  rfqSearch: '', rfqCatFilter: 'all', rfqRepFilter: 'all', rfqCoFilter: '', rfqCustFilter: '',
   page: 'home', period: 'annual', cpf: 'all', pld: todayStr(), vd: todayStr(),
   exp: null, showAI: false, onField: false, fieldVehicle: null, viewRep: null,
   logView: 'mine', planView: 'mine', coView: 'all',
@@ -2976,6 +2978,8 @@ function renderRFQ() {
   if(!STATE.rfqSearch) STATE.rfqSearch = '';
   if(!STATE.rfqCatFilter) STATE.rfqCatFilter = 'all';
   if(!STATE.rfqRepFilter) STATE.rfqRepFilter = 'all';
+  if(!STATE.rfqCoFilter) STATE.rfqCoFilter = '';
+  if(!STATE.rfqCustFilter) STATE.rfqCustFilter = '';
 
   const myRfqs = getMyRFQs();
   const openRFQs = myRfqs.filter(r=>r.status==='New Lead'||r.status==='Quoted');
@@ -2999,6 +3003,17 @@ function renderRFQ() {
   if(STATE.rfqFilter!=='all') displayRFQs = displayRFQs.filter(r=>r.status===STATE.rfqFilter);
   if(STATE.rfqCatFilter!=='all') displayRFQs = displayRFQs.filter(r=>(r.category||'')===STATE.rfqCatFilter);
   if(isM && STATE.rfqRepFilter!=='all') displayRFQs = displayRFQs.filter(r=>r.repId===STATE.rfqRepFilter);
+  if(STATE.rfqCoFilter.trim()) {
+    const qc = STATE.rfqCoFilter.trim().toLowerCase();
+    displayRFQs = displayRFQs.filter(r=>{
+      const cmp = rfqCompany(r);
+      return (cmp?.name||'').toLowerCase().includes(qc);
+    });
+  }
+  if(STATE.rfqCustFilter.trim()) {
+    const qu = STATE.rfqCustFilter.trim().toLowerCase();
+    displayRFQs = displayRFQs.filter(r=>(r.customerName||'').toLowerCase().includes(qu)||(r.customerEmail||'').toLowerCase().includes(qu));
+  }
   if(STATE.rfqSearch.trim()) {
     const q = STATE.rfqSearch.trim().toLowerCase();
     displayRFQs = displayRFQs.filter(r=>{
@@ -3019,7 +3034,7 @@ function renderRFQ() {
   });
 
   // Count active secondary filters for badge
-  const activeFilters = (STATE.rfqCatFilter!=='all'?1:0) + (isM&&STATE.rfqRepFilter!=='all'?1:0);
+  const activeFilters = (STATE.rfqCatFilter!=='all'?1:0) + (isM&&STATE.rfqRepFilter!=='all'?1:0) + (STATE.rfqCoFilter?1:0) + (STATE.rfqCustFilter?1:0);
 
   // Build category list from actual data
   const allCats = [...new Set(myRfqs.map(r=>r.category).filter(Boolean))].sort();
@@ -3080,40 +3095,22 @@ function renderRFQ() {
         <input class="search-inp" id="rfq-search-inp" placeholder="Search company, customer, subject…" value="${STATE.rfqSearch.replace(/"/g,'&quot;')}"
           oninput="STATE.rfqSearch=this.value;renderRFQ()" />
       </div>
-      <button class="btn btn-sm" onclick="toggleRFQFilterDrawer()" style="flex-shrink:0;gap:5px;position:relative;${activeFilters>0?'border-color:var(--indigo);color:var(--indigo2);background:rgba(99,102,241,.1)':''}">
+      <button class="btn btn-sm" onclick="openRFQFilterPanel()" style="flex-shrink:0;gap:5px;position:relative;${activeFilters>0?'border-color:var(--indigo);color:var(--indigo2);background:rgba(99,102,241,.1)':''}">
         <i class="ti ti-adjustments-horizontal"></i> Filter
         ${activeFilters>0?`<span style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;background:var(--indigo);border-radius:50%;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;color:#fff">${activeFilters}</span>`:''}
       </button>
     </div>
 
-    <!-- Filter drawer (hidden by default) -->
-    <div id="rfq-filter-drawer" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
-      <div class="row-between" style="margin-bottom:12px">
-        <div style="font-size:12px;font-weight:600">Filters</div>
-        <button class="btn btn-sm" style="font-size:10px;padding:3px 8px" onclick="STATE.rfqCatFilter='all';STATE.rfqRepFilter='all';renderRFQ()">Clear all</button>
-      </div>
-
-      <div class="text-label" style="margin-bottom:8px">Category</div>
-      <div class="chip-row" style="flex-wrap:wrap;margin-bottom:${isM?'12px':'0'}">
-        <span class="chip${STATE.rfqCatFilter==='all'?' active':''}" onclick="STATE.rfqCatFilter='all';renderRFQ()" style="font-size:10px">All</span>
-        ${allCats.map(c=>`<span class="chip${STATE.rfqCatFilter===c?' active':''}" onclick="STATE.rfqCatFilter='${c}';renderRFQ()" style="font-size:10px">${c}</span>`).join('')}
-      </div>
-
-      ${isM?`
-      <div class="text-label" style="margin-bottom:8px">Rep</div>
-      <div class="chip-row" style="flex-wrap:wrap">
-        <span class="chip${STATE.rfqRepFilter==='all'?' active':''}" onclick="STATE.rfqRepFilter='all';renderRFQ()" style="font-size:10px">All reps</span>
-        ${myReps().map(r=>`<span class="chip${STATE.rfqRepFilter===r.id?' active':''}" onclick="STATE.rfqRepFilter='${r.id}';renderRFQ()" style="font-size:10px">${r.name.split(' ')[0]}</span>`).join('')}
-      </div>`:''}
-    </div>
-
     <!-- Results count when filters active -->
-    ${(STATE.rfqSearch.trim()||STATE.rfqCatFilter!=='all'||(isM&&STATE.rfqRepFilter!=='all'))?`
-    <div class="text-label" style="margin-bottom:8px">${displayRFQs.length} result${displayRFQs.length!==1?'s':''}</div>`:''}
+    ${(STATE.rfqSearch.trim()||STATE.rfqCatFilter!=='all'||STATE.rfqCoFilter||STATE.rfqCustFilter||(isM&&STATE.rfqRepFilter!=='all'))?`
+    <div class="row-between" style="margin-bottom:8px">
+      <div class="text-label">${displayRFQs.length} result${displayRFQs.length!==1?'s':''}</div>
+      <span style="font-size:10px;color:var(--indigo2);cursor:pointer" onclick="STATE.rfqSearch='';STATE.rfqCatFilter='all';STATE.rfqRepFilter='all';STATE.rfqCoFilter='';STATE.rfqCustFilter='';renderRFQ()">Clear all filters</span>
+    </div>`:''}
 
     <!-- RFQ tiles -->
     ${displayRFQs.length===0
-      ? `<div class="empty"><i class="ti ti-file-search"></i><p>No RFQs match your filters</p><small><span style="color:var(--indigo2);cursor:pointer" onclick="STATE.rfqSearch='';STATE.rfqCatFilter='all';STATE.rfqRepFilter='all';renderRFQ()">Clear filters</span></small></div>`
+      ? `<div class="empty"><i class="ti ti-file-search"></i><p>No RFQs match your filters</p><small><span style="color:var(--indigo2);cursor:pointer" onclick="STATE.rfqSearch='';STATE.rfqCatFilter='all';STATE.rfqRepFilter='all';STATE.rfqCoFilter='';STATE.rfqCustFilter='';renderRFQ()">Clear filters</span></small></div>`
       : displayRFQs.map(rfq=>{
           const urg = rfqUrgency(rfq);
           const days = rfqDaysAgo(rfq.rfqDate||rfq.rfqdate);
@@ -3152,10 +3149,178 @@ function renderRFQ() {
   }
 }
 
-function toggleRFQFilterDrawer() {
-  const d = document.getElementById('rfq-filter-drawer');
-  if(!d) return;
-  d.style.display = d.style.display==='none' ? 'block' : 'none';
+function openRFQAddContact(rfqId) {
+  const rfq = STATE.rfqs.find(r=>r.id===rfqId);
+  if(!rfq) return;
+  const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===String(rfq.customerEmail||'').toLowerCase());
+  const cmp = rfq.companyId ? co(rfq.companyId) : contact ? co(contact.companyId) : null;
+  const panel = document.getElementById('panel-rfq-add-from');
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('rfq-add-from');openRFQDetail('${rfqId}')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">Add Contact</span>
+    </div>
+    <div class="info-box" style="margin-bottom:14px">
+      <i class="ti ti-info-circle" style="color:var(--blue);font-size:16px;flex-shrink:0"></i>
+      <div class="text-xs">Pre-filled from RFQ. Edit as needed before saving.</div>
+    </div>
+    <div class="inp-group"><div class="inp-label">Name</div><input class="inp" id="radc-name" value="${(rfq.customerName||'').replace(/"/g,'&quot;')}"></div>
+    <div class="inp-group"><div class="inp-label">Email</div><input class="inp" type="email" id="radc-email" value="${(rfq.customerEmail||'').replace(/"/g,'&quot;')}"></div>
+    <div class="inp-group"><div class="inp-label">Phone</div><input class="inp" type="tel" id="radc-phone" placeholder="e.g. 9876543210"></div>
+    <div class="inp-group"><div class="inp-label">Designation</div><input class="inp" id="radc-desig" placeholder="e.g. Purchase Manager"></div>
+    <div class="inp-group">
+      <div class="inp-label">Link to company</div>
+      <select class="inp" id="radc-co">
+        <option value="">— No company —</option>
+        ${STATE.companies.map(c=>`<option value="${c.id}" ${cmp&&cmp.id===c.id?'selected':''}>${c.name}</option>`).join('')}
+      </select>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="saveRFQContact('${rfqId}')"><i class="ti ti-check"></i> Save Contact</button>`;
+  openPanel('rfq-add-from');
+}
+
+async function saveRFQContact(rfqId) {
+  const name = document.getElementById('radc-name')?.value.trim();
+  if(!name){showToast('Name is required','error');return;}
+  const coId = document.getElementById('radc-co')?.value||'';
+  const contact = {
+    id:uid(), companyId:coId,
+    name,
+    email: document.getElementById('radc-email')?.value.trim()||'',
+    phone: document.getElementById('radc-phone')?.value.trim()||'',
+    designation: document.getElementById('radc-desig')?.value.trim()||'',
+    addedBy: STATE.user.id, addedDate: todayStr(), cardPhotoUrl:''
+  };
+  await apiWrite('Contacts', contact);
+  STATE.contacts.push(contact);
+  if(coId) { await apiUpdate('RFQs',{id:rfqId,companyId:coId}); const r=STATE.rfqs.find(x=>x.id===rfqId);if(r)r.companyId=coId; }
+  showToast('Contact saved ✓','success');
+  closePanel('rfq-add-from');
+  openRFQDetail(rfqId);
+}
+
+function openRFQAddCompany(rfqId) {
+  const rfq = STATE.rfqs.find(r=>r.id===rfqId);
+  if(!rfq) return;
+  const panel = document.getElementById('panel-rfq-add-from');
+  // Extract company name guess from customer name (last part often company)
+  const nameParts = (rfq.customerName||'').split(',');
+  const coNameGuess = nameParts.length>1 ? nameParts[1].trim() : '';
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('rfq-add-from');openRFQDetail('${rfqId}')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">Add Company</span>
+    </div>
+    <div class="info-box" style="margin-bottom:14px">
+      <i class="ti ti-info-circle" style="color:var(--blue);font-size:16px;flex-shrink:0"></i>
+      <div class="text-xs">Adding company from RFQ. You can assign it to a rep and optionally save the contact too.</div>
+    </div>
+    <div class="inp-group"><div class="inp-label">Company name *</div><input class="inp" id="radc-coname" value="${coNameGuess.replace(/"/g,'&quot;')}" placeholder="e.g. Shapoorji Pallonji"></div>
+    <div class="inp-group"><div class="inp-label">Address *</div><input class="inp" id="radc-addr" placeholder="e.g. Mumbai, Maharashtra"></div>
+    <div class="inp-group"><div class="inp-label">Industry</div>
+      <select class="inp" id="radc-ind">
+        <option value="">Select industry</option>
+        ${INDUSTRIES.map(i=>`<option value="${i}">${i}</option>`).join('')}
+      </select>
+    </div>
+    <div class="inp-group"><div class="inp-label">Priority</div>
+      <select class="inp" id="radc-pri">
+        ${PRIORITIES.map(p=>`<option value="${p.split(' ')[0]}">${p}</option>`).join('')}
+      </select>
+    </div>
+    <div class="inp-group">
+      <div class="inp-label">Assign to rep *</div>
+      <select class="inp" id="radc-rep">
+        <option value="">Select rep</option>
+        ${myReps().map(r=>`<option value="${r.id}">${r.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="text-label" style="margin-bottom:8px">Also save customer as contact?</div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
+      <input type="checkbox" id="radc-save-contact" style="accent-color:var(--indigo);width:15px;height:15px" checked>
+      <span style="font-size:11px;color:var(--text2)">${rfq.customerName||'Customer'} (${rfq.customerEmail||'no email'})</span>
+    </label>
+    <button class="btn btn-primary btn-full" onclick="saveRFQCompany('${rfqId}')"><i class="ti ti-check"></i> Add Company</button>`;
+  openPanel('rfq-add-from');
+}
+
+async function saveRFQCompany(rfqId) {
+  const rfq = STATE.rfqs.find(r=>r.id===rfqId);
+  if(!rfq) return;
+  const name = document.getElementById('radc-coname')?.value.trim();
+  const addr = document.getElementById('radc-addr')?.value.trim();
+  const repId = document.getElementById('radc-rep')?.value;
+  if(!name||!addr){showToast('Company name and address are required','error');return;}
+  if(!repId){showToast('Please assign a rep','error');return;}
+  showToast('Saving...','');
+  const cId = uid();
+  const coObj = {
+    id:cId, name, address:addr,
+    region:'', industry:document.getElementById('radc-ind')?.value||'',
+    priority:document.getElementById('radc-pri')?.value||'C',
+    assignedReps:repId, lastVisited:'', totalBusiness:0,
+    addedBy:STATE.user.id, active:'TRUE'
+  };
+  const ok = await apiWrite('Companies', coObj);
+  if(!ok){showToast('Failed to save company','error');return;}
+  STATE.companies.push(coObj);
+  // Link RFQ to this company
+  await apiUpdate('RFQs',{id:rfqId,companyId:cId});
+  if(rfq) rfq.companyId = cId;
+  // Optionally save contact
+  if(document.getElementById('radc-save-contact')?.checked && rfq.customerName) {
+    await saveContactsForCompany(cId,[{
+      name: rfq.customerName, email: rfq.customerEmail||'',
+      phone:'', designation:''
+    }]);
+  }
+  showToast(`${name} added and linked to RFQ ✓`,'success');
+  closePanel('rfq-add-from');
+  openRFQDetail(rfqId);
+}
+
+function openRFQFilterPanel() {
+  const isM = STATE.user.role==='manager';
+  const allCats = [...new Set(STATE.rfqs.map(r=>r.category).filter(Boolean))].sort();
+  const panel = document.getElementById('panel-rfq-filter');
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('rfq-filter')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">Filter RFQs</span>
+      <button class="btn btn-sm" style="font-size:10px;margin-left:auto" onclick="STATE.rfqCatFilter='all';STATE.rfqRepFilter='all';STATE.rfqCoFilter='';STATE.rfqCustFilter='';closePanel('rfq-filter');renderRFQ()">Clear all</button>
+    </div>
+
+    <div class="inp-group">
+      <div class="inp-label">Company name</div>
+      <input class="inp" id="flt-co" placeholder="e.g. Shapoorji" value="${(STATE.rfqCoFilter||'').replace(/"/g,'&quot;')}" oninput="STATE.rfqCoFilter=this.value">
+    </div>
+
+    <div class="inp-group">
+      <div class="inp-label">Customer name</div>
+      <input class="inp" id="flt-cust" placeholder="e.g. Kartick Basak" value="${(STATE.rfqCustFilter||'').replace(/"/g,'&quot;')}" oninput="STATE.rfqCustFilter=this.value">
+    </div>
+
+    <div class="inp-group">
+      <div class="inp-label" style="margin-bottom:8px">Category</div>
+      <div class="chip-row" style="flex-wrap:wrap">
+        <span class="chip${STATE.rfqCatFilter==='all'?' active':''}" onclick="STATE.rfqCatFilter='all';document.querySelectorAll('.flt-cat').forEach(c=>c.classList.remove('active'));this.classList.add('active')" style="font-size:10px">All</span>
+        ${allCats.map(c=>`<span class="chip flt-cat${STATE.rfqCatFilter===c?' active':''}" onclick="STATE.rfqCatFilter='${c}';document.querySelectorAll('.flt-cat,.chip:first-child').forEach(x=>x.classList.remove('active'));this.classList.add('active')" style="font-size:10px">${c}</span>`).join('')}
+      </div>
+    </div>
+
+    ${isM?`
+    <div class="inp-group">
+      <div class="inp-label" style="margin-bottom:8px">Rep</div>
+      <div class="chip-row" style="flex-wrap:wrap">
+        <span class="chip${STATE.rfqRepFilter==='all'?' active':''}" onclick="STATE.rfqRepFilter='all';document.querySelectorAll('.flt-rep').forEach(c=>c.classList.remove('active'));this.classList.add('active')" style="font-size:10px">All reps</span>
+        ${myReps().map(r=>`<span class="chip flt-rep${STATE.rfqRepFilter===r.id?' active':''}" onclick="STATE.rfqRepFilter='${r.id}';document.querySelectorAll('.flt-rep').forEach(x=>x.classList.remove('active'));this.classList.add('active')" style="font-size:10px">${r.name.split(' ')[0]}</span>`).join('')}
+      </div>
+    </div>`:''}
+
+    <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="closePanel('rfq-filter');renderRFQ()">
+      <i class="ti ti-check"></i> Apply Filters
+    </button>`;
+  openPanel('rfq-filter');
 }
 
 function openRFQDetail(id) {
@@ -3191,7 +3356,13 @@ function openRFQDetail(id) {
       <div class="text-label" style="margin-bottom:8px">Contact</div>
       <div style="font-size:12px;font-weight:500">${rfq.customerName||'—'}</div>
       <div class="text-xs">${rfq.customerEmail||'—'}</div>
+      ${contact&&contact.phone?`<div class="text-xs" style="margin-top:2px"><i class="ti ti-phone" style="font-size:10px"></i> ${contact.phone}</div>`:''}
       ${cmp?`<div class="text-xs" style="color:var(--indigo2);margin-top:2px">${cmp.name}</div>`:''}
+      ${isM?`
+      <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">
+        ${!contact?`<button class="btn btn-sm" style="font-size:10px" onclick="openRFQAddContact('${rfq.id}')"><i class="ti ti-user-plus"></i> Add to contacts</button>`:''}
+        ${!cmp?`<button class="btn btn-sm" style="font-size:10px" onclick="openRFQAddCompany('${rfq.id}')"><i class="ti ti-building-plus"></i> Add to companies</button>`:''}
+      </div>`:''}
     </div>
 
     ${rfq.status==='Quoted'||rfq.status==='Order Received'?`
