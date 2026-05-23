@@ -398,6 +398,7 @@ select.inp { cursor: pointer; }
       <div class="panel" id="panel-add-rfq"></div>
       <div class="panel" id="panel-rfq-filter"></div>
       <div class="panel" id="panel-rfq-add-from"></div>
+      <div class="panel" id="panel-co-filter"></div>
     </div>
 
   </div>
@@ -1072,12 +1073,12 @@ function openCoFilterPanel() {
   const allCos = allCIds.map(id=>STATE.companies.find(c=>c.id===id)).filter(Boolean);
   const allIndustries = [...new Set(allCos.map(c=>c.industry).filter(Boolean))].sort();
 
-  const panel = document.getElementById('panel-rfq-filter'); // reuse same panel slot
+  const panel = document.getElementById('panel-co-filter'); // reuse same panel slot
   panel.innerHTML = `
     <div class="panel-head">
-      <button class="panel-back" onclick="closePanel('rfq-filter')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <button class="panel-back" onclick="closePanel('co-filter')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
       <span class="panel-title">Filter Companies</span>
-      <button class="btn btn-sm" style="font-size:10px;margin-left:auto" onclick="STATE.coIndustryFilter='all';STATE.cpf='all';closePanel('rfq-filter');renderCompanies()">Clear all</button>
+      <button class="btn btn-sm" style="font-size:10px;margin-left:auto" onclick="STATE.coIndustryFilter='all';STATE.cpf='all';closePanel('co-filter');renderCompanies()">Clear all</button>
     </div>
 
     <div class="inp-group">
@@ -1103,10 +1104,10 @@ function openCoFilterPanel() {
       </div>
     </div>
 
-    <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="closePanel('rfq-filter');renderCompanies()">
+    <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="closePanel('co-filter');renderCompanies()">
       <i class="ti ti-check"></i> Apply Filters
     </button>`;
-  openPanel('rfq-filter');
+  openPanel('co-filter');
 }
 
 async function addFocusPeriod(coId, period) {
