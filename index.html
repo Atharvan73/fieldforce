@@ -3437,7 +3437,7 @@ function openRFQFilterPanel() {
       <div class="text-label" style="margin-bottom:8px">Category</div>
       <div class="chip-row" style="flex-wrap:wrap">
         <span class="chip${STATE.rfqCatFilter==='all'?' active':''}" onclick="STATE.rfqCatFilter='all';document.querySelectorAll('.flt-cat').forEach(c=>c.classList.remove('active'));this.classList.add('active')" style="font-size:10px">All</span>
-        ${allCats.map(c=>`<span class="chip flt-cat${STATE.rfqCatFilter===c?' active':''}" onclick="STATE.rfqCatFilter='${c}';document.querySelectorAll('.flt-cat').forEach(x=>x.classList.remove('active'));this.classList.add('active')" style="font-size:10px">${c}</span>`).join('')}
+        ${allCats.map(c=>'<span class="chip flt-cat'+(STATE.rfqCatFilter===c?' active':'')+'" onclick="STATE.rfqCatFilter=\''+c+'\';document.querySelectorAll(\'.flt-cat\').forEach(x=>x.classList.remove(\'active\'));this.classList.add(\'active\')" style="font-size:10px">'+c+'</span>').join('')}
       </div>
     </div>
 
@@ -3446,7 +3446,7 @@ function openRFQFilterPanel() {
       <div class="text-label" style="margin-bottom:8px">Rep</div>
       <div class="chip-row" style="flex-wrap:wrap">
         <span class="chip${STATE.rfqRepFilter==='all'?' active':''}" onclick="STATE.rfqRepFilter='all';document.querySelectorAll('.flt-rep').forEach(c=>c.classList.remove('active'));this.classList.add('active')" style="font-size:10px">All reps</span>
-        ${myReps().map(r=>`<span class="chip flt-rep${STATE.rfqRepFilter===r.id?' active':''}" onclick="STATE.rfqRepFilter='${r.id}';document.querySelectorAll('.flt-rep').forEach(x=>x.classList.remove('active'));this.classList.add('active')" style="font-size:10px">${r.name.split(' ')[0]}</span>`).join('')}
+        ${myReps().map(r=>'<span class="chip flt-rep'+(STATE.rfqRepFilter===r.id?' active':'')+'" onclick="STATE.rfqRepFilter=\''+r.id+'\';document.querySelectorAll(\'.flt-rep\').forEach(x=>x.classList.remove(\'active\'));this.classList.add(\'active\')" style="font-size:10px">'+r.name.split(' ')[0]+'</span>').join('')}
       </div>
     </div>`:''}
 
@@ -3456,84 +3456,6 @@ function openRFQFilterPanel() {
   openPanel('rfq-filter');
 }
 
-  const panel = document.getElementById('panel-rfq-filter');
-  panel.innerHTML = `
-    <div class="panel-head">
-      <button class="panel-back" onclick="closePanel('rfq-filter')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
-      <span class="panel-title">Filter RFQs</span>
-      <button class="btn btn-sm" style="font-size:10px;margin-left:auto" onclick="STATE.rfqCatFilter='all';STATE.rfqRepFilter='all';STATE.rfqCoFilter='';STATE.rfqCustFilter='';closePanel('rfq-filter');renderRFQ()">Clear all</button>
-    </div>
-
-    <!-- Company filter -->
-    <div style="margin-bottom:16px">
-      <div class="text-label" style="margin-bottom:8px">Company</div>
-      <div class="search-wrap" style="margin-bottom:6px">
-        <i class="ti ti-search"></i>
-        <input class="search-inp" placeholder="Search companies…" oninput="filterRFQList('flt-co-list',this.value)">
-      </div>
-      <div id="flt-co-list" style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:1px">
-        <div onclick="STATE.rfqCoFilter='';document.querySelectorAll('.flt-co-item').forEach(x=>x.style.background='transparent');this.style.background='rgba(99,102,241,.1)'"
-          style="padding:9px 12px;border-radius:8px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:space-between;background:${!STATE.rfqCoFilter?'rgba(99,102,241,.1)':'transparent'}">
-          <span style="color:${!STATE.rfqCoFilter?'var(--indigo2)':'var(--text)'}">All companies</span>
-          ${!STATE.rfqCoFilter?'<i class="ti ti-check" style="color:var(--indigo2);font-size:12px"></i>':''}
-        </div>
-        ${allCoNames.map(n=>`
-        <div class="flt-co-item" data-name="${n.toLowerCase()}"
-          onclick="STATE.rfqCoFilter='${n.replace(/'/g,"\\'").replace(/"/g,'&quot;')}';document.querySelectorAll('#flt-co-list>div').forEach(x=>x.style.background='transparent');this.style.background='rgba(99,102,241,.1)'"
-          style="padding:9px 12px;border-radius:8px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:space-between;background:${STATE.rfqCoFilter===n?'rgba(99,102,241,.1)':'transparent'}">
-          <span style="color:${STATE.rfqCoFilter===n?'var(--indigo2)':'var(--text)'}">${n}</span>
-          <span style="font-size:10px;color:var(--text3)">${STATE.rfqs.filter(r=>{const c=r.companyId?co(r.companyId):null;return (c?.name||'')=== n;}).length||''}</span>
-          ${STATE.rfqCoFilter===n?'<i class="ti ti-check" style="color:var(--indigo2);font-size:12px"></i>':''}
-        </div>`).join('')}
-      </div>
-    </div>
-
-    <!-- Customer / contact person filter -->
-    <div style="margin-bottom:16px">
-      <div class="text-label" style="margin-bottom:8px">Contact person</div>
-      <div class="search-wrap" style="margin-bottom:6px">
-        <i class="ti ti-search"></i>
-        <input class="search-inp" placeholder="Search contacts…" oninput="filterRFQList('flt-cust-list',this.value)">
-      </div>
-      <div id="flt-cust-list" style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:1px">
-        <div onclick="STATE.rfqCustFilter='';document.querySelectorAll('.flt-cust-item').forEach(x=>x.style.background='transparent');this.style.background='rgba(99,102,241,.1)'"
-          style="padding:9px 12px;border-radius:8px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:space-between;background:${!STATE.rfqCustFilter?'rgba(99,102,241,.1)':'transparent'}">
-          <span style="color:${!STATE.rfqCustFilter?'var(--indigo2)':'var(--text)'}">All contacts</span>
-          ${!STATE.rfqCustFilter?'<i class="ti ti-check" style="color:var(--indigo2);font-size:12px"></i>':''}
-        </div>
-        ${allCustNames.map(n=>`
-        <div class="flt-cust-item" data-name="${n.toLowerCase()}"
-          onclick="STATE.rfqCustFilter='${n.replace(/'/g,"\\'").replace(/"/g,'&quot;')}';document.querySelectorAll('#flt-cust-list>div').forEach(x=>x.style.background='transparent');this.style.background='rgba(99,102,241,.1)'"
-          style="padding:9px 12px;border-radius:8px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:space-between;background:${STATE.rfqCustFilter===n?'rgba(99,102,241,.1)':'transparent'}">
-          <span style="color:${STATE.rfqCustFilter===n?'var(--indigo2)':'var(--text)'}">${n}</span>
-          ${STATE.rfqCustFilter===n?'<i class="ti ti-check" style="color:var(--indigo2);font-size:12px"></i>':''}
-        </div>`).join('')}
-      </div>
-    </div>
-
-    <!-- Category -->
-    <div style="margin-bottom:16px">
-      <div class="text-label" style="margin-bottom:8px">Category</div>
-      <div class="chip-row" style="flex-wrap:wrap">
-        <span class="chip${STATE.rfqCatFilter==='all'?' active':''}" onclick="STATE.rfqCatFilter='all';document.querySelectorAll('.flt-cat').forEach(c=>c.classList.remove('active'));this.classList.add('active')" style="font-size:10px">All</span>
-        ${allCats.map(c=>`<span class="chip flt-cat${STATE.rfqCatFilter===c?' active':''}" onclick="STATE.rfqCatFilter='${c}';document.querySelectorAll('.flt-cat').forEach(x=>x.classList.remove('active'));this.classList.add('active')" style="font-size:10px">${c}</span>`).join('')}
-      </div>
-    </div>
-
-    ${isM?`
-    <div style="margin-bottom:16px">
-      <div class="text-label" style="margin-bottom:8px">Rep</div>
-      <div class="chip-row" style="flex-wrap:wrap">
-        <span class="chip${STATE.rfqRepFilter==='all'?' active':''}" onclick="STATE.rfqRepFilter='all';document.querySelectorAll('.flt-rep').forEach(c=>c.classList.remove('active'));this.classList.add('active')" style="font-size:10px">All reps</span>
-        ${myReps().map(r=>`<span class="chip flt-rep${STATE.rfqRepFilter===r.id?' active':''}" onclick="STATE.rfqRepFilter='${r.id}';document.querySelectorAll('.flt-rep').forEach(x=>x.classList.remove('active'));this.classList.add('active')" style="font-size:10px">${r.name.split(' ')[0]}</span>`).join('')}
-      </div>
-    </div>`:''}
-
-    <button class="btn btn-primary btn-full" onclick="closePanel('rfq-filter');renderRFQ()">
-      <i class="ti ti-check"></i> Apply Filters
-    </button>`;
-  openPanel('rfq-filter');
-}
 
 function filterRFQList(listId, query) {
   const q = query.toLowerCase();
