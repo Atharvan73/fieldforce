@@ -3360,18 +3360,19 @@ async function saveRFQCompany(rfqId) {
   openRFQDetail(rfqId);
 }
 
+function rfqCoName(rfq) {
+  if(rfq.contactCompanyName) return rfq.contactCompanyName;
+  if(rfq.companyId){ const c=co(rfq.companyId); if(c?.name) return c.name; }
+  const email=String(rfq.customerEmail||'').toLowerCase().trim();
+  if(email){ const contact=STATE.contacts.find(c=>c.email&&c.email.toLowerCase().trim()===email); if(contact){ const c=co(contact.companyId); if(c?.name) return c.name; } }
+  return '';
+}
+
 function openRFQFilterPanel() {
   const isM = STATE.user.role==='manager';
   const allCats = [...new Set(STATE.rfqs.map(r=>r.category).filter(Boolean))].sort();
 
   // Company list — use contactCompanyName if available, else fall back to companyId lookup
-  function rfqCoName(rfq) {
-    if(rfq.contactCompanyName) return rfq.contactCompanyName;
-    if(rfq.companyId){ const c=co(rfq.companyId); if(c?.name) return c.name; }
-    const email=String(rfq.customerEmail||'').toLowerCase().trim();
-    if(email){ const contact=STATE.contacts.find(c=>c.email&&c.email.toLowerCase().trim()===email); if(contact){ const c=co(contact.companyId); if(c?.name) return c.name; } }
-    return '';
-  }
   const allCoNames = [...new Set(STATE.rfqs.map(rfqCoName).filter(Boolean))].sort();
 
   // Contact person list — use contactPersonName if available, else skip
