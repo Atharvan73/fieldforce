@@ -343,7 +343,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v2.4</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v2.5</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -2863,35 +2863,108 @@ function rfqStatusBadge(status) {
 
 function rfqDaysAgo(dateStr) {
   if(!dateStr) return null;
-  const d = new Date(dateStr.split('-').reverse().join('-'));
+  let d;
+  // Handle dd-mm-yyyy, yyyy-mm-dd, and dd/mm/yyyy
+  if(/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
+    const [dd,mm,yyyy] = dateStr.split('-');
+    d = new Date(`${yyyy}-${mm}-${dd}`);
+  } else {
+    d = new Date(dateStr);
+  }
   if(isNaN(d)) return null;
   return Math.floor((Date.now()-d)/86400000);
 }
 
 function rfqUrgency(rfq) {
-  const days = rfqDaysAgo(rfq.rfqDate);
-  if(rfq.status==='New Lead'&&days>3) return 'high';
-  if(rfq.status==='Quoted'&&days>7) return 'medium';
+  const days = rfqDaysAgo(rfq.rfqDate||rfq.rfqdate);
+  if((rfq.status==='New Lead')&&days>3) return 'high';
+  if((rfq.status==='Quoted')&&days>7) return 'medium';
   return 'low';
+}
+
+function getRFQContactAttribution(rfq) {
+  const email = String(rfq.customerEmail||rfq.customeremail||'').toLowerCase().trim();
+  if(!email) return {label:'Not in contacts', cls:'badge-gray'};
+  const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase().trim()===email);
+  if(!contact) return {label:'Not in contacts', cls:'badge-gray'};
+  const targets = STATE.targets.filter(t=>t.companyId===contact.companyId);
+  if(!targets.length) return {label:'Known contact', cls:'badge-blue'};
+  const repIds = [...new Set(targets.map(t=>t.repId))];
+  const names = repIds.map(id=>{
+    const u = STATE.users.find(u=>u.id===id);
+    if(!u) return null;
+    if(u.id===STATE.user.id) return 'My contact';
+    return u.name.split(' ')[0]+"'s contact";
+  }).filter(Boolean);
+  if(!names.length) return {label:'Known contact', cls:'badge-blue'};
+  const isMyContact = names.some(n=>n==='My contact');
+  return {label:names.join(' · '), cls:isMyContact?'badge-green':'badge-blue'};
+}
+
+function rfqOwnerTag(rfq) {
+  const attr = getRFQContactAttribution(rfq);
+  return `<span class="badge ${attr.cls}" style="font-size:8px">${attr.label}</span>`;
 }
 
 function getMyRFQs() {
   const isM = STATE.user.role==='manager';
-  if(isM && STATE.rfqView==='all') return STATE.rfqs;
+  if(!STATE.rfqViewUser) STATE.rfqViewUser='all';
+
+  if(isM) {
+    if(STATE.rfqViewUser==='all') return STATE.rfqs;
+    if(STATE.rfqViewUser==='unassigned') return STATE.rfqs.filter(r=>!r.repId&&getRFQContactAttribution(r).label==='Not in contacts');
+    // Filter by whose contacts the RFQ belongs to
+    return STATE.rfqs.filter(r=>{
+      if(r.repId===STATE.rfqViewUser) return true;
+      const email = String(r.customerEmail||r.customeremail||'').toLowerCase();
+      const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===email);
+      if(!contact) return false;
+      return STATE.targets.some(t=>t.companyId===contact.companyId&&t.repId===STATE.rfqViewUser);
+    });
+  }
+
+  // Reps see only their own or RFQs linked to their contacts
   const myId = STATE.user.id;
-  // Filter by repId, or by contacts linked to user's companies
   return STATE.rfqs.filter(r=>{
     if(r.repId===myId) return true;
-    // Also show if contact email matches a contact in user's companies
-    if(!r.repId) {
-      const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===String(r.customerEmail||'').toLowerCase());
-      if(contact) {
-        const coTarget = STATE.targets.find(t=>t.companyId===contact.companyId&&t.repId===myId);
-        return !!coTarget;
-      }
-    }
+    const email = String(r.customerEmail||r.customeremail||'').toLowerCase();
+    const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===email);
+    if(contact) return STATE.targets.some(t=>t.companyId===contact.companyId&&t.repId===myId);
     return false;
   });
+}
+
+function rfqViewDropdown() {
+  if(STATE.user.role!=='manager') return '';
+  if(!STATE.rfqViewUser) STATE.rfqViewUser='all';
+  const allUsers = [STATE.user, ...myReps()];
+  const totalCount = STATE.rfqs.length;
+  const options = [
+    {val:'all', label:`All RFQs (${totalCount})`},
+    ...allUsers.map(u=>{
+      const count = STATE.rfqs.filter(r=>{
+        if(r.repId===u.id) return true;
+        const email = String(r.customerEmail||r.customeremail||'').toLowerCase();
+        const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===email);
+        return contact && STATE.targets.some(t=>t.companyId===contact.companyId&&t.repId===u.id);
+      }).length;
+      const label = u.id===STATE.user.id ? `My contacts (${count})` : `${u.name.split(' ')[0]}'s contacts (${count})`;
+      return {val:u.id, label};
+    }),
+    {val:'unassigned', label:'Not in contacts'},
+  ];
+  const current = options.find(o=>o.val===STATE.rfqViewUser)||options[0];
+  return `<div style="position:relative;display:inline-block">
+    <button onclick="event.stopPropagation();toggleDropdown('rfqVU')" style="display:flex;align-items:center;gap:5px;padding:5px 10px;background:var(--indigo);color:#fff;border:none;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;max-width:160px">
+      <i class="ti ti-selector" style="font-size:11px;flex-shrink:0"></i>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${current.label}</span>
+    </button>
+    <div id="dd-rfqVU" style="display:none;position:absolute;top:34px;right:0;background:var(--bg2);border:1px solid var(--border);border-radius:10px;min-width:200px;z-index:200;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.5)">
+      ${options.map(o=>`<div onclick="event.stopPropagation();STATE.rfqViewUser='${o.val}';toggleDropdown('rfqVU');renderRFQ()" style="padding:10px 14px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:8px;color:${STATE.rfqViewUser===o.val?'var(--indigo2)':'var(--text)'};background:${STATE.rfqViewUser===o.val?'rgba(99,102,241,.1)':'transparent'}">
+        ${STATE.rfqViewUser===o.val?'<i class="ti ti-check" style="font-size:11px;color:var(--indigo2)"></i>':'<span style="width:15px;display:inline-block"></span>'}${o.label}
+      </div>`).join('')}
+    </div>
+  </div>`;
 }
 
 function renderRFQ() {
@@ -2934,7 +3007,7 @@ function renderRFQ() {
     <div class="row-between" style="margin-bottom:14px">
       <div style="font-size:16px;font-weight:600">RFQ Tracker</div>
       <div class="row" style="gap:6px">
-        ${isM?viewSwitcherHtml('rfqView2','all','renderRFQ()'):''}
+        ${rfqViewDropdown()}
         <button class="btn btn-primary btn-sm" onclick="openAddRFQPanel()"><i class="ti ti-plus"></i> Add</button>
       </div>
     </div>
@@ -2984,29 +3057,29 @@ function renderRFQ() {
       ? `<div class="empty"><i class="ti ti-file-invoice"></i><p>No RFQs in this view</p><small>RFQs from your contacts appear here automatically</small></div>`
       : displayRFQs.map(rfq=>{
           const urg = rfqUrgency(rfq);
-          const days = rfqDaysAgo(rfq.rfqDate);
+          const days = rfqDaysAgo(rfq.rfqDate||rfq.rfqdate);
           const cmp = rfqCompany(rfq);
-          const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===String(rfq.customerEmail||'').toLowerCase());
-          const repName = rep(rfq.repId)?.name||'';
+          const attr = getRFQContactAttribution(rfq);
+          const assignedRep = rfq.repId?rep(rfq.repId):null;
           const borderCol = urg==='high'?'rgba(239,68,68,.4)':urg==='medium'?'rgba(245,158,11,.3)':'var(--border)';
-
           return `<div class="card" style="margin-bottom:10px;border-color:${borderCol};cursor:pointer" onclick="openRFQDetail('${rfq.id}')">
             <div class="row-between" style="margin-bottom:6px">
               <div style="flex:1;min-width:0">
-                <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${rfq.rfqSubject||rfq.subject||'No subject'}</div>
-                <div class="text-xs" style="margin-top:1px">${rfq.customerName||rfq.from||'Unknown'} ${cmp?'· '+cmp.name:''}</div>
+                <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${rfq.rfqSubject||rfq.rfqsubject||rfq.subject||'No subject'}</div>
+                <div class="text-xs" style="margin-top:1px">${rfq.customerName||rfq.customername||rfq.from||'Unknown'} ${cmp?'· '+cmp.name:''}</div>
               </div>
-              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;margin-left:8px">
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;margin-left:8px">
                 ${rfqStatusBadge(rfq.status)}
-                ${urg==='high'?'<span class="badge badge-red" style="font-size:8px">⚡ Urgent</span>':urg==='medium'?'<span class="badge badge-amber" style="font-size:8px">Follow up</span>':''}
+                ${urg==='high'?'<span class="badge badge-red" style="font-size:8px">⚡ Urgent</span>':urg==='medium'?'<span class="badge badge-amber" style="font-size:8px">↑ Follow up</span>':''}
               </div>
             </div>
-            <div class="text-xs" style="margin-bottom:6px;color:var(--text2);line-height:1.5">${(rfq.rfqSummary||rfq.summary||'').substring(0,100)}${(rfq.rfqSummary||rfq.summary||'').length>100?'…':''}</div>
+            <div class="text-xs" style="margin-bottom:7px;color:var(--text2);line-height:1.5">${(rfq.rfqSummary||rfq.rfqsummary||rfq.summary||'').substring(0,100)}${(rfq.rfqSummary||rfq.rfqsummary||rfq.summary||'').length>100?'…':''}</div>
             <div class="row-between">
-              <div class="row" style="gap:8px">
+              <div class="row" style="gap:4px;flex-wrap:wrap">
                 ${rfq.category?`<span class="badge badge-blue" style="font-size:8px">${rfq.category}</span>`:''}
-                ${days!==null?`<span class="text-xs">${days===0?'Today':days+'d ago'}</span>`:''}
-                ${isM&&repName?`<span class="text-xs" style="color:var(--indigo2)">${repName}</span>`:''}
+                <span class="badge ${attr.cls}" style="font-size:8px">${attr.label}</span>
+                ${days!==null?`<span class="text-xs" style="color:var(--text3)">${days===0?'Today':days+'d ago'}</span>`:''}
+                ${isM&&assignedRep?`<span class="text-xs" style="color:var(--indigo2)">→ ${assignedRep.name.split(' ')[0]}</span>`:''}
               </div>
               <i class="ti ti-chevron-right" style="font-size:14px;color:var(--text3)"></i>
             </div>
