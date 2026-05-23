@@ -343,7 +343,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v2.3</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v2.4</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -381,6 +381,8 @@ select.inp { cursor: pointer; }
         <div class="page" id="page-gps"></div>
         <div class="page" id="page-team"></div>
         <div class="page" id="page-cal"></div>
+        <div class="page" id="page-rfq"></div>
+        <div class="page" id="page-tasks"></div>
       </div>
 
       <!-- PANELS (sit inside content area) -->
@@ -392,6 +394,8 @@ select.inp { cursor: pointer; }
       <div class="panel" id="panel-card"></div>
       <div class="panel" id="panel-addcal"></div>
       <div class="panel" id="panel-vehicle"></div>
+      <div class="panel" id="panel-rfq-detail"></div>
+      <div class="panel" id="panel-add-rfq"></div>
     </div>
 
   </div>
@@ -507,6 +511,7 @@ let STATE = {
   user: null,
   users: [], companies: [], targets: [], visits: [], planItems: [],
   contacts: [], pos: [], gpsLogs: [], taClaims: [], calEvents: [], approvals: [],
+  rfqs: [], tasks: [],
   page: 'home', period: 'annual', cpf: 'all', pld: todayStr(), vd: todayStr(),
   exp: null, showAI: false, onField: false, fieldVehicle: null, viewRep: null,
   logView: 'mine', planView: 'mine', coView: 'all',
@@ -569,11 +574,12 @@ async function apiUpdate(sheet, payload) {
 
 // ── DATA LOADING ─────────────────────────────────────────────────────────────
 async function loadAll() {
-  const [users,companies,targets,visits,planItems,contacts,pos,gpsLogs,taClaims,calEvents,approvals] = await Promise.all([
+  const [users,companies,targets,visits,planItems,contacts,pos,gpsLogs,taClaims,calEvents,approvals,rfqs,tasks] = await Promise.all([
     apiRead('Users'), apiRead('Companies'), apiRead('Targets'),
     apiRead('Visits'), apiRead('VisitPlan'), apiRead('Contacts'),
     apiRead('POs'), apiRead('GPSLogs'), apiRead('TAClaims'),
-    apiRead('CalendarEvents'), apiRead('Approvals')
+    apiRead('CalendarEvents'), apiRead('Approvals'),
+    apiRead('RFQs'), apiRead('Tasks')
   ]);
   // Normalise all date fields to YYYY-MM-DD strings to prevent type mismatch
   function normDate(d) {
@@ -598,6 +604,7 @@ async function loadAll() {
   STATE.visits=visits; STATE.planItems=planItems; STATE.contacts=contacts;
   STATE.pos=pos; STATE.gpsLogs=gpsLogs; STATE.taClaims=taClaims;
   STATE.calEvents=calEvents; STATE.approvals=approvals;
+  STATE.rfqs=rfqs||[]; STATE.tasks=tasks||[];
   if(!STATE.viewRep && STATE.user.role==='manager') STATE.viewRep = myReps()[0]?.id;
 }
 
@@ -677,8 +684,8 @@ function renderNav() {
 
   // All pages
   const allPages = isM
-    ? [['home','home','Home'],['team','users','Team'],['companies','building','Companies'],['plan','calendar-plus','My Plan'],['log','clipboard-list','My Visits'],['targets','target','Targets'],['gps','truck','GPS & Travel'],['cal','calendar','Calendar']]
-    : [['home','home','Home'],['companies','building','Companies'],['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['targets','target','Targets'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']];
+    ? [['home','home','Home'],['team','users','Team'],['companies','building','Companies'],['plan','calendar-plus','My Plan'],['log','clipboard-list','My Visits'],['targets','target','Targets'],['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks'],['gps','truck','GPS & Travel'],['cal','calendar','Calendar']]
+    : [['home','home','Home'],['companies','building','Companies'],['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['targets','target','Targets'],['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']];
 
   // Mobile bottom nav — first 5 pages
   const mobilePages = allPages.slice(0,5);
@@ -692,11 +699,13 @@ function renderNav() {
     ? {
         'Overview':    [['home','home','Home'],['team','users','Team Overview']],
         'My field':    [['plan','calendar-plus','My Daily Plan'],['log','clipboard-list','My Visit Log'],['gps','map-pin','My GPS & TA']],
+        'Sales':       [['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks']],
         'Management':  [['companies','building','Companies'],['targets','target','Targets'],['cal','calendar','Calendar']]
       }
     : {
         'Dashboard':   [['home','home','Home']],
         'Field work':  [['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['companies','building','Companies']],
+        'Sales':       [['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks']],
         'Performance': [['targets','target','Targets'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']]
       };
 
@@ -734,7 +743,7 @@ function renderPage(p) {
   const map = {
     home: renderHome, companies: renderCompanies, plan: renderPlan,
     log: renderLog, targets: renderTargets, gps: renderGPS,
-    team: renderTeam, cal: renderCal
+    team: renderTeam, cal: renderCal, rfq: renderRFQ, tasks: renderTasks
   };
   if(map[p]) map[p]();
 }
@@ -2836,7 +2845,527 @@ function capturePhoto(visitId) {
   input.click();
 }
 
-// ── BOOT ──────────────────────────────────────────────────────────────────────
+// ── RFQ TRACKER ───────────────────────────────────────────────────────────────
+
+const RFQ_STATUSES = ['New Lead','Quoted','Order Received','Order Lost','Unmatched PO'];
+
+function rfqStatusBadge(status) {
+  const map = {
+    'New Lead':      ['badge-red','Not Quoted'],
+    'Quoted':        ['badge-amber','Quoted'],
+    'Order Received':['badge-green','Order Received'],
+    'Order Lost':    ['badge-gray','Lost'],
+    'Unmatched PO':  ['badge-purple','Unmatched PO'],
+  };
+  const [cls,lbl] = map[status]||['badge-gray',status];
+  return `<span class="badge ${cls}">${lbl}</span>`;
+}
+
+function rfqDaysAgo(dateStr) {
+  if(!dateStr) return null;
+  const d = new Date(dateStr.split('-').reverse().join('-'));
+  if(isNaN(d)) return null;
+  return Math.floor((Date.now()-d)/86400000);
+}
+
+function rfqUrgency(rfq) {
+  const days = rfqDaysAgo(rfq.rfqDate);
+  if(rfq.status==='New Lead'&&days>3) return 'high';
+  if(rfq.status==='Quoted'&&days>7) return 'medium';
+  return 'low';
+}
+
+function getMyRFQs() {
+  const isM = STATE.user.role==='manager';
+  if(isM && STATE.rfqView==='all') return STATE.rfqs;
+  const myId = STATE.user.id;
+  // Filter by repId, or by contacts linked to user's companies
+  return STATE.rfqs.filter(r=>{
+    if(r.repId===myId) return true;
+    // Also show if contact email matches a contact in user's companies
+    if(!r.repId) {
+      const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===String(r.customerEmail||'').toLowerCase());
+      if(contact) {
+        const coTarget = STATE.targets.find(t=>t.companyId===contact.companyId&&t.repId===myId);
+        return !!coTarget;
+      }
+    }
+    return false;
+  });
+}
+
+function renderRFQ() {
+  const el = document.getElementById('page-rfq');
+  const isM = STATE.user.role==='manager';
+  if(!STATE.rfqView) STATE.rfqView = 'open';
+  if(!STATE.rfqFilter) STATE.rfqFilter = 'all';
+
+  const myRfqs = getMyRFQs();
+  const openRFQs = myRfqs.filter(r=>r.status==='New Lead'||r.status==='Quoted');
+  const closedRFQs = myRfqs.filter(r=>r.status==='Order Received'||r.status==='Order Lost');
+  const unmatched = myRfqs.filter(r=>r.status==='Unmatched PO');
+
+  const notQuoted = openRFQs.filter(r=>r.status==='New Lead').length;
+  const quoted = openRFQs.filter(r=>r.status==='Quoted').length;
+  const ordered = closedRFQs.filter(r=>r.status==='Order Received').length;
+  const lost = closedRFQs.filter(r=>r.status==='Order Lost').length;
+
+  // Filter displayed RFQs
+  let displayRFQs = STATE.rfqView==='open' ? openRFQs : STATE.rfqView==='closed' ? closedRFQs : myRfqs;
+  if(STATE.rfqFilter!=='all') displayRFQs = displayRFQs.filter(r=>r.status===STATE.rfqFilter);
+
+  // Sort: high urgency first, then by date
+  displayRFQs = [...displayRFQs].sort((a,b)=>{
+    const urgMap={'high':0,'medium':1,'low':2};
+    const ua=urgMap[rfqUrgency(a)]||2, ub=urgMap[rfqUrgency(b)]||2;
+    if(ua!==ub) return ua-ub;
+    return (rfqDaysAgo(b.rfqDate)||0)-(rfqDaysAgo(a.rfqDate)||0);
+  });
+
+  // Get linked company for each RFQ via contacts
+  function rfqCompany(rfq) {
+    if(rfq.companyId) return co(rfq.companyId);
+    const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===String(rfq.customerEmail||'').toLowerCase());
+    if(contact) return co(contact.companyId);
+    return null;
+  }
+
+  el.innerHTML = `
+    <div class="row-between" style="margin-bottom:14px">
+      <div style="font-size:16px;font-weight:600">RFQ Tracker</div>
+      <div class="row" style="gap:6px">
+        ${isM?viewSwitcherHtml('rfqView2','all','renderRFQ()'):''}
+        <button class="btn btn-primary btn-sm" onclick="openAddRFQPanel()"><i class="ti ti-plus"></i> Add</button>
+      </div>
+    </div>
+
+    <!-- Summary bar -->
+    <div class="grid2" style="gap:8px;margin-bottom:12px">
+      <div class="card" style="padding:12px;border-color:rgba(239,68,68,.3);cursor:pointer" onclick="STATE.rfqView='open';STATE.rfqFilter='New Lead';renderRFQ()">
+        <div style="font-size:22px;font-weight:700;color:#FCA5A5">${notQuoted}</div>
+        <div class="text-xs">Not quoted</div>
+        <div class="text-xs" style="color:var(--red);margin-top:2px">Needs action</div>
+      </div>
+      <div class="card" style="padding:12px;border-color:rgba(245,158,11,.3);cursor:pointer" onclick="STATE.rfqView='open';STATE.rfqFilter='Quoted';renderRFQ()">
+        <div style="font-size:22px;font-weight:700;color:#FCD34D">${quoted}</div>
+        <div class="text-xs">Quoted / Awaited</div>
+        <div class="text-xs" style="color:var(--amber);margin-top:2px">Order pending</div>
+      </div>
+      <div class="card" style="padding:12px;border-color:rgba(16,185,129,.3);cursor:pointer" onclick="STATE.rfqView='closed';STATE.rfqFilter='Order Received';renderRFQ()">
+        <div style="font-size:22px;font-weight:700;color:#34D399">${ordered}</div>
+        <div class="text-xs">Orders received</div>
+        <div class="text-xs" style="color:var(--emerald);margin-top:2px">Closed won</div>
+      </div>
+      <div class="card" style="padding:12px;cursor:pointer" onclick="STATE.rfqView='closed';STATE.rfqFilter='Order Lost';renderRFQ()">
+        <div style="font-size:22px;font-weight:700;color:var(--text2)">${lost}</div>
+        <div class="text-xs">Orders lost</div>
+        <div class="text-xs" style="color:var(--text3);margin-top:2px">Closed lost</div>
+      </div>
+    </div>
+
+    <!-- View tabs -->
+    <div class="seg-tabs" style="margin-bottom:10px">
+      <button class="seg-tab${STATE.rfqView==='open'?' active':''}" onclick="STATE.rfqView='open';STATE.rfqFilter='all';renderRFQ()">Open (${openRFQs.length})</button>
+      <button class="seg-tab${STATE.rfqView==='closed'?' active':''}" onclick="STATE.rfqView='closed';STATE.rfqFilter='all';renderRFQ()">Closed (${closedRFQs.length})</button>
+      <button class="seg-tab${STATE.rfqView==='all'?' active':''}" onclick="STATE.rfqView='all';STATE.rfqFilter='all';renderRFQ()">All (${myRfqs.length})</button>
+    </div>
+
+    <!-- Filter chips -->
+    <div class="chip-row" style="margin-bottom:12px">
+      <span class="chip${STATE.rfqFilter==='all'?' active':''}" onclick="STATE.rfqFilter='all';renderRFQ()">All</span>
+      <span class="chip${STATE.rfqFilter==='New Lead'?' active':''}" onclick="STATE.rfqFilter='New Lead';renderRFQ()" style="border-color:rgba(239,68,68,.3);color:#FCA5A5">Not Quoted</span>
+      <span class="chip${STATE.rfqFilter==='Quoted'?' active':''}" onclick="STATE.rfqFilter='Quoted';renderRFQ()" style="border-color:rgba(245,158,11,.3);color:#FCD34D">Quoted</span>
+      <span class="chip${STATE.rfqFilter==='Order Received'?' active':''}" onclick="STATE.rfqFilter='Order Received';renderRFQ()" style="border-color:rgba(16,185,129,.3);color:#34D399">Order Received</span>
+      <span class="chip${STATE.rfqFilter==='Order Lost'?' active':''}" onclick="STATE.rfqFilter='Order Lost';renderRFQ()">Lost</span>
+    </div>
+
+    <!-- RFQ tiles -->
+    ${displayRFQs.length===0
+      ? `<div class="empty"><i class="ti ti-file-invoice"></i><p>No RFQs in this view</p><small>RFQs from your contacts appear here automatically</small></div>`
+      : displayRFQs.map(rfq=>{
+          const urg = rfqUrgency(rfq);
+          const days = rfqDaysAgo(rfq.rfqDate);
+          const cmp = rfqCompany(rfq);
+          const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===String(rfq.customerEmail||'').toLowerCase());
+          const repName = rep(rfq.repId)?.name||'';
+          const borderCol = urg==='high'?'rgba(239,68,68,.4)':urg==='medium'?'rgba(245,158,11,.3)':'var(--border)';
+
+          return `<div class="card" style="margin-bottom:10px;border-color:${borderCol};cursor:pointer" onclick="openRFQDetail('${rfq.id}')">
+            <div class="row-between" style="margin-bottom:6px">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${rfq.rfqSubject||rfq.subject||'No subject'}</div>
+                <div class="text-xs" style="margin-top:1px">${rfq.customerName||rfq.from||'Unknown'} ${cmp?'· '+cmp.name:''}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;margin-left:8px">
+                ${rfqStatusBadge(rfq.status)}
+                ${urg==='high'?'<span class="badge badge-red" style="font-size:8px">⚡ Urgent</span>':urg==='medium'?'<span class="badge badge-amber" style="font-size:8px">Follow up</span>':''}
+              </div>
+            </div>
+            <div class="text-xs" style="margin-bottom:6px;color:var(--text2);line-height:1.5">${(rfq.rfqSummary||rfq.summary||'').substring(0,100)}${(rfq.rfqSummary||rfq.summary||'').length>100?'…':''}</div>
+            <div class="row-between">
+              <div class="row" style="gap:8px">
+                ${rfq.category?`<span class="badge badge-blue" style="font-size:8px">${rfq.category}</span>`:''}
+                ${days!==null?`<span class="text-xs">${days===0?'Today':days+'d ago'}</span>`:''}
+                ${isM&&repName?`<span class="text-xs" style="color:var(--indigo2)">${repName}</span>`:''}
+              </div>
+              <i class="ti ti-chevron-right" style="font-size:14px;color:var(--text3)"></i>
+            </div>
+          </div>`;
+        }).join('')}`;
+}
+
+function openRFQDetail(id) {
+  const rfq = STATE.rfqs.find(r=>r.id===id);
+  if(!rfq) return;
+  const isM = STATE.user.role==='manager';
+  const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===String(rfq.customerEmail||'').toLowerCase());
+  const cmp = rfq.companyId?co(rfq.companyId):contact?co(contact.companyId):null;
+  const days = rfqDaysAgo(rfq.rfqDate);
+  const panel = document.getElementById('panel-rfq-detail');
+
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('rfq-detail')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">RFQ Detail</span>
+    </div>
+
+    <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:12px">
+      ${rfqStatusBadge(rfq.status)}
+      ${rfq.category?`<span class="badge badge-blue">${rfq.category}</span>`:''}
+      ${days!==null?`<span class="badge badge-gray">${days===0?'Today':days+'d ago'}</span>`:''}
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <div class="text-label" style="margin-bottom:8px">RFQ details</div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">${rfq.rfqSubject||rfq.subject||'—'}</div>
+      <div class="text-xs" style="margin-bottom:8px">📅 Received: ${rfq.rfqDate||'—'}</div>
+      <div class="rmk-box">${rfq.rfqSummary||rfq.summary||'No summary available'}</div>
+      ${rfq.products||rfq.notes?`<div style="margin-top:8px"><div class="text-label" style="margin-bottom:4px">Items / Products</div><div class="text-sm">${rfq.products||rfq.notes||'—'}</div></div>`:''}
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <div class="text-label" style="margin-bottom:8px">Contact</div>
+      <div style="font-size:12px;font-weight:500">${rfq.customerName||'—'}</div>
+      <div class="text-xs">${rfq.customerEmail||'—'}</div>
+      ${cmp?`<div class="text-xs" style="color:var(--indigo2);margin-top:2px">${cmp.name}</div>`:''}
+    </div>
+
+    ${rfq.status==='Quoted'||rfq.status==='Order Received'?`
+    <div class="card" style="margin-bottom:12px">
+      <div class="text-label" style="margin-bottom:8px">Quotation & Order</div>
+      ${rfq.quotedDate?`<div class="text-xs">Quoted on: <strong>${rfq.quotedDate}</strong></div>`:''}
+      ${rfq.poDate?`<div class="text-xs">Order on: <strong>${rfq.poDate}</strong></div>`:''}
+      ${rfq.poSummary?`<div class="rmk-box" style="margin-top:6px">${rfq.poSummary}</div>`:''}
+    </div>`:''}
+
+    <!-- Assign to rep (manager only) -->
+    ${isM?`<div class="inp-group">
+      <div class="inp-label">Assign to rep</div>
+      <select class="inp" id="rfq-assign-rep" onchange="assignRFQ('${rfq.id}',this.value)">
+        <option value="">Unassigned</option>
+        ${myReps().map(r=>`<option value="${r.id}" ${rfq.repId===r.id?'selected':''}>${r.name}</option>`).join('')}
+      </select>
+    </div>`:''}
+
+    <!-- Status update -->
+    <div class="text-label" style="margin-bottom:8px">Update status</div>
+    <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      ${RFQ_STATUSES.filter(s=>s!=='Unmatched PO').map(s=>`
+        <button class="btn btn-sm ${rfq.status===s?'btn-primary':''}" style="font-size:10px" onclick="updateRFQStatus('${rfq.id}','${s}')">
+          ${s}
+        </button>`).join('')}
+    </div>
+
+    ${rfq.status==='New Lead'?`
+    <div class="inp-group">
+      <div class="inp-label">Mark as quoted — add date</div>
+      <input type="date" class="inp" id="rfq-quoted-date" value="${todayStr()}">
+    </div>
+    <button class="btn btn-primary btn-full" style="margin-bottom:8px" onclick="markRFQQuoted('${rfq.id}')">
+      <i class="ti ti-check"></i> Mark as Quoted
+    </button>`:''}
+
+    ${rfq.status==='Quoted'?`
+    <div class="warn-box" style="margin-bottom:10px">
+      <i class="ti ti-clock" style="color:var(--amber);font-size:16px;flex-shrink:0"></i>
+      <div class="text-xs" style="color:var(--amber)">Waiting for order. If order received, update status to "Order Received" and the PO will be registered automatically.</div>
+    </div>
+    <div class="inp-group">
+      <div class="inp-label">PO amount (₹) — if order received</div>
+      <input type="number" class="inp" id="rfq-po-amount" placeholder="e.g. 150000">
+    </div>
+    <button class="btn btn-success btn-full" style="margin-bottom:8px" onclick="markOrderReceived('${rfq.id}')">
+      <i class="ti ti-trophy"></i> Mark Order Received
+    </button>
+    <button class="btn btn-danger btn-full" onclick="updateRFQStatus('${rfq.id}','Order Lost')">
+      <i class="ti ti-x"></i> Mark Order Lost
+    </button>`:''}`;
+
+  openPanel('rfq-detail');
+}
+
+async function assignRFQ(rfqId, repId) {
+  await apiUpdate('RFQs',{id:rfqId,repId});
+  const r=STATE.rfqs.find(x=>x.id===rfqId);if(r)r.repId=repId;
+  showToast('Assigned ✓','success');
+  autoCreateFollowupTask(rfqId);
+}
+
+async function updateRFQStatus(rfqId, status) {
+  await apiUpdate('RFQs',{id:rfqId,status});
+  const r=STATE.rfqs.find(x=>x.id===rfqId);if(r)r.status=status;
+  showToast('Status updated ✓','success');
+  closePanel('rfq-detail');
+  renderRFQ();
+}
+
+async function markRFQQuoted(rfqId) {
+  const date = document.getElementById('rfq-quoted-date')?.value||todayStr();
+  await apiUpdate('RFQs',{id:rfqId,status:'Quoted',quotedDate:date});
+  const r=STATE.rfqs.find(x=>x.id===rfqId);
+  if(r){r.status='Quoted';r.quotedDate=date;}
+  // Auto-create follow-up task
+  autoCreateFollowupTask(rfqId);
+  showToast('Marked as quoted ✓','success');
+  closePanel('rfq-detail');
+  renderRFQ();
+}
+
+async function markOrderReceived(rfqId) {
+  const amount = document.getElementById('rfq-po-amount')?.value;
+  if(!amount){showToast('Please enter PO amount','error');return;}
+  const rfq = STATE.rfqs.find(x=>x.id===rfqId);
+  if(!rfq)return;
+  await apiUpdate('RFQs',{id:rfqId,status:'Order Received',poDate:todayStr()});
+  rfq.status='Order Received';rfq.poDate=todayStr();
+  // Auto-register PO in target tracking
+  const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===String(rfq.customerEmail||'').toLowerCase());
+  const coId = rfq.companyId||(contact?.companyId)||'';
+  const repId = rfq.repId||STATE.user.id;
+  if(coId&&repId) {
+    const po={id:uid(),repId,companyId:coId,type:'PO',amount,description:rfq.rfqSubject||'RFQ Order',date:todayStr(),status:'pending',verifiedBy:'',fileUrl:'',rfqId};
+    await apiWrite('POs',po);
+    STATE.pos.push(po);
+    showToast('Order received + PO registered for verification ✓','success');
+  } else {
+    showToast('Order marked received ✓','success');
+  }
+  // Complete any related tasks
+  STATE.tasks.filter(t=>t.rfqId===rfqId).forEach(async t=>{
+    await apiUpdate('Tasks',{id:t.id,status:'completed'});t.status='completed';
+  });
+  closePanel('rfq-detail');
+  renderRFQ();
+}
+
+function openAddRFQPanel() {
+  const panel = document.getElementById('panel-add-rfq');
+  const myCos = STATE.user.role==='rep'
+    ? STATE.companies.filter(c=>c.assignedReps&&c.assignedReps.includes(STATE.user.id))
+    : STATE.companies;
+
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('add-rfq')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">Add RFQ manually</span>
+    </div>
+    <div class="info-box" style="margin-bottom:14px">
+      <i class="ti ti-info-circle" style="color:var(--blue);font-size:16px;flex-shrink:0"></i>
+      <div class="text-xs" style="color:#93C5FD">RFQs from known contacts are added automatically. Use this to add RFQs received via phone, WhatsApp, or in-person.</div>
+    </div>
+    <div class="inp-group"><div class="inp-label">Company *</div>
+      <select class="inp" id="ar-co" onchange="updateRFQContactPicker(this.value)">
+        <option value="">Select company…</option>
+        ${myCos.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
+      </select>
+    </div>
+    <div id="ar-contact-picker"></div>
+    <div class="inp-group"><div class="inp-label">Contact name *</div><input class="inp" id="ar-name" placeholder="e.g. Suresh Kumar"></div>
+    <div class="inp-group"><div class="inp-label">Contact email</div><input class="inp" type="email" id="ar-email" placeholder="e.g. suresh@company.com"></div>
+    <div class="inp-group"><div class="inp-label">RFQ subject *</div><input class="inp" id="ar-subject" placeholder="e.g. Quotation for Industrial Pumps"></div>
+    <div class="inp-group"><div class="inp-label">What are they asking to quote?</div><textarea class="inp" id="ar-summary" rows="3" placeholder="Brief description of items/requirements…" style="resize:none"></textarea></div>
+    <div class="inp-group"><div class="inp-label">Items / Products</div><input class="inp" id="ar-products" placeholder="e.g. 5x Industrial Pump 50HP, 10x Gate Valve"></div>
+    <div class="grid2" style="gap:8px;margin-bottom:12px">
+      <div><div class="inp-label">Category</div>
+        <select class="inp" id="ar-cat">
+          ${['Consumables','Safety','Welding','Tools and Tackles','Lifting Equipment','Electrical','Mechanical Spares','Lighting','Miscellaneous'].map(c=>`<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>
+      <div><div class="inp-label">Date received</div><input type="date" class="inp" id="ar-date" value="${todayStr()}"></div>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="saveManualRFQ()"><i class="ti ti-check"></i> Add RFQ</button>`;
+  openPanel('add-rfq');
+}
+
+function updateRFQContactPicker(coId) {
+  const el = document.getElementById('ar-contact-picker');
+  if(!el||!coId) return;
+  const contacts = getCompanyContacts(coId);
+  if(!contacts.length) return;
+  el.innerHTML = `<div style="background:var(--bg3);border-radius:8px;overflow:hidden;margin-bottom:10px">
+    ${contacts.map(ct=>`<div onclick="document.getElementById('ar-name').value='${ct.name}';document.getElementById('ar-email').value='${ct.email||''}'" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer">
+      <div style="width:24px;height:24px;border-radius:50%;background:var(--indigo);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:#fff">${ct.name.slice(0,2).toUpperCase()}</div>
+      <div><div style="font-size:11px;font-weight:500">${ct.name}</div><div class="text-xs">${ct.designation||''}</div></div>
+    </div>`).join('')}
+  </div>`;
+}
+
+async function saveManualRFQ() {
+  const coId = document.getElementById('ar-co').value;
+  const name = document.getElementById('ar-name').value.trim();
+  const subject = document.getElementById('ar-subject').value.trim();
+  if(!coId||!name||!subject){showToast('Company, contact name and subject required','error');return;}
+  const rfq = {
+    id:uid(),
+    repId:STATE.user.id,
+    companyId:coId,
+    customerName:name,
+    customerEmail:document.getElementById('ar-email').value||'',
+    rfqSubject:subject,
+    rfqSummary:document.getElementById('ar-summary').value||'',
+    products:document.getElementById('ar-products').value||'',
+    category:document.getElementById('ar-cat').value||'Miscellaneous',
+    rfqDate:document.getElementById('ar-date').value||todayStr(),
+    status:'New Lead',
+    quotedDate:'',poDate:'',poSummary:'',matchScore:'',source:'manual'
+  };
+  showToast('Saving...','');
+  const ok = await apiWrite('RFQs',rfq);
+  if(ok){
+    STATE.rfqs.push(rfq);
+    autoCreateFollowupTask(rfq.id);
+    showToast('RFQ added ✓','success');
+    closePanel('add-rfq');
+    renderRFQ();
+  }
+}
+
+// ── TASKS ─────────────────────────────────────────────────────────────────────
+
+function autoCreateFollowupTask(rfqId) {
+  const rfq = STATE.rfqs.find(r=>r.id===rfqId);
+  if(!rfq)return;
+  const existingTask = STATE.tasks.find(t=>t.rfqId===rfqId&&t.status==='pending');
+  if(existingTask)return; // already has a task
+  const dueDate = new Date();
+  if(rfq.status==='New Lead') dueDate.setDate(dueDate.getDate()+2);
+  if(rfq.status==='Quoted') dueDate.setDate(dueDate.getDate()+7);
+  const task = {
+    id:uid(),
+    repId:rfq.repId||STATE.user.id,
+    rfqId,
+    companyId:rfq.companyId||'',
+    type:rfq.status==='New Lead'?'quote':'followup',
+    title:rfq.status==='New Lead'?`Quote RFQ: ${rfq.rfqSubject||''}`.substring(0,60):`Follow up on quotation: ${rfq.rfqSubject||''}`.substring(0,60),
+    dueDate:dueDate.toISOString().slice(0,10),
+    status:'pending',
+    priority:rfq.status==='New Lead'?'high':'medium',
+    createdDate:todayStr(),
+  };
+  apiWrite('Tasks',task).then(ok=>{ if(ok) STATE.tasks.push(task); });
+}
+
+function autoGenerateTasks() {
+  // Generate tasks for overdue RFQs that don't have tasks yet
+  const myId = STATE.user.id;
+  STATE.rfqs.filter(r=>(r.repId===myId||!r.repId)&&(r.status==='New Lead'||r.status==='Quoted')).forEach(rfq=>{
+    const days = rfqDaysAgo(rfq.rfqDate)||0;
+    const hasTask = STATE.tasks.some(t=>t.rfqId===rfq.id&&t.status==='pending');
+    if(!hasTask&&((rfq.status==='New Lead'&&days>1)||(rfq.status==='Quoted'&&days>5))) {
+      autoCreateFollowupTask(rfq.id);
+    }
+  });
+}
+
+function renderTasks() {
+  const el = document.getElementById('page-tasks');
+  const isM = STATE.user.role==='manager';
+  const myId = STATE.user.id;
+  const myTasks = isM
+    ? STATE.tasks
+    : STATE.tasks.filter(t=>t.repId===myId||!t.repId);
+
+  // Auto-generate any missing tasks
+  autoGenerateTasks();
+
+  const pending = myTasks.filter(t=>t.status==='pending');
+  const completed = myTasks.filter(t=>t.status==='completed');
+
+  // Sort: overdue first, then by due date
+  const sorted = [...pending].sort((a,b)=>{
+    const aOverdue = a.dueDate<todayStr();
+    const bOverdue = b.dueDate<todayStr();
+    if(aOverdue&&!bOverdue) return -1;
+    if(!aOverdue&&bOverdue) return 1;
+    return a.dueDate.localeCompare(b.dueDate);
+  });
+
+  el.innerHTML = `
+    <div class="row-between" style="margin-bottom:14px">
+      <div style="font-size:16px;font-weight:600">Tasks</div>
+      <div class="row" style="gap:6px">
+        <span class="badge badge-red" style="font-size:11px">${sorted.filter(t=>t.dueDate<todayStr()).length} overdue</span>
+        <span class="badge badge-amber" style="font-size:11px">${sorted.filter(t=>t.dueDate>=todayStr()).length} upcoming</span>
+      </div>
+    </div>
+
+    ${sorted.length===0&&completed.length===0?`
+      <div class="empty"><i class="ti ti-checklist"></i><p>No tasks yet</p><small>Tasks are auto-created when RFQs need quoting or following up</small></div>`:''}
+
+    ${sorted.length>0?`
+      <div class="text-label" style="margin-bottom:8px">Pending (${sorted.length})</div>
+      ${sorted.map(t=>{
+        const rfq = STATE.rfqs.find(r=>r.id===t.rfqId);
+        const cmp = co(t.companyId);
+        const isOverdue = t.dueDate<todayStr();
+        const daysUntil = Math.ceil((new Date(t.dueDate)-Date.now())/86400000);
+        return `<div class="card" style="margin-bottom:8px;border-color:${isOverdue?'rgba(239,68,68,.3)':t.priority==='high'?'rgba(245,158,11,.3)':'var(--border)'}">
+          <div class="row-between" style="margin-bottom:6px">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:500;margin-bottom:2px">${t.title}</div>
+              <div class="text-xs">${cmp?.name||''} ${isM&&rep(t.repId)?.name?'· '+rep(t.repId).name:''}</div>
+            </div>
+            <div style="flex-shrink:0;text-align:right;margin-left:8px">
+              <div class="text-xs" style="color:${isOverdue?'#FCA5A5':'var(--text2)'}">
+                ${isOverdue?`${Math.abs(daysUntil)}d overdue`:daysUntil===0?'Due today':`Due in ${daysUntil}d`}
+              </div>
+              <span class="badge ${t.type==='quote'?'badge-red':'badge-amber'}" style="font-size:8px;margin-top:2px">${t.type==='quote'?'Quote':'Follow up'}</span>
+            </div>
+          </div>
+          ${rfq?`<div class="text-xs" style="color:var(--text3);margin-bottom:8px">${rfq.rfqSubject||''} · ${rfq.category||''}</div>`:''}
+          <div class="row" style="gap:6px">
+            <button class="btn btn-success btn-sm" style="font-size:10px" onclick="completeTask('${t.id}')"><i class="ti ti-check"></i> Done</button>
+            ${rfq?`<button class="btn btn-primary btn-sm" style="font-size:10px" onclick="openRFQDetail('${rfq.id}');navigate('rfq')"><i class="ti ti-file-invoice"></i> View RFQ</button>`:''}
+            <button class="btn btn-sm" style="font-size:10px" onclick="snoozeTask('${t.id}')"><i class="ti ti-clock"></i> Snooze 2d</button>
+          </div>
+        </div>`;
+      }).join('')}`:''}
+
+    ${completed.length>0?`
+      <div class="text-label" style="margin-top:12px;margin-bottom:8px">Completed (${completed.length})</div>
+      ${completed.slice(0,5).map(t=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);opacity:.6">
+          <i class="ti ti-circle-check" style="color:var(--emerald);font-size:16px;flex-shrink:0"></i>
+          <div style="flex:1"><div style="font-size:11px;text-decoration:line-through">${t.title}</div></div>
+        </div>`).join('')}`:''}`;
+}
+
+async function completeTask(taskId) {
+  await apiUpdate('Tasks',{id:taskId,status:'completed'});
+  const t=STATE.tasks.find(x=>x.id===taskId);if(t)t.status='completed';
+  showToast('Task completed ✓','success');
+  renderTasks();
+}
+
+async function snoozeTask(taskId) {
+  const t=STATE.tasks.find(x=>x.id===taskId);if(!t)return;
+  const newDate=new Date(t.dueDate);newDate.setDate(newDate.getDate()+2);
+  const newDateStr=newDate.toISOString().slice(0,10);
+  await apiUpdate('Tasks',{id:taskId,dueDate:newDateStr});
+  t.dueDate=newDateStr;
+  showToast('Snoozed 2 days ✓','');
+  renderTasks();
+}
 initLogin();
 </script>
 </body>
