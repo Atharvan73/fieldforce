@@ -343,7 +343,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v3.5</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v3.6</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -3528,7 +3528,13 @@ function openRFQDetail(id) {
       </select>
     </div>`:''}
 
-    <!-- Status update -->
+    <!-- Category edit -->
+    <div class="inp-group">
+      <div class="inp-label">Category</div>
+      <select class="inp" onchange="updateRFQCategory('${rfq.id}',this.value)">
+        ${['Consumables','Safety','Welding','Tools and Tackles','Lifting Equipment','Electrical','Mechanical Spares','Lighting','Construction Chemicals','Miscellaneous'].map(c=>`<option value="${c}" ${(rfq.category||'')=== c?'selected':''}>${c}</option>`).join('')}
+      </select>
+    </div>
     <div class="text-label" style="margin-bottom:8px">Update status</div>
     <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:14px">
       ${RFQ_STATUSES.filter(s=>s!=='Unmatched PO').map(s=>`
@@ -3578,6 +3584,12 @@ async function updateRFQStatus(rfqId, status) {
   showToast('Status updated ✓','success');
   closePanel('rfq-detail');
   renderRFQ();
+}
+
+async function updateRFQCategory(rfqId, category) {
+  await apiUpdate('RFQs',{id:rfqId,category});
+  const r=STATE.rfqs.find(x=>x.id===rfqId);if(r)r.category=category;
+  showToast('Category updated ✓','success');
 }
 
 async function markRFQQuoted(rfqId) {
