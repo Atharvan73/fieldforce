@@ -343,7 +343,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v3.4</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v3.5</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -3649,7 +3649,7 @@ function openAddRFQPanel() {
     <div class="grid2" style="gap:8px;margin-bottom:12px">
       <div><div class="inp-label">Category</div>
         <select class="inp" id="ar-cat">
-          ${['Consumables','Safety','Welding','Tools and Tackles','Lifting Equipment','Electrical','Mechanical Spares','Lighting','Miscellaneous'].map(c=>`<option value="${c}">${c}</option>`).join('')}
+          ${['Consumables','Safety','Welding','Tools and Tackles','Lifting Equipment','Electrical','Mechanical Spares','Lighting','Construction Chemicals','Miscellaneous'].map(c=>`<option value="${c}">${c}</option>`).join('')}
         </select>
       </div>
       <div><div class="inp-label">Date received</div><input type="date" class="inp" id="ar-date" value="${todayStr()}"></div>
