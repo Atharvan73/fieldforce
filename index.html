@@ -343,7 +343,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v3.6</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v3.7</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -1031,6 +1031,7 @@ function renderCompanies() {
               <div class="co-info">
                 <div class="co-name">${pri(c.priority)} ${c.name}${ov?' <span class="badge badge-red" style="font-size:8px">OD</span>':''}</div>
                 <div class="co-sub">${c.address?.split(',').slice(0,2).join(',')} · ${c.industry}</div>
+                ${isM?`<div class="row" style="gap:3px;margin-top:3px;flex-wrap:wrap">${[...new Set(allT.filter(t=>t.companyId===c.id).map(t=>t.repId))].map(rid=>{const r=rep(rid);return r?`<span style="font-size:9px;background:rgba(99,102,241,.1);color:var(--indigo2);border-radius:10px;padding:1px 7px">${r.name.split(' ')[0]}</span>`:''}).join('')}</div>`:''}
               </div>
               <div class="co-meta">
                 <div class="co-ach">
@@ -1053,6 +1054,7 @@ function renderCompanies() {
               <div class="row" style="gap:5px;margin-top:4px;flex-wrap:wrap">
                 ${!hasMonthly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(245,158,11,.3);color:var(--amber)" onclick="addFocusPeriod('${c.id}','monthly');event.stopPropagation()"><i class="ti ti-plus" style="font-size:10px"></i> Add to Monthly</button>`:''}
                 ${!hasWeekly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(16,185,129,.3);color:var(--emerald)" onclick="addFocusPeriod('${c.id}','weekly');event.stopPropagation()"><i class="ti ti-plus" style="font-size:10px"></i> Add to Weekly</button>`:''}
+                ${isM&&!allT.some(t=>t.companyId===c.id&&t.repId===STATE.user.id)?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="addToMyCompanies('${c.id}');event.stopPropagation()"><i class="ti ti-user-plus" style="font-size:10px"></i> Add to mine</button>`:''}
                 <button class="btn btn-sm" style="font-size:9px" onclick="openCoDetail('${c.id}');event.stopPropagation()"><i class="ti ti-arrow-right" style="font-size:10px"></i> Full details</button>
               </div>
             </div>
@@ -1140,6 +1142,36 @@ async function addFocusPeriod(coId, period) {
     showToast(`Added to ${period} targets ✓`,'success');
     renderCompanies();
   }
+}
+
+async function addToMyCompanies(coId) {
+  // Add annual target for manager themselves
+  const existing = STATE.targets.find(t=>t.companyId===coId&&t.repId===STATE.user.id&&t.period==='annual');
+  if(existing){ showToast('Already in your companies',''); return; }
+  const t = {
+    id:uid(), companyId:coId, repId:STATE.user.id,
+    period:'annual', periodValue:'2025',
+    saleTarget:0, items:'', goals:'', achieved:0, approvedBy:STATE.user.id
+  };
+  const ok = await apiWrite('Targets',t);
+  if(ok){ STATE.targets.push(t); showToast('Added to your companies ✓','success'); renderCompanies(); }
+}
+
+function checkDuplicateCompany(val) {
+  const list = document.getElementById('aco-dup-list');
+  if(!list) return;
+  const q = val.trim().toLowerCase();
+  if(q.length < 2){ list.style.display='none'; return; }
+  const matches = STATE.companies.filter(c=>(c.name||'').toLowerCase().includes(q)).slice(0,5);
+  if(!matches.length){ list.style.display='none'; return; }
+  list.style.display='block';
+  list.innerHTML = matches.map(c=>{
+    const reps = [...new Set(STATE.targets.filter(t=>t.companyId===c.id).map(t=>t.repId))].map(rid=>rep(rid)?.name.split(' ')[0]).filter(Boolean).join(', ');
+    return `<div style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="document.getElementById('aco-name').value='${c.name.replace(/'/g,"\\'")}';document.getElementById('aco-dup-list').style.display='none'">
+      <div style="font-size:11px;font-weight:600;color:var(--amber)">⚠ Already exists: ${c.name}</div>
+      <div style="font-size:10px;color:var(--text3)">${c.address||''} ${reps?'· Assigned to: '+reps:''}</div>
+    </div>`;
+  }).join('');
 }
 
 function openCoDetail(cId) {
@@ -1230,7 +1262,9 @@ function openAddCompanyPanel() {
       <!-- SECTION 1: Company basics -->
       <div class="text-label" style="margin-bottom:10px">Company details</div>
 
-      <div class="inp-group"><div class="inp-label">Company name *</div><input class="inp" id="aco-name" placeholder="e.g. ABC Industries Pvt Ltd"></div>
+      <div class="inp-group"><div class="inp-label">Company name *</div><input class="inp" id="aco-name" placeholder="e.g. ABC Industries Pvt Ltd" oninput="checkDuplicateCompany(this.value)" autocomplete="off">
+        <div id="aco-dup-list" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:160px;overflow-y:auto"></div>
+      </div>
       <div class="inp-group"><div class="inp-label">Address *</div><input class="inp" id="aco-addr" placeholder="e.g. Sector 62, Noida, UP"></div>
       <div class="grid2" style="gap:8px;margin-bottom:12px">
         <div><div class="inp-label">City / Region *</div><input class="inp" id="aco-region" placeholder="e.g. Noida"></div>
