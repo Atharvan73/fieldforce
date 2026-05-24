@@ -343,7 +343,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v3.3</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v3.4</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -3111,7 +3111,10 @@ function renderRFQ() {
     const urgMap={'high':0,'medium':1,'low':2};
     const ua=urgMap[rfqUrgency(a)]||2, ub=urgMap[rfqUrgency(b)]||2;
     if(ua!==ub) return ua-ub;
-    return (rfqDaysAgo(b.rfqDate)||0)-(rfqDaysAgo(a.rfqDate)||0);
+    // Newest first within same urgency
+    const da = new Date(a.rfqDate||a.rfqdate||0);
+    const db = new Date(b.rfqDate||b.rfqdate||0);
+    return db-da;
   });
 
   // Count active secondary filters for badge
