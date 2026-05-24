@@ -343,7 +343,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v3.2</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v3.3</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -3245,10 +3245,10 @@ function openRFQAddContact(rfqId) {
       <i class="ti ti-info-circle" style="color:var(--blue);font-size:16px;flex-shrink:0"></i>
       <div class="text-xs">Pre-filled from RFQ. Edit as needed before saving.</div>
     </div>
-    <div class="inp-group"><div class="inp-label">Name</div><input class="inp" id="radc-name" value="${(rfq.customerName||'').replace(/"/g,'&quot;')}"></div>
+    <div class="inp-group"><div class="inp-label">Name</div><input class="inp" id="radc-name" value="${(rfq.contactPersonName||rfq.customerName||'').replace(/"/g,'&quot;')}"></div>
+    <div class="inp-group"><div class="inp-label">Designation</div><input class="inp" id="radc-desig" value="${(rfq.contactDesignation||'').replace(/"/g,'&quot;')}" placeholder="e.g. Purchase Manager"></div>
     <div class="inp-group"><div class="inp-label">Email</div><input class="inp" type="email" id="radc-email" value="${(rfq.customerEmail||'').replace(/"/g,'&quot;')}"></div>
-    <div class="inp-group"><div class="inp-label">Phone</div><input class="inp" type="tel" id="radc-phone" placeholder="e.g. 9876543210"></div>
-    <div class="inp-group"><div class="inp-label">Designation</div><input class="inp" id="radc-desig" placeholder="e.g. Purchase Manager"></div>
+    <div class="inp-group"><div class="inp-label">Phone</div><input class="inp" type="tel" id="radc-phone" value="${(rfq.contactPhone||'').replace(/"/g,'&quot;')}" placeholder="e.g. +91 9876543210"></div>
     <div class="inp-group">
       <div class="inp-label">Link to company</div>
       <select class="inp" id="radc-co">
@@ -3286,7 +3286,7 @@ function openRFQAddCompany(rfqId) {
   const panel = document.getElementById('panel-rfq-add-from');
   // Extract company name guess from customer name (last part often company)
   const nameParts = (rfq.customerName||'').split(',');
-  const coNameGuess = nameParts.length>1 ? nameParts[1].trim() : '';
+  const coNameGuess = rfq.contactCompanyName || (nameParts.length>1 ? nameParts[1].trim() : '');
   panel.innerHTML = `
     <div class="panel-head">
       <button class="panel-back" onclick="closePanel('rfq-add-from');openRFQDetail('${rfqId}')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
@@ -3495,10 +3495,12 @@ function openRFQDetail(id) {
 
     <div class="card" style="margin-bottom:12px">
       <div class="text-label" style="margin-bottom:8px">Contact</div>
-      <div style="font-size:12px;font-weight:500">${rfq.customerName||'—'}</div>
-      <div class="text-xs">${rfq.customerEmail||'—'}</div>
-      ${contact&&contact.phone?`<div class="text-xs" style="margin-top:2px"><i class="ti ti-phone" style="font-size:10px"></i> ${contact.phone}</div>`:''}
-      ${cmp?`<div class="text-xs" style="color:var(--indigo2);margin-top:2px">${cmp.name}</div>`:''}
+      <div style="font-size:12px;font-weight:500">${rfq.contactPersonName||rfq.customerName||'—'}</div>
+      ${rfq.contactDesignation?`<div class="text-xs" style="color:var(--text3)">${rfq.contactDesignation}</div>`:''}
+      <div class="text-xs" style="margin-top:2px">${rfq.customerEmail||'—'}</div>
+      ${(rfq.contactPhone||(contact&&contact.phone))?`<div class="text-xs" style="margin-top:2px"><i class="ti ti-phone" style="font-size:10px"></i> ${rfq.contactPhone||contact.phone}</div>`:''}
+      ${rfq.contactCompanyName||cmp?`<div class="text-xs" style="color:var(--indigo2);margin-top:2px"><i class="ti ti-building" style="font-size:10px"></i> ${rfq.contactCompanyName||cmp?.name}</div>`:''}
+      ${rfq.contactSite?`<div class="text-xs" style="color:var(--amber);margin-top:2px"><i class="ti ti-map-pin" style="font-size:10px"></i> ${rfq.contactSite}</div>`:''}
       ${isM?`
       <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">
         ${!contact?`<button class="btn btn-sm" style="font-size:10px" onclick="openRFQAddContact('${rfq.id}')"><i class="ti ti-user-plus"></i> Add to contacts</button>`:''}
