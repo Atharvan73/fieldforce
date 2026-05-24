@@ -343,7 +343,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v3.7</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v3.9</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -1166,12 +1166,80 @@ function checkDuplicateCompany(val) {
   if(!matches.length){ list.style.display='none'; return; }
   list.style.display='block';
   list.innerHTML = matches.map(c=>{
-    const reps = [...new Set(STATE.targets.filter(t=>t.companyId===c.id).map(t=>t.repId))].map(rid=>rep(rid)?.name.split(' ')[0]).filter(Boolean).join(', ');
-    return `<div style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="document.getElementById('aco-name').value='${c.name.replace(/'/g,"\\'")}';document.getElementById('aco-dup-list').style.display='none'">
-      <div style="font-size:11px;font-weight:600;color:var(--amber)">⚠ Already exists: ${c.name}</div>
-      <div style="font-size:10px;color:var(--text3)">${c.address||''} ${reps?'· Assigned to: '+reps:''}</div>
+    const assignedReps = [...new Set(STATE.targets.filter(t=>t.companyId===c.id).map(t=>t.repId))].map(rid=>rep(rid)?.name.split(' ')[0]).filter(Boolean).join(', ');
+    return `<div style="padding:10px 12px;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:600;color:var(--amber);margin-bottom:2px">⚠ Already exists: ${c.name}</div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:6px">${c.address||''} ${assignedReps?'· Assigned to: '+assignedReps:''}</div>
+      <button class="btn btn-sm btn-primary" style="font-size:10px" onclick="assignExistingCompany('${c.id}')">
+        <i class="ti ti-user-plus"></i> Assign this company to a rep instead
+      </button>
     </div>`;
   }).join('');
+}
+
+function assignExistingCompany(coId) {
+  const c = STATE.companies.find(x=>x.id===coId);
+  if(!c) return;
+  const reps = myReps();
+  const panel = document.getElementById('panel-addco');
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="openAddCompanyPanel()"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">Assign company</span>
+    </div>
+    <div class="card" style="margin-bottom:14px;border-color:rgba(99,102,241,.3)">
+      <div style="font-size:13px;font-weight:600">${c.name}</div>
+      <div class="text-xs" style="margin-top:2px">${c.address||''}</div>
+      <div class="text-xs" style="color:var(--text3)">${c.industry||''}</div>
+    </div>
+    <div class="inp-group">
+      <div class="inp-label">Assign to rep *</div>
+      <select class="inp" id="aec-rep">
+        <option value="${STATE.user.id}">${STATE.user.name} (myself)</option>
+        ${reps.map(r=>`<option value="${r.id}">${r.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="inp-group">
+      <div class="inp-label">Period</div>
+      <select class="inp" id="aec-period">
+        <option value="annual">Annual</option>
+        <option value="monthly">Monthly</option>
+        <option value="weekly">Weekly</option>
+      </select>
+    </div>
+    <div class="inp-group">
+      <div class="inp-label">Sale target (₹)</div>
+      <input class="inp" type="number" id="aec-tgt" placeholder="e.g. 500000">
+    </div>
+    <div class="inp-group">
+      <div class="inp-label">Items to sell</div>
+      <input class="inp" id="aec-items" placeholder="e.g. Safety Equipment">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="saveAssignExisting('${coId}')">
+      <i class="ti ti-check"></i> Assign & Add to Target Companies
+    </button>`;
+}
+
+async function saveAssignExisting(coId, repElId, tgtElId) {
+  const repId = document.getElementById(repElId||'aec-rep')?.value;
+  const period = document.getElementById('aec-period')?.value||'annual';
+  const saleTarget = document.getElementById(tgtElId||'aec-tgt')?.value||0;
+  const items = document.getElementById('aec-items')?.value||'';
+  if(!repId){ showToast('Select a rep','error'); return; }
+  const existing = STATE.targets.find(t=>t.companyId===coId&&t.repId===repId&&t.period===period);
+  if(existing){ showToast('Already assigned to this rep for this period',''); closePanel('addco'); return; }
+  const t = {
+    id:uid(), companyId:coId, repId,
+    period, periodValue: period==='annual'?'2025':period==='weekly'?weekRange(todayStr()).start:new Date().toISOString().slice(0,7),
+    saleTarget:Number(saleTarget), items, goals:'', achieved:0, approvedBy:STATE.user.id
+  };
+  const ok = await apiWrite('Targets',t);
+  if(ok){
+    STATE.targets.push(t);
+    showToast('Company assigned ✓','success');
+    closePanel('addco');
+    renderCompanies();
+  }
 }
 
 function openCoDetail(cId) {
@@ -3436,13 +3504,20 @@ function openRFQFilterPanel() {
           All companies ${!STATE.rfqCoFilter?'<i class="ti ti-check" style="font-size:11px"></i>':''}
         </div>
         ${allCoNames.length===0?`<div style="padding:12px 14px;font-size:11px;color:var(--text3)">No companies linked to RFQs yet</div>`:''}
-        ${allCoNames.map(n=>`
+        ${allCoNames.map(n=>{
+          const existingCo = STATE.companies.find(c=>(c.name||'').toLowerCase()===n.toLowerCase());
+          const inTargets = existingCo && STATE.targets.some(t=>t.companyId===existingCo.id);
+          return `
         <div class="flt-item" data-name="${n.toLowerCase().replace(/"/g,'')}"
-          onclick="STATE.rfqCoFilter=this.dataset.name;document.querySelectorAll('#flt-co-list>div').forEach(x=>{x.style.background='transparent';x.style.color='var(--text)'});this.style.background='rgba(99,102,241,.1)';this.style.color='var(--indigo2)'"
           style="padding:10px 14px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:${STATE.rfqCoFilter===n.toLowerCase()?'rgba(99,102,241,.1)':'transparent'};color:${STATE.rfqCoFilter===n.toLowerCase()?'var(--indigo2)':'var(--text)'}">
-          <span>${n}</span>
-          <span style="font-size:10px;color:var(--text3)">${STATE.rfqs.filter(r=>rfqCoName(r)===n).length}</span>
-        </div>`).join('')}
+          <span style="flex:1" onclick="STATE.rfqCoFilter=this.parentElement.dataset.name;document.querySelectorAll('#flt-co-list>div').forEach(x=>{x.style.background='transparent';x.style.color='var(--text)'});this.parentElement.style.background='rgba(99,102,241,.1)';this.parentElement.style.color='var(--indigo2)'">${n}</span>
+          <div class="row" style="gap:6px;align-items:center">
+            <span style="font-size:10px;color:var(--text3)">${STATE.rfqs.filter(r=>rfqCoName(r)===n).length}</span>
+            ${!inTargets?`<span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--amber);border-radius:4px;padding:1px 5px">Not in targets</span>`:''}
+            <i class="ti ti-info-circle" style="font-size:14px;color:var(--text3);flex-shrink:0" onclick="event.stopPropagation();openRFQCoQuickView('${n.replace(/'/g,"\\'")}')"></i>
+          </div>
+        </div>`;
+        }).join('')}
       </div>
     </div>
 
@@ -3496,9 +3571,115 @@ function openRFQFilterPanel() {
 
 function filterRFQList(listId, query) {
   const q = query.toLowerCase();
-  document.querySelectorAll(`#${listId} .flt-co-item, #${listId} .flt-cust-item`).forEach(el=>{
-    el.style.display = el.dataset.name.includes(q) ? '' : 'none';
+  document.querySelectorAll(`#${listId} .flt-co-item, #${listId} .flt-cust-item, #${listId} .flt-item`).forEach(el=>{
+    el.style.display = (el.dataset.name||'').includes(q) ? '' : 'none';
   });
+}
+
+function openRFQCoQuickView(coName) {
+  const existingCo = STATE.companies.find(c=>(c.name||'').toLowerCase()===coName.toLowerCase());
+  const rfqCount = STATE.rfqs.filter(r=>rfqCoName(r).toLowerCase()===coName.toLowerCase()).length;
+  const assignedReps = existingCo
+    ? [...new Set(STATE.targets.filter(t=>t.companyId===existingCo.id).map(t=>t.repId))].map(rid=>rep(rid)).filter(Boolean)
+    : [];
+  const inTargets = assignedReps.length > 0;
+  const reps = myReps();
+
+  const panel = document.getElementById('panel-rfq-filter');
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="openRFQFilterPanel()"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">${coName}</span>
+    </div>
+
+    <!-- Company info card -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">${coName}</div>
+      ${existingCo?`
+        <div class="text-xs" style="color:var(--text3)">${existingCo.address||'No address'}</div>
+        <div class="text-xs" style="color:var(--text3)">${existingCo.industry||''}</div>
+        <div class="row" style="gap:4px;margin-top:6px;flex-wrap:wrap">
+          ${inTargets
+            ? assignedReps.map(r=>`<span style="font-size:10px;background:rgba(99,102,241,.1);color:var(--indigo2);border-radius:10px;padding:2px 8px">${r.name.split(' ')[0]}</span>`).join('')
+            : `<span style="font-size:10px;background:rgba(245,158,11,.1);color:var(--amber);border-radius:10px;padding:2px 8px">Not in target companies</span>`}
+        </div>`
+      :`<div class="text-xs" style="color:var(--amber);margin-top:4px">Not in your companies database yet</div>`}
+      <div class="text-xs" style="color:var(--text3);margin-top:6px">${rfqCount} RFQ${rfqCount!==1?'s':''} received</div>
+    </div>
+
+    <!-- Assign section -->
+    ${existingCo && !inTargets ? `
+    <div class="text-label" style="margin-bottom:8px">Add to target companies</div>
+    <div class="inp-group">
+      <div class="inp-label">Assign to rep *</div>
+      <select class="inp" id="qv-rep">
+        <option value="${STATE.user.id}">${STATE.user.name} (myself)</option>
+        ${reps.map(r=>`<option value="${r.id}">${r.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="inp-group">
+      <div class="inp-label">Sale target (₹)</div>
+      <input class="inp" type="number" id="qv-tgt" placeholder="e.g. 500000">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="saveAssignExisting('${existingCo.id}','qv-rep','qv-tgt')">
+      <i class="ti ti-user-plus"></i> Assign to Target Companies
+    </button>` : ''}
+
+    ${!existingCo ? `
+    <div class="text-label" style="margin-bottom:8px">Add to companies & assign</div>
+    <div class="inp-group"><div class="inp-label">Address</div><input class="inp" id="qv-addr" placeholder="e.g. Noida, UP"></div>
+    <div class="inp-group"><div class="inp-label">Industry</div>
+      <select class="inp" id="qv-ind">
+        <option value="">Select…</option>
+        ${INDUSTRIES.map(i=>`<option value="${i}">${i}</option>`).join('')}
+      </select>
+    </div>
+    <div class="inp-group">
+      <div class="inp-label">Assign to rep *</div>
+      <select class="inp" id="qv-rep">
+        <option value="${STATE.user.id}">${STATE.user.name} (myself)</option>
+        ${reps.map(r=>`<option value="${r.id}">${r.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="inp-group">
+      <div class="inp-label">Sale target (₹)</div>
+      <input class="inp" type="number" id="qv-tgt" placeholder="e.g. 500000">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="saveNewCoFromQuickView('${coName.replace(/'/g,"\\'")}')">
+      <i class="ti ti-plus"></i> Add & Assign
+    </button>` : ''}
+
+    ${inTargets ? `
+    <button class="btn btn-full" style="margin-top:8px" onclick="openCoDetail('${existingCo.id}');closePanel('rfq-filter')">
+      <i class="ti ti-arrow-right"></i> View full company details
+    </button>` : ''}`;
+  // keep panel open (already open)
+}
+
+async function saveNewCoFromQuickView(coName) {
+  const repId = document.getElementById('qv-rep')?.value;
+  if(!repId){ showToast('Select a rep','error'); return; }
+  const cId = uid();
+  const coObj = {
+    id:cId, name:coName,
+    address: document.getElementById('qv-addr')?.value||'',
+    region:'', industry: document.getElementById('qv-ind')?.value||'',
+    priority:'B', assignedReps:repId, lastVisited:'', totalBusiness:0,
+    addedBy:STATE.user.id, active:'TRUE'
+  };
+  const ok = await apiWrite('Companies', coObj);
+  if(!ok){ showToast('Failed to save','error'); return; }
+  STATE.companies.push(coObj);
+  const t = {
+    id:uid(), companyId:cId, repId,
+    period:'annual', periodValue:'2025',
+    saleTarget: Number(document.getElementById('qv-tgt')?.value||0),
+    items:'', goals:'', achieved:0, approvedBy:STATE.user.id
+  };
+  await apiWrite('Targets', t);
+  STATE.targets.push(t);
+  showToast(`${coName} added & assigned ✓`,'success');
+  openRFQFilterPanel();
 }
 
 function openRFQDetail(id) {
