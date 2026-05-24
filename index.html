@@ -352,7 +352,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v4.3</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v4.4</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -541,7 +541,7 @@ let STATE = {
   contacts: [], pos: [], gpsLogs: [], taClaims: [], calEvents: [], approvals: [],
   rfqs: [], tasks: [],
   rfqSearch: '', rfqCatFilter: 'all', rfqRepFilter: 'all', rfqCoFilter: '', rfqCustFilter: '',
-  coSearch: '', coIndustryFilter: 'all',
+  coSearch: '', coIndustryFilter: 'all', coSort: 'alpha-asc',
   page: 'home', period: 'annual', cpf: 'all', pld: todayStr(), vd: todayStr(),
   exp: null, showAI: false, onField: false, fieldVehicle: null, viewRep: null,
   logView: 'mine', planView: 'mine', coView: 'all',
@@ -991,6 +991,21 @@ function renderCompanies() {
     cos=cos.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.address||'').toLowerCase().includes(q)||(c.industry||'').toLowerCase().includes(q));
   }
 
+  // Sort
+  if(!STATE.coSort) STATE.coSort='alpha-asc';
+  const priOrder={'A':0,'B':1,'C':2};
+  cos = [...cos].sort((a,b)=>{
+    switch(STATE.coSort) {
+      case 'alpha-asc':  return (a.name||'').localeCompare(b.name||'');
+      case 'alpha-desc': return (b.name||'').localeCompare(a.name||'');
+      case 'biz-asc':    return Number(a.totalBusiness||0)-Number(b.totalBusiness||0);
+      case 'biz-desc':   return Number(b.totalBusiness||0)-Number(a.totalBusiness||0);
+      case 'pri-asc':    return (priOrder[a.priority]??2)-(priOrder[b.priority]??2);
+      case 'pri-desc':   return (priOrder[b.priority]??2)-(priOrder[a.priority]??2);
+      default:           return (a.name||'').localeCompare(b.name||'');
+    }
+  });
+
   function getBestTarget(cId, period) {
     const t = myT.filter(t=>t.companyId===cId);
     if(period==='annual'||period==='all') return t.find(x=>x.period==='annual')||t[0];
@@ -1010,6 +1025,8 @@ function renderCompanies() {
   // Build industry list from data
   const allIndustries = [...new Set(allCos.map(c=>c.industry).filter(Boolean))].sort();
   const activeSecondaryFilters = (STATE.coIndustryFilter!=='all'?1:0);
+
+  const sortLabels = {'alpha-asc':'A → Z','alpha-desc':'Z → A','biz-desc':'Business ↓','biz-asc':'Business ↑','pri-asc':'Priority ↑','pri-desc':'Priority ↓'};
 
   el.innerHTML = `
     <div class="row-between" style="margin-bottom:12px">
@@ -1050,13 +1067,21 @@ function renderCompanies() {
         oninput="STATE.coSearch=this.value;renderCompanies()" />
     </div>
 
-    <!-- Filter row: priority chips + filter button -->
+    <!-- Filter row: priority chips + sort + filter button -->
     <div class="row" style="gap:6px;margin-bottom:12px;align-items:center">
       <div class="chip-row" style="flex:1;margin-bottom:0">
         ${['all','A','B','C'].map(f=>`<span class="chip${STATE.cpf===f?' active':''}" onclick="STATE.cpf='${f}';renderCompanies()">${f==='all'?'All':'Priority '+f}</span>`).join('')}
       </div>
+      <select class="inp" style="width:auto;padding:5px 8px;font-size:10px;flex-shrink:0" onchange="STATE.coSort=this.value;renderCompanies()">
+        <option value="alpha-asc" ${STATE.coSort==='alpha-asc'?'selected':''}>A → Z</option>
+        <option value="alpha-desc" ${STATE.coSort==='alpha-desc'?'selected':''}>Z → A</option>
+        <option value="pri-asc" ${STATE.coSort==='pri-asc'?'selected':''}>Priority ↑</option>
+        <option value="pri-desc" ${STATE.coSort==='pri-desc'?'selected':''}>Priority ↓</option>
+        <option value="biz-desc" ${STATE.coSort==='biz-desc'?'selected':''}>Business ↓</option>
+        <option value="biz-asc" ${STATE.coSort==='biz-asc'?'selected':''}>Business ↑</option>
+      </select>
       <button class="btn btn-sm" onclick="openCoFilterPanel()" style="flex-shrink:0;position:relative;${activeSecondaryFilters>0?'border-color:var(--indigo);color:var(--indigo2);background:rgba(99,102,241,.1)':''}">
-        <i class="ti ti-adjustments-horizontal"></i> Filter
+        <i class="ti ti-adjustments-horizontal"></i>
         ${activeSecondaryFilters>0?`<span style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;background:var(--indigo);border-radius:50%;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;color:#fff">${activeSecondaryFilters}</span>`:''}
       </button>
     </div>
@@ -1321,7 +1346,17 @@ function openCoDetail(cId) {
       <button class="panel-back" onclick="closePanel('co')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
       <span class="panel-title">${c.name}</span>
     </div>
-    <div class="row" style="flex-wrap:wrap;gap:4px;margin-bottom:10px">${pri(c.priority)}<span class="badge badge-blue">${c.industry}</span><span class="badge badge-gray">${c.region}</span></div>
+    <div class="row" style="flex-wrap:wrap;gap:4px;margin-bottom:10px">
+      ${isM
+        ? `<select class="inp" style="width:auto;padding:3px 8px;font-size:11px" onchange="updateCompanyPriority('${c.id}',this.value)">
+            <option value="A" ${c.priority==='A'?'selected':''}>🔴 Priority A — High</option>
+            <option value="B" ${c.priority==='B'?'selected':''}>🟡 Priority B — Medium</option>
+            <option value="C" ${c.priority==='C'?'selected':''}>⚪ Priority C — Low</option>
+          </select>`
+        : pri(c.priority)}
+      <span class="badge badge-blue">${c.industry}</span>
+      <span class="badge badge-gray">${c.region}</span>
+    </div>
     <div class="text-xs" style="margin-bottom:12px"><i class="ti ti-map-pin" style="font-size:11px"></i> ${c.address}</div>
     <div class="grid2" style="margin-bottom:14px">
       <div class="card-sm"><div class="text-xs">Total business</div><div style="font-size:14px;font-weight:700;color:var(--emerald)">${fmt(c.totalBusiness)}</div></div>
@@ -1690,6 +1725,15 @@ async function requestRemoval(coId) {
   STATE.approvals.push(ar);
   showToast('Removal request sent to manager ✓','success');
   closePanel('co');
+}
+
+async function updateCompanyPriority(coId, priority) {
+  const c = STATE.companies.find(x=>x.id===coId);
+  if(!c) return;
+  c.priority = priority;
+  await apiUpdate('Companies',{id:coId, priority});
+  showToast('Priority updated ✓','success');
+  renderCompanies();
 }
 
 async function managerRemoveCompany(coId) {
