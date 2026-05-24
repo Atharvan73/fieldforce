@@ -343,7 +343,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v4.1</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v4.2</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -1838,17 +1838,29 @@ function renderPlan() {
     ${!isToday&&mp.length?`
       <div class="text-label" style="margin-bottom:6px"><i class="ti ti-pencil" style="font-size:11px;vertical-align:-1px"></i> Planned visits</div>
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--card-radius);overflow:hidden">
-      ${mp.map(p=>{const c=co(p.companyId);return`<div class="plan-item" style="padding:10px 14px">
-        <div class="plan-time">${p.time}</div>
-        <div class="plan-body">
-          <div class="plan-co">${c.name||'Unknown'}</div>
-          <div class="plan-meta">${p.meetingWith||'TBD'} · ${(p.itemsToPitch||'').substring(0,32)}${(p.itemsToPitch||'').length>32?'…':''}</div>
-          ${p.notes?`<div style="font-size:9px;color:var(--indigo2);background:rgba(99,102,241,.08);border-radius:4px;padding:2px 6px;display:inline-block;margin-top:3px">📌 ${p.notes}</div>`:''}
-        </div>
-        <div class="row" style="gap:4px">
-          <button class="btn btn-danger btn-sm" style="padding:3px 6px;font-size:10px" onclick="deletePlanItem('${p.id}')"><i class="ti ti-trash"></i></button>
-        </div>
-      </div>`;}).join('')}</div>`:''}
+      ${mp.map(p=>{
+        const c=co(p.companyId);
+        const collabIds=(p.collaborators||'').split(',').filter(Boolean);
+        const iAmCollab=collabIds.includes(STATE.user.id);
+        const isOwner=!p.collabMasterId&&p.repId===STATE.user.id;
+        const canManageCollab=STATE.user.role==='manager'||isOwner;
+        const ownerName=p.collabOwner?STATE.users.find(u=>u.id===p.collabOwner)?.name?.split(' ')[0]:'';
+        return`<div class="plan-item" style="padding:10px 14px;flex-wrap:wrap;gap:6px">
+          <div class="plan-time">${p.time}</div>
+          <div class="plan-body" style="flex:1">
+            <div class="plan-co">${c.name||'Unknown'}</div>
+            <div class="plan-meta">${p.meetingWith||'TBD'} · ${(p.itemsToPitch||'').substring(0,32)}${(p.itemsToPitch||'').length>32?'…':''}</div>
+            ${collabIds.length>0?`<div style="font-size:9px;color:var(--indigo2);margin-top:3px"><i class="ti ti-users" style="font-size:9px"></i> ${isOwner||iAmCollab?'With: '+collabIds.map(id=>STATE.users.find(u=>u.id===id)?.name?.split(' ')[0]).filter(Boolean).join(', '):'Joined · Owner: '+ownerName}</div>`:''}
+            ${p.notes?`<div style="font-size:9px;color:var(--indigo2);background:rgba(99,102,241,.08);border-radius:4px;padding:2px 6px;display:inline-block;margin-top:3px">📌 ${p.notes}</div>`:''}
+          </div>
+          <div class="row" style="gap:4px;flex-shrink:0">
+            <button class="btn btn-sm" style="font-size:9px;padding:3px 8px;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="openManageCollaborators('${p.id}')">
+              <i class="ti ti-users" style="font-size:10px"></i> ${iAmCollab||isOwner?'Collab':'Join'}
+            </button>
+            ${canManageCollab&&isOwner?`<button class="btn btn-danger btn-sm" style="padding:3px 6px;font-size:10px" onclick="deletePlanItem('${p.id}')"><i class="ti ti-trash"></i></button>`:''}
+          </div>
+        </div>`;
+      }).join('')}</div>`:''}
 
     ${!mp.length&&!ce.length?`
       <div class="empty">
