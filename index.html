@@ -343,11 +343,11 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v3.9</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v4.0</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
-      <div class="notif-btn" onclick="showToast('No new notifications','')"><i class="ti ti-bell" style="font-size:20px"></i><div class="notif-dot" id="notif-dot"></div></div>
+      <div class="notif-btn" onclick="showCollabNotifications()"><i class="ti ti-bell" style="font-size:20px"></i><div class="notif-dot" id="notif-dot" style="display:none"></div></div>
       <div class="user-av" id="top-av" onclick="logout()"></div>
     </div>
   </div>
@@ -668,6 +668,7 @@ async function doLogin(silent=false) {
   document.getElementById('top-av').textContent = STATE.user.avatar||STATE.user.name.slice(0,2).toUpperCase();
   document.getElementById('top-av').style.background = STATE.user.role==='manager'?'#6366F1':'#10B981';
   renderNav();
+  updateNotifDot();
   if(!silent) showToast('Loading data...','');
   await loadAll();
   navigate('home');
@@ -1735,14 +1736,29 @@ function renderPlan() {
         </div></div>
         ${notVisited?'<span class="badge badge-red">Not visited</span>':sbg(effectiveSt)}
       </div>
+
+      ${(()=>{
+        const collabIds = (p.collaborators||'').split(',').filter(Boolean);
+        if(!collabIds.length) return '';
+        const isOwner = !p.collabMasterId; // master = owner
+        const ownerName = p.collabOwner ? STATE.users.find(u=>u.id===p.collabOwner)?.name : STATE.user.name;
+        const collabNames = collabIds.map(id=>STATE.users.find(u=>u.id===id)?.name?.split(' ')[0]).filter(Boolean).join(', ');
+        return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;background:rgba(99,102,241,.08);border-radius:6px;padding:5px 9px">
+          <i class="ti ti-users" style="color:var(--indigo2);font-size:12px;flex-shrink:0"></i>
+          <span style="font-size:10px;color:var(--indigo2)">${isOwner?'With: '+collabNames:'Joined visit · Owner: '+ownerName}</span>
+        </div>`;
+      })()}
+
       <div class="text-xs" style="margin-bottom:10px;color:var(--text3)">${p.itemsToPitch||'Items not specified'}</div>
 
       ${effectiveSt==='planned'?`
-        <div class="row" style="gap:6px;margin-bottom:0">
+        <div class="row" style="gap:6px;margin-bottom:6px">
           <button class="btn btn-success btn-sm" style="flex:1;justify-content:center" onclick="checkIn('${p.id}')"><i class="ti ti-map-pin"></i> Check in</button>
           <button class="btn btn-sm" style="flex:1;justify-content:center" onclick="capturePhoto('${p.id}')"><i class="ti ti-camera"></i> Photo</button>
-          <button class="btn btn-danger btn-sm" style="padding:5px 8px" onclick="deletePlanItem('${p.id}')"><i class="ti ti-trash"></i></button>
-        </div>`:''}
+          ${!p.collabMasterId?`<button class="btn btn-danger btn-sm" style="padding:5px 8px" onclick="deletePlanItem('${p.id}')"><i class="ti ti-trash"></i></button>`:''}
+        </div>
+        ${(isM||!p.collabMasterId)?`<button class="btn btn-sm btn-full" style="font-size:10px;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="openManageCollaborators('${p.id}')"><i class="ti ti-user-plus" style="font-size:11px"></i> ${(p.collaborators||'').split(',').filter(Boolean).length>0?'Manage collaborators':'Add collaborator'}</button>`:''}
+        `:''}
 
       ${effectiveSt==='in-progress'?`
         <div class="row" style="gap:6px">
@@ -2011,9 +2027,11 @@ function fillContact(name, desig, phone, email) {
 
 function openAddVisitPanel() {
   const panel = document.getElementById('panel-addvisit');
+  const isM = STATE.user.role==='manager';
   const myCos = STATE.user.role==='rep'
     ? STATE.companies.filter(c=>c.assignedReps&&c.assignedReps.includes(STATE.user.id))
     : STATE.companies;
+  const allReps = STATE.users.filter(u=>u.id!==STATE.user.id);
   panel.innerHTML = `
     <div class="panel-head"><button class="panel-back" onclick="closePanel('addvisit')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">Add visit to plan</span></div>
     <div class="inp-group"><div class="inp-label">Company</div>
@@ -2039,6 +2057,28 @@ function openAddVisitPanel() {
     </label>
     <div class="inp-group"><div class="inp-label">Items to pitch</div><input class="inp" id="av-it" placeholder="e.g. Industrial Pumps, Gate Valves"></div>
     <div class="inp-group"><div class="inp-label">Visit goal / notes</div><input class="inp" id="av-nt" placeholder="e.g. Convert RFQ to PO this visit"></div>
+
+    <!-- Collaborated visit section -->
+    ${allReps.length>0?`
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:0">
+        <input type="checkbox" id="av-collab-toggle" style="accent-color:var(--indigo);width:15px;height:15px" onchange="document.getElementById('av-collab-list').style.display=this.checked?'block':'none'">
+        <div>
+          <div style="font-size:12px;font-weight:600"><i class="ti ti-users" style="color:var(--indigo2);font-size:13px"></i> Collaborated visit</div>
+          <div style="font-size:10px;color:var(--text3)">More than one person visiting this company</div>
+        </div>
+      </label>
+      <div id="av-collab-list" style="display:none;margin-top:10px">
+        <div class="text-label" style="margin-bottom:6px">Who else is joining?</div>
+        ${allReps.map(r=>`
+        <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px;background:var(--bg2)">
+          <input type="checkbox" name="av-collab" value="${r.id}" style="accent-color:var(--indigo);width:14px;height:14px">
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--emerald);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;flex-shrink:0">${r.name.slice(0,2).toUpperCase()}</div>
+          <div><div style="font-size:12px;font-weight:500">${r.name}</div><div style="font-size:10px;color:var(--text3)">${r.role}</div></div>
+        </label>`).join('')}
+      </div>
+    </div>`:''}
+
     <button class="btn btn-primary btn-full" style="margin-top:4px" onclick="saveVisitPlan()">Add to visit plan</button>`;
   openPanel('addvisit');
 }
@@ -2059,23 +2099,80 @@ async function saveVisitPlan() {
   const email = document.getElementById('av-em')?.value||'';
   const saveContact = document.getElementById('av-save-contact')?.checked;
 
-  const item={id:uid(),repId:STATE.user.id,companyId:coId,date:dt,time:document.getElementById('av-tm').value,meetingWith,designation,itemsToPitch:document.getElementById('av-it').value,notes:document.getElementById('av-nt').value,source:'manual',status:'planned'};
+  // Get collaborators
+  const collabCheckboxes = document.querySelectorAll('input[name="av-collab"]:checked');
+  const collaborators = Array.from(collabCheckboxes).map(cb=>cb.value);
+
+  const masterId = uid();
+  const item={
+    id:masterId, repId:STATE.user.id, companyId:coId, date:dt,
+    time:document.getElementById('av-tm').value,
+    meetingWith, designation,
+    itemsToPitch:document.getElementById('av-it').value,
+    notes:document.getElementById('av-nt').value,
+    source:'manual', status:'planned',
+    collaborators: collaborators.join(','),
+    isCollabMaster:'TRUE'
+  };
   showToast('Saving...','');
   const ok=await apiWrite('VisitPlan',item);
   if(ok){
     STATE.planItems.push(item);
+
+    // Create mirrored plan items for each collaborator
+    for(const repId of collaborators) {
+      const mirror = {
+        id:uid(), repId, companyId:coId, date:dt,
+        time:item.time, meetingWith, designation,
+        itemsToPitch:item.itemsToPitch, notes:item.notes,
+        source:'manual', status:'planned',
+        collaborators: [STATE.user.id, ...collaborators.filter(c=>c!==repId)].join(','),
+        isCollabMaster:'FALSE',
+        collabMasterId: masterId,
+        collabOwner: STATE.user.id
+      };
+      await apiWrite('VisitPlan', mirror);
+      STATE.planItems.push(mirror);
+    }
+
     // Save contact if name filled and checkbox checked
     if(saveContact && meetingWith && meetingWith!=='TBD') {
       const existing = STATE.contacts.find(c=>c.companyId===coId&&c.name.toLowerCase()===meetingWith.toLowerCase());
-      if(!existing) {
-        await saveContactsForCompany(coId,[{name:meetingWith,designation,phone,email}]);
-      }
+      if(!existing) await saveContactsForCompany(coId,[{name:meetingWith,designation,phone,email}]);
     }
+
+    // Show notification dot for collaborators
+    if(collaborators.length>0) addCollabNotification(coId, dt, collaborators);
+
     STATE.pld=dt;
-    showToast('Added to plan ✓','success');
+    showToast(`Added to plan ✓${collaborators.length>0?' · '+collaborators.length+' collaborator(s) notified':''}`, 'success');
     closePanel('addvisit');
     renderPlan();
   }
+}
+
+function addCollabNotification(coId, dt, collaboratorIds) {
+  // Store pending notifications in localStorage for each collaborator
+  // When they open the app, the notif dot will be active
+  const notifs = JSON.parse(localStorage.getItem('collabNotifs')||'[]');
+  const c = co(coId);
+  collaboratorIds.forEach(repId=>{
+    notifs.push({
+      id: uid(), repId, coId, date:dt,
+      message:`${STATE.user.name} added you to a visit at ${c?.name||'a company'} on ${dt}`,
+      seen:false, createdAt: new Date().toISOString()
+    });
+  });
+  localStorage.setItem('collabNotifs', JSON.stringify(notifs));
+  updateNotifDot();
+}
+
+function updateNotifDot() {
+  const dot = document.getElementById('notif-dot');
+  if(!dot) return;
+  const notifs = JSON.parse(localStorage.getItem('collabNotifs')||'[]');
+  const mine = notifs.filter(n=>n.repId===STATE.user?.id&&!n.seen);
+  dot.style.display = mine.length>0 ? 'block' : 'none';
 }
 
 async function deletePlanItem(id) {
@@ -2084,6 +2181,90 @@ async function deletePlanItem(id) {
   await apiUpdate('VisitPlan',{id,status:'cancelled'});
   renderPlan();
   showToast('Removed','');
+}
+
+function openManageCollaborators(planId) {
+  const p = STATE.planItems.find(x=>x.id===planId);
+  if(!p) return;
+  const isM = STATE.user.role==='manager';
+  const canManage = isM || (!p.collabMasterId); // owner or manager
+  if(!canManage){ showToast('Only the visit owner or manager can manage collaborators',''); return; }
+
+  const currentCollabs = (p.collaborators||'').split(',').filter(Boolean);
+  const allOthers = STATE.users.filter(u=>u.id!==STATE.user.id);
+  const c = co(p.companyId);
+  const panel = document.getElementById('panel-addvisit');
+
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('addvisit');renderPlan()"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">Manage collaborators</span>
+    </div>
+    <div class="card" style="margin-bottom:14px;border-color:rgba(99,102,241,.3)">
+      <div style="font-size:13px;font-weight:600">${c?.name||'Visit'}</div>
+      <div class="text-xs" style="color:var(--text3)">${p.date} · ${p.time} · ${p.meetingWith||'TBD'}</div>
+    </div>
+    <div class="text-label" style="margin-bottom:8px">Who is joining this visit?</div>
+    ${allOthers.map(r=>`
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:6px;background:var(--bg2);border:1px solid ${currentCollabs.includes(r.id)?'rgba(99,102,241,.4)':'var(--border)'}">
+      <input type="checkbox" name="mc-collab" value="${r.id}" style="accent-color:var(--indigo);width:15px;height:15px" ${currentCollabs.includes(r.id)?'checked':''}>
+      <div style="width:32px;height:32px;border-radius:50%;background:${r.role==='manager'?'var(--indigo)':'var(--emerald)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0">${r.name.slice(0,2).toUpperCase()}</div>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:500">${r.name}</div>
+        <div style="font-size:10px;color:var(--text3)">${r.role}</div>
+      </div>
+      ${currentCollabs.includes(r.id)?'<span style="font-size:9px;color:var(--indigo2);background:rgba(99,102,241,.1);padding:2px 7px;border-radius:10px">Added</span>':''}
+    </label>`).join('')}
+    <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="saveCollaborators('${planId}')">
+      <i class="ti ti-check"></i> Save collaborators
+    </button>`;
+  openPanel('addvisit');
+}
+
+async function saveCollaborators(planId) {
+  const p = STATE.planItems.find(x=>x.id===planId);
+  if(!p) return;
+
+  const newCollabs = Array.from(document.querySelectorAll('input[name="mc-collab"]:checked')).map(cb=>cb.value);
+  const oldCollabs = (p.collaborators||'').split(',').filter(Boolean);
+
+  // Find removed collaborators — delete their mirror items
+  const removed = oldCollabs.filter(id=>!newCollabs.includes(id));
+  for(const repId of removed) {
+    const mirror = STATE.planItems.find(x=>x.collabMasterId===planId&&x.repId===repId);
+    if(mirror){
+      STATE.planItems = STATE.planItems.filter(x=>x.id!==mirror.id);
+      await apiUpdate('VisitPlan',{id:mirror.id,status:'cancelled'});
+    }
+  }
+
+  // Find newly added collaborators — create mirror items
+  const added = newCollabs.filter(id=>!oldCollabs.includes(id));
+  for(const repId of added) {
+    const mirror = {
+      id:uid(), repId, companyId:p.companyId, date:p.date,
+      time:p.time, meetingWith:p.meetingWith, designation:p.designation||'',
+      itemsToPitch:p.itemsToPitch, notes:p.notes,
+      source:'manual', status:'planned',
+      collaborators:[STATE.user.id, ...newCollabs.filter(c=>c!==repId)].join(','),
+      isCollabMaster:'FALSE',
+      collabMasterId: planId,
+      collabOwner: p.repId
+    };
+    await apiWrite('VisitPlan', mirror);
+    STATE.planItems.push(mirror);
+  }
+
+  // Update master's collaborators field
+  p.collaborators = newCollabs.join(',');
+  await apiUpdate('VisitPlan',{id:planId, collaborators:newCollabs.join(',')});
+
+  // Notify newly added
+  if(added.length>0) addCollabNotification(p.companyId, p.date, added);
+
+  showToast('Collaborators updated ✓','success');
+  closePanel('addvisit');
+  renderPlan();
 }
 
 function openNotVisitedForm(planId) {
@@ -4054,6 +4235,40 @@ async function snoozeTask(taskId) {
   showToast('Snoozed 2 days ✓','');
   renderTasks();
 }
+
+function showCollabNotifications() {
+  const notifs = JSON.parse(localStorage.getItem('collabNotifs')||'[]');
+  const mine = notifs.filter(n=>n.repId===STATE.user?.id);
+  if(!mine.length){ showToast('No new notifications',''); return; }
+
+  // Mark all as seen
+  mine.forEach(n=>n.seen=true);
+  const all = notifs.map(n=>mine.find(m=>m.id===n.id)||n);
+  localStorage.setItem('collabNotifs', JSON.stringify(all));
+  updateNotifDot();
+
+  const panel = document.getElementById('panel-visit');
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('visit')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">Notifications</span>
+    </div>
+    ${mine.slice().reverse().map(n=>`
+    <div class="card" style="margin-bottom:8px">
+      <div class="row" style="gap:8px;align-items:flex-start">
+        <i class="ti ti-users" style="color:var(--indigo2);font-size:16px;flex-shrink:0;margin-top:2px"></i>
+        <div>
+          <div style="font-size:12px;font-weight:500">${n.message}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:3px">${n.createdAt?.slice(0,10)||''}</div>
+          <button class="btn btn-sm" style="margin-top:6px;font-size:10px" onclick="STATE.pld='${n.date}';closePanel('visit');navigate('plan')">
+            <i class="ti ti-calendar"></i> View in plan
+          </button>
+        </div>
+      </div>
+    </div>`).join('')}`;
+  openPanel('visit');
+}
+
 initLogin();
 </script>
 </body>
