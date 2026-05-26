@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v5.0</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v5.2</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -495,7 +495,7 @@ if('serviceWorker' in navigator) {
 // ── CONFIG ───────────────────────────────────────────────────────────────────
 const APP_VERSION = '3.2'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
-const CLAUDE_KEY = ''; // Add your Claude API key here
+const CLAUDE_KEY = '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';
 const KM_RATES = { 'two-wheeler': 3.5, 'four-wheeler': 8, 'public-transport': 3.5 };
 
 // ── MASTER DATA ───────────────────────────────────────────────────────────────
@@ -611,12 +611,23 @@ async function apiRead(sheet, {cache=true}={}) {
     if(cached) return cached;
   }
   try {
-    const r = await fetch(`${API}?action=read&sheet=${sheet}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(()=>controller.abort(), 15000); // 15s timeout
+    const r = await fetch(`${API}?action=read&sheet=${sheet}`, {signal:controller.signal});
+    clearTimeout(timeout);
     const d = await r.json();
     const data = d.success ? d.data : [];
     if(cache && d.success) cacheSet(sheet, data);
     return data;
-  } catch(e) { console.error('Read error',sheet,e); return []; }
+  } catch(e) {
+    console.error('Read error',sheet,e);
+    // Return stale cache if available, even if expired
+    try {
+      const raw = localStorage.getItem(CACHE_PREFIX+sheet);
+      if(raw) { const {data}=JSON.parse(raw); if(data) return data; }
+    } catch(e2) {}
+    return [];
+  }
 }
 
 // Optimistic write — updates STATE immediately, saves in background
@@ -748,7 +759,12 @@ async function loadFromCacheOrFetch() {
     setTimeout(async () => { await loadAll(); renderPage(STATE.page); }, 500);
   } else {
     showSkeleton();
-    await loadAll();
+    try {
+      await loadAll();
+    } catch(e) {
+      console.error('loadAll failed:', e);
+      showToast('Partial data loaded — some sections may be empty','error');
+    }
     navigate('home');
   }
 }
@@ -824,7 +840,23 @@ async function doLogin(silent=false) {
   document.getElementById('top-av').style.background = STATE.user.role==='manager'?'#6366F1':'#10B981';
   renderNav();
   updateNotifDot();
-  await loadFromCacheOrFetch();
+
+  // Safety timeout — if loading takes more than 20s, show error and retry option
+  const loadTimeout = setTimeout(()=>{
+    showToast('Loading is taking longer than usual...','');
+    // Try to navigate home with whatever data we have
+    if(STATE.users.length) navigate('home');
+  }, 20000);
+
+  try {
+    await loadFromCacheOrFetch();
+  } catch(e) {
+    console.error('Login load error:', e);
+    showToast('Failed to load data — showing cached data','error');
+    navigate('home');
+  } finally {
+    clearTimeout(loadTimeout);
+  }
 }
 function logout() {
   if(confirm('Log out?')) {
