@@ -88,7 +88,11 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 .panel::-webkit-scrollbar { width: 4px; }
 .panel::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
 
-/* BOTTOM NAV (mobile only) */
+@keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:.8} }
+@keyframes spin { to{transform:rotate(360deg)} }
+/* Pull to refresh indicator */
+#ptr-indicator { position:fixed;top:56px;left:50%;transform:translateX(-50%);background:var(--indigo);color:#fff;border-radius:20px;padding:6px 14px;font-size:11px;font-weight:600;display:none;z-index:100;gap:6px;align-items:center; }
+#ptr-indicator.visible { display:flex; }
 #bottomnav { background: var(--bg); border-top: 1px solid var(--border); display: flex; flex-shrink: 0; z-index: 50; padding-bottom: env(safe-area-inset-bottom); }
 .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; cursor: pointer; color: var(--text3); font-size: 10px; font-weight: 500; border: none; background: none; transition: color .2s; }
 .nav-item.active { color: var(--indigo2); }
@@ -352,10 +356,10 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v4.5</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v4.6</span>
     </div>
     <div class="topbar-right">
-      <div class="notif-btn" onclick="refreshData()" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
+      <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
       <div class="notif-btn" onclick="showCollabNotifications()"><i class="ti ti-bell" style="font-size:20px"></i><div class="notif-dot" id="notif-dot" style="display:none"></div></div>
       <div class="user-av" id="top-av" onclick="logout()"></div>
     </div>
@@ -363,6 +367,8 @@ select.inp { cursor: pointer; }
 
   <!-- MOBILE DRAWER OVERLAY -->
   <div id="mobile-drawer-overlay" onclick="toggleMobileDrawer()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200"></div>
+  <!-- PULL TO REFRESH -->
+  <div id="ptr-indicator"><i class="ti ti-refresh" style="font-size:14px"></i> Release to refresh</div>
   <!-- MOBILE DRAWER -->
   <div id="mobile-drawer" style="display:none;position:fixed;top:0;left:0;bottom:0;width:280px;background:var(--bg2);border-right:1px solid var(--border);z-index:201;overflow-y:auto;flex-direction:column;padding:0 0 20px">
     <div style="padding:16px 16px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
@@ -579,18 +585,71 @@ function showToast(msg, type='') {
 }
 
 // ── API CALLS ────────────────────────────────────────────────────────────────
-async function apiRead(sheet) {
+// ── CACHE ─────────────────────────────────────────────────────────────────────
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+function cacheSet(key, data) {
+  try { localStorage.setItem('ffp_'+key, JSON.stringify({data, ts: Date.now()})); } catch(e) {}
+}
+function cacheGet(key) {
+  try {
+    const raw = localStorage.getItem('ffp_'+key);
+    if(!raw) return null;
+    const {data, ts} = JSON.parse(raw);
+    if(Date.now()-ts > CACHE_TTL) return null;
+    return data;
+  } catch(e) { return null; }
+}
+function cacheClear() {
+  Object.keys(localStorage).filter(k=>k.startsWith('ffp_cache_')).forEach(k=>localStorage.removeItem(k));
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function apiRead(sheet, {cache=true}={}) {
+  if(cache) {
+    const cached = cacheGet('cache_'+sheet);
+    if(cached) return cached;
+  }
   try {
     const r = await fetch(`${API}?action=read&sheet=${sheet}`);
     const d = await r.json();
-    return d.success ? d.data : [];
+    const data = d.success ? d.data : [];
+    if(cache && d.success) cacheSet('cache_'+sheet, data);
+    return data;
   } catch(e) { console.error('Read error',sheet,e); return []; }
 }
+
+// Optimistic write — updates STATE immediately, saves in background
+function apiWriteOptimistic(sheet, payload, stateArray, rollbackFn) {
+  stateArray.push(payload); // instant STATE update
+  apiWrite(sheet, payload).then(ok => {
+    if(!ok && rollbackFn) {
+      rollbackFn();
+      renderPage(STATE.page);
+    }
+  });
+  cacheSet('cache_'+sheet, stateArray); // update cache
+}
+
+// Optimistic update — patches STATE immediately, saves in background
+function apiUpdateOptimistic(sheet, payload, stateArray) {
+  const item = stateArray.find(x=>x.id===payload.id);
+  const snapshot = item ? {...item} : null;
+  if(item) Object.assign(item, payload);
+  cacheSet('cache_'+sheet, stateArray);
+  apiUpdate(sheet, payload).then(ok => {
+    if(!ok && snapshot && item) {
+      Object.assign(item, snapshot);
+      renderPage(STATE.page);
+    }
+  });
+}
+
 async function apiWrite(sheet, payload) {
   try {
     const r = await fetch(`${API}?action=write&sheet=${sheet}`, { method:'POST', body:JSON.stringify(payload) });
     const d = await r.json();
     if(!d.success) showToast('Save failed: '+d.error,'error');
+    else { cacheSet('cache_'+sheet, null); } // invalidate cache on write
     return d.success;
   } catch(e) { showToast('Network error','error'); return false; }
 }
@@ -598,51 +657,135 @@ async function apiUpdate(sheet, payload) {
   try {
     const r = await fetch(`${API}?action=update&sheet=${sheet}`, { method:'POST', body:JSON.stringify(payload) });
     const d = await r.json();
+    if(d.success) cacheSet('cache_'+sheet, null); // invalidate cache on update
     return d.success;
   } catch(e) { return false; }
 }
 
-// ── DATA LOADING ─────────────────────────────────────────────────────────────
-async function loadAll() {
-  const [users,companies,targets,visits,planItems,contacts,pos,gpsLogs,taClaims,calEvents,approvals,rfqs,tasks] = await Promise.all([
-    apiRead('Users'), apiRead('Companies'), apiRead('Targets'),
-    apiRead('Visits'), apiRead('VisitPlan'), apiRead('Contacts'),
-    apiRead('POs'), apiRead('GPSLogs'), apiRead('TAClaims'),
-    apiRead('CalendarEvents'), apiRead('Approvals'),
-    apiRead('RFQs'), apiRead('Tasks')
-  ]);
-  // Normalise all date fields to YYYY-MM-DD strings to prevent type mismatch
-  function normDate(d) {
-    if(!d) return '';
-    if(d instanceof Date) return d.toISOString().slice(0,10);
-    const s = String(d).trim();
-    // Handle DD/MM/YYYY format
-    if(s.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-      const [dd,mm,yyyy] = s.split('/');
-      return `${yyyy}-${mm}-${dd}`;
-    }
-    return s.slice(0,10);
-  }
-  visits.forEach(v=>{ v.date=normDate(v.date); v.repId=String(v.repId||'').trim(); v.companyId=String(v.companyId||'').trim(); });
-  planItems.forEach(p=>{ p.date=normDate(p.date); p.repId=String(p.repId||'').trim(); p.companyId=String(p.companyId||'').trim(); p.status=String(p.status||'planned').trim(); });
-  calEvents.forEach(e=>{ e.date=normDate(e.date); e.repId=String(e.repId||'').trim(); });
-  gpsLogs.forEach(g=>{ g.date=normDate(g.date); g.repId=String(g.repId||'').trim(); });
+// ── DEBOUNCE ──────────────────────────────────────────────────────────────────
+const _debounceTimers = {};
+function debounce(key, fn, ms=200) {
+  clearTimeout(_debounceTimers[key]);
+  _debounceTimers[key] = setTimeout(fn, ms);
+}
 
+// ── BUTTON LOADING STATE ──────────────────────────────────────────────────────
+function btnLoad(el, loading=true) {
+  if(!el) return;
+  if(loading) { el.dataset.origText=el.innerHTML; el.innerHTML='<i class="ti ti-loader-2" style="animation:spin .6s linear infinite"></i>'; el.disabled=true; }
+  else { el.innerHTML=el.dataset.origText||el.innerHTML; el.disabled=false; }
+}
+
+// ── DATA LOADING ─────────────────────────────────────────────────────────────
+function normDate(d) {
+  if(!d) return '';
+  if(d instanceof Date) return d.toISOString().slice(0,10);
+  const s = String(d).trim();
+  if(s.match(/^\d{2}\/\d{2}\/\d{4}$/)) { const [dd,mm,yyyy]=s.split('/'); return `${yyyy}-${mm}-${dd}`; }
+  return s.slice(0,10);
+}
+function applyNorms(data) {
+  data.visits?.forEach(v=>{ v.date=normDate(v.date); v.repId=String(v.repId||'').trim(); v.companyId=String(v.companyId||'').trim(); });
+  data.planItems?.forEach(p=>{ p.date=normDate(p.date); p.repId=String(p.repId||'').trim(); p.companyId=String(p.companyId||'').trim(); p.status=String(p.status||'planned').trim(); });
+  data.calEvents?.forEach(e=>{ e.date=normDate(e.date); e.repId=String(e.repId||'').trim(); });
+  data.gpsLogs?.forEach(g=>{ g.date=normDate(g.date); g.repId=String(g.repId||'').trim(); });
+}
+
+// Priority sheets — loaded first (needed for home/nav render)
+const PRIORITY_SHEETS = ['Users','Companies','Targets','Visits','VisitPlan','Contacts','RFQs'];
+// Deferred sheets — loaded after first render
+const DEFERRED_SHEETS = ['POs','GPSLogs','TAClaims','CalendarEvents','Approvals','Tasks'];
+
+async function loadAll() {
+  const [users,companies,targets,visits,planItems,contacts,rfqs] = await Promise.all(
+    PRIORITY_SHEETS.map(s=>apiRead(s))
+  );
+  const data = {visits, planItems, calEvents:[], gpsLogs:[]};
+  applyNorms(data);
   STATE.users=users;
   STATE.companies=companies.filter(c=>String(c.active||'').trim().toUpperCase()!=='FALSE');
   STATE.targets=targets.filter(t=>String(t.active||'').trim().toUpperCase()!=='FALSE');
-  STATE.visits=visits; STATE.planItems=planItems; STATE.contacts=contacts;
-  STATE.pos=pos; STATE.gpsLogs=gpsLogs; STATE.taClaims=taClaims;
-  STATE.calEvents=calEvents; STATE.approvals=approvals;
-  STATE.rfqs=rfqs||[]; STATE.tasks=tasks||[];
+  STATE.visits=data.visits; STATE.planItems=data.planItems; STATE.contacts=contacts;
+  STATE.rfqs=rfqs||[];
+  STATE.pos=[]; STATE.gpsLogs=[]; STATE.taClaims=[]; STATE.calEvents=[]; STATE.approvals=[]; STATE.tasks=[];
   if(!STATE.viewRep && STATE.user.role==='manager') STATE.viewRep = myReps()[0]?.id;
+
+  // Deferred load — runs after first render, silently fills in the rest
+  setTimeout(async () => {
+    const [pos,gpsLogs,taClaims,calEvents,approvals,tasks] = await Promise.all(
+      DEFERRED_SHEETS.map(s=>apiRead(s))
+    );
+    const d2 = {visits:STATE.visits, planItems:STATE.planItems, calEvents, gpsLogs};
+    applyNorms(d2);
+    STATE.pos=pos; STATE.gpsLogs=d2.gpsLogs; STATE.taClaims=taClaims;
+    STATE.calEvents=d2.calEvents; STATE.approvals=approvals; STATE.tasks=tasks||[];
+    // Re-render only if user is on a page that needs deferred data
+    if(['gps','cal','targets','tasks'].includes(STATE.page)) renderPage(STATE.page);
+  }, 100);
 }
 
-async function refreshData() {
+// Load from cache instantly, then refresh in background
+async function loadFromCacheOrFetch() {
+  // Try to load from cache first
+  const cachedKeys = PRIORITY_SHEETS.reduce((acc,s)=>{ acc[s]=cacheGet('cache_'+s); return acc; }, {});
+  const hasCache = PRIORITY_SHEETS.every(s=>cachedKeys[s]!==null);
+
+  if(hasCache) {
+    // Render immediately from cache
+    const [users,companies,targets,visits,planItems,contacts,rfqs] = PRIORITY_SHEETS.map(s=>cachedKeys[s]);
+    const data = {visits:[...visits], planItems:[...planItems], calEvents:[], gpsLogs:[]};
+    applyNorms(data);
+    STATE.users=users; STATE.companies=companies.filter(c=>String(c.active||'').trim().toUpperCase()!=='FALSE');
+    STATE.targets=targets.filter(t=>String(t.active||'').trim().toUpperCase()!=='FALSE');
+    STATE.visits=data.visits; STATE.planItems=data.planItems; STATE.contacts=contacts;
+    STATE.rfqs=rfqs||[]; STATE.pos=[]; STATE.gpsLogs=[]; STATE.taClaims=[]; STATE.calEvents=[]; STATE.approvals=[]; STATE.tasks=[];
+    if(!STATE.viewRep && STATE.user.role==='manager') STATE.viewRep = myReps()[0]?.id;
+    navigate('home');
+
+    // Also load deferred from cache
+    DEFERRED_SHEETS.forEach(s=>{ const c=cacheGet('cache_'+s); if(c) {
+      if(s==='POs') STATE.pos=c;
+      if(s==='GPSLogs') { c.forEach(g=>g.date=normDate(g.date)); STATE.gpsLogs=c; }
+      if(s==='TAClaims') STATE.taClaims=c;
+      if(s==='CalendarEvents') { c.forEach(e=>e.date=normDate(e.date)); STATE.calEvents=c; }
+      if(s==='Approvals') STATE.approvals=c;
+      if(s==='Tasks') STATE.tasks=c;
+    }});
+
+    // Background refresh after 300ms
+    setTimeout(async () => {
+      await loadAll(); // fetches fresh data
+      renderPage(STATE.page); // re-render with fresh data
+    }, 300);
+  } else {
+    // No cache — show skeleton then load
+    showSkeleton();
+    await loadAll();
+    navigate('home');
+  }
+}
+
+function showSkeleton() {
+  const content = document.getElementById('content-area');
+  if(!content) return;
+  content.innerHTML = `<div style="padding:16px">
+    ${[1,2,3].map(()=>`<div style="background:var(--bg2);border-radius:12px;padding:16px;margin-bottom:12px">
+      <div style="background:var(--bg3);border-radius:6px;height:14px;width:60%;margin-bottom:10px;animation:pulse 1.2s infinite"></div>
+      <div style="background:var(--bg3);border-radius:6px;height:10px;width:80%;margin-bottom:6px;animation:pulse 1.2s infinite"></div>
+      <div style="background:var(--bg3);border-radius:6px;height:10px;width:40%;animation:pulse 1.2s infinite"></div>
+    </div>`).join('')}
+  </div>`;
+}
+
+async function refreshData(btn) {
+  if(btn) btnLoad(btn, true);
+  // Clear cache so fresh data is fetched
+  PRIORITY_SHEETS.concat(DEFERRED_SHEETS).forEach(s=>{ try{localStorage.removeItem('ffp_cache_'+s);}catch(e){} });
   showToast('Refreshing...','');
   await loadAll();
   renderPage(STATE.page);
   showToast('Data refreshed ✓','success');
+  if(btn) btnLoad(btn, false);
 }
 let selectedLoginId = null;
 async function initLogin() {
@@ -693,9 +836,7 @@ async function doLogin(silent=false) {
   document.getElementById('top-av').style.background = STATE.user.role==='manager'?'#6366F1':'#10B981';
   renderNav();
   updateNotifDot();
-  if(!silent) showToast('Loading data...','');
-  await loadAll();
-  navigate('home');
+  await loadFromCacheOrFetch();
 }
 function logout() {
   if(confirm('Log out?')) {
@@ -1065,7 +1206,7 @@ function renderCompanies() {
       <i class="ti ti-search"></i>
       <input class="search-inp" id="co-search-inp" placeholder="Search by name, city, industry…"
         value="${STATE.coSearch.replace(/"/g,'&quot;')}"
-        oninput="STATE.coSearch=this.value;renderCompanies()" />
+        oninput="debounce('cosearch',()=>{STATE.coSearch=this.value;renderCompanies()},200)" />
     </div>
 
     <!-- Filter row: priority chips + sort + filter button -->
@@ -3622,7 +3763,7 @@ function renderRFQ() {
       <div class="search-wrap" style="flex:1;margin-bottom:0">
         <i class="ti ti-search"></i>
         <input class="search-inp" id="rfq-search-inp" placeholder="Search company, customer, subject…" value="${STATE.rfqSearch.replace(/"/g,'&quot;')}"
-          oninput="STATE.rfqSearch=this.value;renderRFQ()" />
+          oninput="debounce('rfqsearch',()=>{STATE.rfqSearch=this.value;renderRFQ()},200)" />
       </div>
       <button class="btn btn-sm" onclick="openRFQFilterPanel()" style="flex-shrink:0;gap:5px;position:relative;${activeFilters>0?'border-color:var(--indigo);color:var(--indigo2);background:rgba(99,102,241,.1)':''}">
         <i class="ti ti-adjustments-horizontal"></i> Filter
@@ -4397,6 +4538,28 @@ async function snoozeTask(taskId) {
   showToast('Snoozed 2 days ✓','');
   renderTasks();
 }
+
+// ── PULL TO REFRESH ───────────────────────────────────────────────────────────
+(function() {
+  let startY=0, pulling=false;
+  const threshold=80;
+  document.addEventListener('touchstart',e=>{
+    if(document.getElementById('content-area').scrollTop===0) { startY=e.touches[0].clientY; pulling=true; }
+  },{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(!pulling) return;
+    const dy=e.touches[0].clientY-startY;
+    if(dy>threshold) document.getElementById('ptr-indicator')?.classList.add('visible');
+    else document.getElementById('ptr-indicator')?.classList.remove('visible');
+  },{passive:true});
+  document.addEventListener('touchend',e=>{
+    if(!pulling) return;
+    const dy=e.changedTouches[0].clientY-startY;
+    pulling=false;
+    document.getElementById('ptr-indicator')?.classList.remove('visible');
+    if(dy>threshold) refreshData();
+  });
+})();
 
 function showCollabNotifications() {
   const notifs = JSON.parse(localStorage.getItem('collabNotifs')||'[]');
