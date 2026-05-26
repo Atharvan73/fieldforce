@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v5.7</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v5.8</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -496,6 +496,22 @@ if('serviceWorker' in navigator) {
 const APP_VERSION = '3.2'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
+
+// Route Claude API calls through Apps Script to avoid CORS
+async function callClaudeViaProxy(messages, maxTokens=500) {
+  const payload = {
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: maxTokens,
+    messages
+  };
+  const r = await fetch(`${API}?action=claudeProxy`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+  const d = await r.json();
+  if(!d.success) throw new Error(d.error||'Claude proxy failed');
+  return d.data;
+}
 const KM_RATES = { 'two-wheeler': 3.5, 'four-wheeler': 8, 'public-transport': 3.5 };
 
 // ── MASTER DATA ───────────────────────────────────────────────────────────────
@@ -3238,27 +3254,14 @@ function scanCardForPerson(idx) {
   input.type='file'; input.accept='image/*'; input.capture='environment';
   input.onchange = async () => {
     if(!input.files[0]) return;
-    const key = getClaudeKey();
-    if(!key){ showToast('Claude API key not set — contact admin','error'); return; }
     showToast('Reading card...','');
     const file = input.files[0];
     const b64 = await new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.readAsDataURL(file); });
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
-          {type:'text',text:'Extract contact details from this visiting card. Return ONLY a JSON object with keys: name, designation, phone, email. If a field is not visible, use empty string.'}
-        ]}]})
-      });
-      if(!res.ok) {
-        const err = await res.text();
-        console.error('Claude API error:', res.status, err);
-        showToast('Card scan failed ('+res.status+') — fill manually','error');
-        return;
-      }
-      const data = await res.json();
+      const data = await callClaudeViaProxy([{role:'user',content:[
+        {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
+        {type:'text',text:'Extract contact details from this visiting card. Return ONLY a JSON object with keys: name, designation, phone, email. If a field is not visible, use empty string.'}
+      ]}], 300);
       const raw = data.content[0].text.replace(/```json|```/g,'').trim();
       const card = JSON.parse(raw);
       if(card.name) {
@@ -3723,21 +3726,21 @@ function openCardScanner() {
 async function processCard(input) {
   const file=input.files[0];if(!file)return;
   document.getElementById('card-loading').style.display='flex';
-  if(getClaudeKey()){
-    try {
-      const b64=await fileToBase64(file);
-      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':getClaudeKey(),'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:file.type,data:b64}},{type:'text',text:'Extract contact details from this visiting card. Return ONLY a JSON object with keys: name, designation, company, phone, email. If a field is not visible, use empty string.'}]}]})});
-      const data=await res.json();
-      const text=data.content?.[0]?.text||'{}';
-      const clean=text.replace(/```json|```/g,'').trim();
-      const info=JSON.parse(clean);
-      document.getElementById('cr-name').value=info.name||'';
-      document.getElementById('cr-desig').value=info.designation||'';
-      document.getElementById('cr-company').value=info.company||'';
-      document.getElementById('cr-phone').value=info.phone||'';
-      document.getElementById('cr-email').value=info.email||'';
-    } catch(e){ showToast('AI reading failed — fill manually','error'); }
-  }
+  try {
+    const b64=await fileToBase64(file);
+    const data = await callClaudeViaProxy([{role:'user',content:[
+      {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
+      {type:'text',text:'Extract contact details from this visiting card. Return ONLY a JSON object with keys: name, designation, company, phone, email. If a field is not visible, use empty string.'}
+    ]}], 500);
+    const text=data.content?.[0]?.text||'{}';
+    const clean=text.replace(/```json|```/g,'').trim();
+    const info=JSON.parse(clean);
+    document.getElementById('cr-name').value=info.name||'';
+    document.getElementById('cr-desig').value=info.designation||'';
+    document.getElementById('cr-company').value=info.company||'';
+    document.getElementById('cr-phone').value=info.phone||'';
+    document.getElementById('cr-email').value=info.email||'';
+  } catch(e){ showToast('AI reading failed — fill manually','error'); }
   document.getElementById('card-loading').style.display='none';
   document.getElementById('card-result').style.display='block';
 }
