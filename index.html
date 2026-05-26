@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v5.5</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v5.7</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -703,10 +703,15 @@ const PRIORITY_SHEETS = ['Users','Companies','Targets','Visits','VisitPlan','Con
 const DEFERRED_SHEETS = ['POs','GPSLogs','TAClaims','CalendarEvents','Approvals','Tasks'];
 
 async function loadAll() {
-  const [users,companies,targets,visits,planItems,contacts,rfqs,settings] = await Promise.all(
+  // Load priority sheets — Settings failure should not block the rest
+  const results = await Promise.allSettled(
     PRIORITY_SHEETS.map(s=>apiRead(s))
   );
-  // Extract Claude key from Settings sheet and store in localStorage
+
+  const [users,companies,targets,visits,planItems,contacts,rfqs,settings] =
+    results.map(r=>r.status==='fulfilled' ? r.value : []);
+
+  // Extract Claude key from Settings sheet
   if(settings?.length) {
     const keySetting = settings.find(r=>(r.key||r.Key||'').toLowerCase()==='claudekey');
     if(keySetting) {
@@ -726,9 +731,8 @@ async function loadAll() {
 
   // Deferred load — runs after first render, silently fills in the rest
   setTimeout(async () => {
-    const [pos,gpsLogs,taClaims,calEvents,approvals,tasks] = await Promise.all(
-      DEFERRED_SHEETS.map(s=>apiRead(s))
-    );
+    const dResults = await Promise.allSettled(DEFERRED_SHEETS.map(s=>apiRead(s)));
+    const [pos,gpsLogs,taClaims,calEvents,approvals,tasks] = dResults.map(r=>r.status==='fulfilled'?r.value:[]);
     const d2 = {visits:STATE.visits, planItems:STATE.planItems, calEvents, gpsLogs};
     applyNorms(d2);
     STATE.pos=pos; STATE.gpsLogs=d2.gpsLogs; STATE.taClaims=taClaims;
@@ -3234,19 +3238,26 @@ function scanCardForPerson(idx) {
   input.type='file'; input.accept='image/*'; input.capture='environment';
   input.onchange = async () => {
     if(!input.files[0]) return;
-    if(!getClaudeKey()){ showToast('Claude API key not configured','error'); return; }
+    const key = getClaudeKey();
+    if(!key){ showToast('Claude API key not set — contact admin','error'); return; }
     showToast('Reading card...','');
     const file = input.files[0];
     const b64 = await new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.readAsDataURL(file); });
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':getClaudeKey(),'anthropic-version':'2023-06-01'},
+        headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
         body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
           {type:'text',text:'Extract contact details from this visiting card. Return ONLY a JSON object with keys: name, designation, phone, email. If a field is not visible, use empty string.'}
         ]}]})
       });
+      if(!res.ok) {
+        const err = await res.text();
+        console.error('Claude API error:', res.status, err);
+        showToast('Card scan failed ('+res.status+') — fill manually','error');
+        return;
+      }
       const data = await res.json();
       const raw = data.content[0].text.replace(/```json|```/g,'').trim();
       const card = JSON.parse(raw);
@@ -3256,8 +3267,13 @@ function scanCardForPerson(idx) {
         document.getElementById('pv-phone-'+idx).value=card.phone||'';
         document.getElementById('pv-email-'+idx).value=card.email||'';
         showToast('Card scanned ✓','success');
+      } else {
+        showToast('No contact details found — fill manually','');
       }
-    } catch(e) { showToast('Could not read card — fill manually','error'); }
+    } catch(e) {
+      console.error('Card scan error:', e);
+      showToast('Could not read card — fill manually','error');
+    }
   };
   input.click();
 }
