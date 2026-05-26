@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.5</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.6</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -3172,31 +3172,32 @@ async function checkIn(id) {
     };
     STATE.visits.push(visit);
 
-    // Upload photo to Google Drive via Apps Script
-    uploadPhotoToDrive(b64, file.type, visitId, company.name, v.date).then(url=>{
-      if(url) {
-        visit.photoUrl = url;
-        v.photoUrl = url;
-        apiUpdate('Visits', {id:visitId, photoUrl:url});
-        showToast('Photo saved to Drive ✓','success');
+    // Upload photo first, then save everything
+    const companyName = company.name||'Unknown';
+    showToast('Uploading photo...','');
+
+    // Upload in background but save visit only after we have the URL
+    uploadPhotoToDrive(b64, file.type, visitId, companyName, v.date).then(async url=>{
+      visit.photoUrl = url||'';
+      v.photoUrl = url||'';
+      if(url) showToast('Photo saved ✓','success');
+
+      // Now save to sheet with correct photoUrl
+      if(navigator.geolocation && STATE.onField) {
+        navigator.geolocation.getCurrentPosition(pos=>{
+          STATE.waypoints.push({
+            lat: pos.coords.latitude, lng: pos.coords.longitude,
+            label:'checkin', time:nowStr(),
+            companyId:v.companyId, companyName:companyName
+          });
+          update.gpsVerified='TRUE'; visit.gpsVerified='TRUE';
+          apiUpdate('VisitPlan',update); apiWrite('Visits',visit);
+        }, ()=>{ apiUpdate('VisitPlan',update); apiWrite('Visits',visit); },
+        {timeout:5000, enableHighAccuracy:true});
+      } else {
+        apiUpdate('VisitPlan',update); apiWrite('Visits',visit);
       }
     });
-
-    // Capture waypoint + save
-    if(navigator.geolocation && STATE.onField) {
-      navigator.geolocation.getCurrentPosition(pos=>{
-        STATE.waypoints.push({
-          lat: pos.coords.latitude, lng: pos.coords.longitude,
-          label:'checkin', time:nowStr(),
-          companyId:v.companyId, companyName:company.name||'Unknown'
-        });
-        update.gpsVerified='TRUE'; visit.gpsVerified='TRUE';
-        apiUpdate('VisitPlan',update); apiWrite('Visits',visit);
-      }, ()=>{ apiUpdate('VisitPlan',update); apiWrite('Visits',visit); },
-      {timeout:5000, enableHighAccuracy:true});
-    } else {
-      apiUpdate('VisitPlan',update); apiWrite('Visits',visit);
-    }
   };
   input.click();
 }
@@ -3212,9 +3213,11 @@ async function uploadPhotoToDrive(b64, mimeType, visitId, companyName, date) {
       })
     });
     const d = await r.json();
-    return d.success ? d.url : '';
+    console.log('Drive upload response:', JSON.stringify(d).slice(0,200));
+    if(!d.success) { console.error('Drive upload failed:', d.error); return ''; }
+    return d.url||'';
   } catch(e) {
-    console.error('Drive upload failed:', e);
+    console.error('Drive upload error:', e);
     return '';
   }
 }
