@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.1</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.2</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -762,11 +762,15 @@ async function loadAll() {
 
 // Load from cache instantly, then refresh in background
 async function loadFromCacheOrFetch() {
+  // Core sheets needed to render home — Settings is optional
+  const CORE_SHEETS = ['Users','Companies','Targets','Visits','VisitPlan','Contacts','RFQs'];
   const cachedData = PRIORITY_SHEETS.map(s=>cacheGet(s));
-  const hasCache = cachedData.every(d=>d!==null);
+  const coreMap = CORE_SHEETS.map(s=>cacheGet(s));
+  const hasCache = coreMap.every(d=>d!==null); // only require core sheets
 
   if(hasCache) {
-    const [users,companies,targets,visits,planItems,contacts,rfqs] = cachedData;
+    const [users,companies,targets,visits,planItems,contacts,rfqs] = coreMap;
+    const settings = cacheGet('Settings')||[];
     const data = {visits:[...visits], planItems:[...planItems], calEvents:[], gpsLogs:[]};
     applyNorms(data);
     STATE.users=users;
@@ -790,9 +794,8 @@ async function loadFromCacheOrFetch() {
     loadAll().then(()=>renderPage(STATE.page)).catch(()=>{});
   } else {
     showSkeleton();
-    // Hard timeout — navigate home after 25s no matter what
     const hardTimeout = setTimeout(()=>{
-      console.warn('loadAll timed out — navigating home with empty data');
+      console.warn('loadAll timed out — navigating home');
       navigate('home');
     }, 25000);
     try {
