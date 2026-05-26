@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v5.8</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v5.9</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -509,7 +509,9 @@ async function callClaudeViaProxy(messages, maxTokens=500) {
     body: JSON.stringify(payload)
   });
   const d = await r.json();
+  console.log('Proxy raw response:', JSON.stringify(d).slice(0,300));
   if(!d.success) throw new Error(d.error||'Claude proxy failed');
+  // d.data is the Anthropic API response object
   return d.data;
 }
 const KM_RATES = { 'two-wheeler': 3.5, 'four-wheeler': 8, 'public-transport': 3.5 };
@@ -3262,7 +3264,10 @@ function scanCardForPerson(idx) {
         {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
         {type:'text',text:'Extract contact details from this visiting card. Return ONLY a JSON object with keys: name, designation, phone, email. If a field is not visible, use empty string.'}
       ]}], 300);
-      const raw = data.content[0].text.replace(/```json|```/g,'').trim();
+      console.log('Claude proxy response:', JSON.stringify(data).slice(0,200));
+      const text = data?.content?.[0]?.text || data?.data?.content?.[0]?.text;
+      if(!text) { showToast('No response from Claude — try again','error'); return; }
+      const raw = text.replace(/```json|```/g,'').trim();
       const card = JSON.parse(raw);
       if(card.name) {
         document.getElementById('pv-name-'+idx).value=card.name||'';
