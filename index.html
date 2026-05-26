@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.2</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.3</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -3006,52 +3006,135 @@ function renderLog() {
           ${sbg(v.status)}
         </div>
         <div class="text-xs" style="margin-bottom:4px"><i class="ti ti-clock" style="font-size:10px"></i> ${v.time} · ${v.meetingWith}${v.designation?', '+v.designation:''}</div>
-        ${v.checkinTime?`<div class="text-xs" style="margin-bottom:4px;color:var(--emerald)"><i class="ti ti-map-pin" style="font-size:10px"></i> Checked in ${v.checkinTime}${v.checkoutTime?' · Out '+v.checkoutTime:''}</div>`:''}
+        ${v.checkinTime?`<div class="text-xs" style="margin-bottom:4px;color:var(--emerald)"><i class="ti ti-map-pin" style="font-size:10px"></i> In ${v.checkinTime}${v.checkoutTime?' · Out '+v.checkoutTime:''}</div>`:''}
         ${v.itemsPitched?`<div class="text-xs" style="margin-bottom:6px;color:var(--text3)">${v.itemsPitched}</div>`:''}
-        ${v.remarks?`<div class="rmk-box" style="margin-bottom:8px">${v.remarks}</div>`:''}
-        <div class="row" style="gap:4px;flex-wrap:wrap;margin-bottom:${needsUpdate||v.remarks?'8px':'0'}">
+        ${v.remarks?`<div class="rmk-box" style="margin-bottom:8px">${v.remarks.substring(0,100)}${v.remarks.length>100?'…':''}</div>`:''}
+        <div class="row" style="gap:4px;flex-wrap:wrap;margin-bottom:8px">
           ${v.rfqShared==='TRUE'?'<span class="badge badge-purple">RFQ shared</span>':''}
           ${v.sampleRequired==='TRUE'?'<span class="badge badge-amber">Sample needed</span>':''}
           ${v.gpsVerified==='TRUE'?'<span class="badge badge-green">GPS ✓</span>':''}
         </div>
         ${v.nextAction?`<div class="info-box" style="margin-bottom:8px"><i class="ti ti-arrow-right" style="color:var(--blue);font-size:14px;flex-shrink:0"></i><div><div style="font-size:10px;font-weight:500;color:#93C5FD">Next action · ${v.nextActionDate}</div><div class="text-xs">${v.nextAction}</div></div></div>`:''}
-        ${!isM&&needsUpdate?`<button class="btn btn-primary btn-full" onclick="openPostVisitForm('${planItem?.id||''}','${v.id}')"><i class="ti ti-notes"></i> Add post-visit update</button>`:''}
-        ${!isM&&v.remarks?`<button class="btn btn-sm" onclick="openPostVisitForm('${planItem?.id||''}','${v.id}')"><i class="ti ti-edit"></i> Edit update</button>`:''}
+        <div class="row" style="gap:6px">
+          <button class="btn btn-sm" style="flex:1;justify-content:center" onclick="openVisitDetail('${v.id}')"><i class="ti ti-eye" style="font-size:11px"></i> View details</button>
+          ${!isM&&needsUpdate?`<button class="btn btn-primary btn-sm" style="flex:1;justify-content:center" onclick="openPostVisitForm('${planItem?.id||''}','${v.id}')"><i class="ti ti-notes"></i> Add update</button>`:''}
+          ${!isM&&v.remarks?`<button class="btn btn-sm" style="flex:1;justify-content:center" onclick="openPostVisitForm('${planItem?.id||''}','${v.id}')"><i class="ti ti-edit"></i> Edit</button>`:''}
+        </div>
       </div>`;
     }).join(''):`<div class="empty"><i class="ti ti-clipboard-off"></i><p>No visits on this day</p><small>Visits you log will appear here</small></div>`}`;
 }
 
 function openVisitDetail(id) {
-  const v=STATE.visits.find(x=>x.id===id)||STATE.planItems.find(x=>x.id===id);
-  if(!v)return;
-  const c=co(v.companyId);
-  const panel=document.getElementById('panel-visit');
-  panel.innerHTML=`
-    <div class="panel-head"><button class="panel-back" onclick="closePanel('visit')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">${c.name||'Visit detail'}</span></div>
-    <div class="grid2" style="margin-bottom:10px">
-      <div class="card-sm"><div class="text-xs">Time</div><div style="font-weight:600;font-family:'DM Mono',monospace">${v.time}</div></div>
-      <div class="card-sm"><div class="text-xs">Status</div>${sbg(v.status)}</div>
-      <div class="card-sm"><div class="text-xs">Meeting with</div><div style="font-weight:500;font-size:12px">${v.meetingWith}</div></div>
-      <div class="card-sm"><div class="text-xs">Designation</div><div style="font-weight:500;font-size:12px">${v.designation||'—'}</div></div>
+  const v = STATE.visits.find(x=>x.id===id) || STATE.planItems.find(x=>x.id===id);
+  if(!v) return;
+  const c = co(v.companyId);
+  const r = rep(v.repId);
+  const isM = STATE.user.role==='manager';
+  const planItem = STATE.planItems.find(p=>p.companyId===v.companyId&&p.date===v.date&&String(p.repId||'').trim()===String(v.repId||'').trim());
+  const panel = document.getElementById('panel-visit');
+
+  // Parse multiple people met (comma-separated names)
+  const peopleNames = (v.meetingWith||'').split(',').map(n=>n.trim()).filter(Boolean);
+  const knownContacts = peopleNames.map(name=>{
+    const ct = STATE.contacts.find(c=>c.companyId===v.companyId&&c.name.toLowerCase()===name.toLowerCase());
+    return {name, contact: ct};
+  });
+
+  panel.innerHTML = `
+    <div class="panel-head">
+      <button class="panel-back" onclick="closePanel('visit')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button>
+      <span class="panel-title">${c.name||'Visit detail'}</span>
     </div>
-    ${v.checkinTime?`<div class="row" style="gap:8px;margin-bottom:10px"><div class="card-sm" style="flex:1;text-align:center"><div class="text-xs">Check-in</div><div style="font-weight:700;color:var(--emerald);font-family:'DM Mono',monospace">${v.checkinTime}</div></div>${v.checkoutTime?`<div class="card-sm" style="flex:1;text-align:center"><div class="text-xs">Check-out</div><div style="font-weight:700;color:var(--red);font-family:'DM Mono',monospace">${v.checkoutTime}</div></div>`:''}</div>`:''}
-    <div style="margin-bottom:10px"><div class="text-label" style="margin-bottom:5px">Items pitched</div><div class="rmk-box">${v.itemsPitched||v.itemsToPitch||'—'}</div></div>
-    ${v.remarks?`<div style="margin-bottom:10px"><div class="text-label" style="margin-bottom:5px">Remarks</div><div class="rmk-box">${v.remarks}</div></div>`:''}
-    <div class="row" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">
-      ${v.rfqShared==='TRUE'||v.rfqShared===true?'<span class="badge badge-purple">RFQ shared</span>':''}
-      ${v.sampleRequired==='TRUE'||v.sampleRequired===true?'<span class="badge badge-amber">Sample needed</span>':''}
-      ${v.gpsVerified==='TRUE'||v.gpsVerified===true?'<span class="badge badge-green">GPS verified</span>':''}
+
+    <!-- Status & date -->
+    <div class="row" style="gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      ${sbg(v.status)}
+      <span class="badge badge-gray">${v.date}</span>
+      ${v.gpsVerified==='TRUE'?'<span class="badge badge-green">GPS verified</span>':''}
+      ${isM&&r?`<span style="font-size:10px;background:rgba(99,102,241,.1);color:var(--indigo2);padding:2px 8px;border-radius:10px">${r.name}</span>`:''}
     </div>
-    ${v.nextAction?`<div class="info-box"><i class="ti ti-arrow-right" style="color:var(--blue);font-size:16px;flex-shrink:0"></i><div><div style="font-size:11px;font-weight:500;color:#93C5FD">Next action</div><div class="text-sm">${v.nextAction} · ${v.nextActionDate}</div></div></div>`:''}
-    ${STATE.user.role==='rep'&&v.status==='planned'?`
-      <div class="row" style="gap:8px;margin-bottom:8px">
-        <button class="btn btn-success" style="flex:1;justify-content:center" onclick="checkIn('${v.id}')"><i class="ti ti-map-pin"></i> Check in</button>
-        <button class="btn" style="flex:1;justify-content:center" onclick="capturePhoto('${v.id}')"><i class="ti ti-camera"></i> Photo</button>
+
+    <!-- Check-in photo -->
+    ${v.photoUrl?`
+    <div class="card" style="margin-bottom:12px;padding:8px;text-align:center">
+      <div class="text-label" style="margin-bottom:6px;text-align:left">Check-in photo</div>
+      <div style="background:var(--bg3);border-radius:8px;padding:24px;color:var(--text3);font-size:11px">
+        <i class="ti ti-camera" style="font-size:24px;display:block;margin-bottom:6px"></i>
+        Photo captured at ${v.checkinTime||'check-in'}
       </div>
-      <button class="btn btn-full" style="margin-bottom:8px" onclick="openRemarksForm('${v.id}')"><i class="ti ti-notes"></i> Add remarks</button>`:''}
-    ${STATE.user.role==='rep'&&v.status==='in-progress'?`
-      <button class="btn btn-danger btn-full" style="margin-bottom:8px" onclick="checkOut('${v.id}')"><i class="ti ti-door-exit"></i> Check out</button>
-      <button class="btn btn-full" style="margin-bottom:8px" onclick="openRemarksForm('${v.id}')"><i class="ti ti-notes"></i> Add remarks</button>`:''}`;
+    </div>`:''}
+
+    <!-- Check-in / Check-out times -->
+    ${v.checkinTime?`
+    <div class="grid2" style="gap:8px;margin-bottom:12px">
+      <div class="card-sm" style="text-align:center">
+        <div class="text-xs" style="margin-bottom:3px">Check-in</div>
+        <div style="font-size:15px;font-weight:700;color:var(--emerald);font-family:'DM Mono',monospace">${v.checkinTime}</div>
+      </div>
+      <div class="card-sm" style="text-align:center">
+        <div class="text-xs" style="margin-bottom:3px">Check-out</div>
+        <div style="font-size:15px;font-weight:700;color:${v.checkoutTime?'var(--red)':'var(--text3)'};font-family:'DM Mono',monospace">${v.checkoutTime||'—'}</div>
+      </div>
+    </div>`:''}
+
+    <!-- People met -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="text-label" style="margin-bottom:8px">People met</div>
+      ${knownContacts.length?knownContacts.map(({name,contact})=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--indigo);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0">${name.slice(0,2).toUpperCase()}</div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:500">${name}</div>
+          <div class="text-xs">${contact?.designation||v.designation||'—'}</div>
+          ${contact?.phone?`<div class="text-xs"><i class="ti ti-phone" style="font-size:9px"></i> ${contact.phone}</div>`:''}
+          ${contact?.email?`<div class="text-xs"><i class="ti ti-mail" style="font-size:9px"></i> ${contact.email}</div>`:''}
+        </div>
+      </div>`).join(''):`
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text3);flex-shrink:0">?</div>
+        <div>
+          <div style="font-size:12px;font-weight:500">${v.meetingWith||'Not specified'}</div>
+          <div class="text-xs">${v.designation||'—'}</div>
+        </div>
+      </div>`}
+    </div>
+
+    <!-- Items pitched -->
+    ${v.itemsPitched||v.itemsToPitch?`
+    <div style="margin-bottom:12px">
+      <div class="text-label" style="margin-bottom:5px">Items pitched</div>
+      <div class="rmk-box">${v.itemsPitched||v.itemsToPitch}</div>
+    </div>`:''}
+
+    <!-- Meeting remarks -->
+    ${v.remarks?`
+    <div style="margin-bottom:12px">
+      <div class="text-label" style="margin-bottom:5px">What was discussed</div>
+      <div class="rmk-box">${v.remarks}</div>
+    </div>`:''}
+
+    <!-- Outcomes -->
+    <div class="row" style="gap:4px;flex-wrap:wrap;margin-bottom:12px">
+      ${v.rfqShared==='TRUE'?'<span class="badge badge-purple"><i class="ti ti-file-invoice" style="font-size:10px"></i> RFQ shared</span>':''}
+      ${v.sampleRequired==='TRUE'?'<span class="badge badge-amber"><i class="ti ti-package" style="font-size:10px"></i> Sample needed</span>':''}
+    </div>
+
+    <!-- Next action -->
+    ${v.nextAction?`
+    <div class="info-box" style="margin-bottom:12px">
+      <i class="ti ti-arrow-right" style="color:var(--blue);font-size:16px;flex-shrink:0"></i>
+      <div>
+        <div style="font-size:11px;font-weight:500;color:#93C5FD">Next action · ${v.nextActionDate||''}</div>
+        <div class="text-sm">${v.nextAction}</div>
+      </div>
+    </div>`:''}
+
+    <!-- Actions -->
+    ${!isM&&(v.status==='completed')?`
+    <button class="btn btn-sm btn-full" onclick="openPostVisitForm('${planItem?.id||''}','${v.id}')">
+      <i class="ti ti-edit"></i> ${v.remarks?'Edit update':'Add post-visit update'}
+    </button>`:''}`;
+
   openPanel('visit');
 }
 
@@ -3484,8 +3567,7 @@ function renderGPS() {
     <div style="font-size:16px;font-weight:600;margin-bottom:12px">GPS & Travel</div>
     ${isM?`<div class="chip-row">${myReps().map(r2=>`<span class="chip${STATE.viewRep===r2.id?' active':''}" onclick="STATE.viewRep='${r2.id}';renderGPS()">${r2.name.split(' ')[0]}</span>`).join('')}</div>`:''}
 
-    ${!isM?`
-    <!-- On/Off field banner -->
+    <!-- On/Off field banner — for both reps and managers -->
     <div class="on-field-banner${STATE.onField?' active':''}">
       <div class="field-dot${STATE.onField?' active':''}"></div>
       <div style="flex:1">
@@ -3499,8 +3581,7 @@ function renderGPS() {
 
     ${STATE.onField&&liveWaypoints.length>0?`
     <!-- Live route so far -->
-    <div class="card" style="border-color:rgba(16,185,129,.3);margin-bottom:10px">
-      <div class="text-label" style="color:var(--emerald);margin-bottom:8px">Today's route so far</div>
+    <div class="card" style="border-color:rgba(16,185,129,.3);margin-bottom:10px">      <div class="text-label" style="color:var(--emerald);margin-bottom:8px">Today's route so far</div>
       ${liveWaypoints.map((wp,i)=>`
       <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:${i<liveWaypoints.length-1?'0':'0'}">
         <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">
@@ -3514,7 +3595,6 @@ function renderGPS() {
       </div>`).join('')}
       <div style="margin-top:8px;font-size:10px;color:var(--text3)">Distance will be calculated by road when you mark off field</div>
     </div>`:''}
-    `:''}
 
     <!-- Daily logs -->
     <div class="card">
