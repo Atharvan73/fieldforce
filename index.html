@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.3</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.5</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -3055,14 +3055,14 @@ function openVisitDetail(id) {
     </div>
 
     <!-- Check-in photo -->
-    ${v.photoUrl?`
-    <div class="card" style="margin-bottom:12px;padding:8px;text-align:center">
-      <div class="text-label" style="margin-bottom:6px;text-align:left">Check-in photo</div>
-      <div style="background:var(--bg3);border-radius:8px;padding:24px;color:var(--text3);font-size:11px">
-        <i class="ti ti-camera" style="font-size:24px;display:block;margin-bottom:6px"></i>
-        Photo captured at ${v.checkinTime||'check-in'}
-      </div>
+    ${v.photoUrl&&v.photoUrl!=='uploading'?`
+    <div style="margin-bottom:12px">
+      <a href="${v.photoUrl}" target="_blank" rel="noopener" class="btn btn-sm" style="display:inline-flex;align-items:center;gap:6px;border-color:rgba(99,102,241,.3);color:var(--indigo2)">
+        <i class="ti ti-camera" style="font-size:13px"></i> View check-in photo
+      </a>
     </div>`:''}
+    ${v.photoUrl==='uploading'?`
+    <div style="margin-bottom:12px;font-size:11px;color:var(--text3)"><i class="ti ti-loader-2" style="animation:spin .6s linear infinite"></i> Uploading photo...</div>`:''}
 
     <!-- Check-in / Check-out times -->
     ${v.checkinTime?`
@@ -3142,48 +3142,81 @@ async function checkIn(id) {
   const v = STATE.planItems.find(x=>x.id===id); if(!v) return;
   const company = co(v.companyId);
 
-  // Mandatory photo before check-in
   const input = document.createElement('input');
   input.type='file'; input.accept='image/*'; input.capture='environment';
   input.onchange = async () => {
-    // Optimistic update — re-render immediately
+    if(!input.files[0]) return;
+    const file = input.files[0];
+
+    // Read as base64
+    const b64 = await new Promise(res=>{
+      const r = new FileReader();
+      r.onload = ()=>res(r.result.split(',')[1]);
+      r.readAsDataURL(file);
+    });
+
+    // Optimistic update — re-render immediately with placeholder
     const update = {id, status:'in-progress', checkinTime:nowStr(), gpsVerified:'FALSE'};
     Object.assign(v, update);
-    showToast('Checked in ✓','success');
+    v.photoUrl = 'uploading';
+    showToast('Checked in ✓ · Uploading photo...','success');
     renderPlan();
 
-    const visit = {id:uid(), repId:STATE.user.id, companyId:v.companyId, date:v.date, time:v.time,
+    const visitId = uid();
+    const visit = {
+      id:visitId, repId:STATE.user.id, companyId:v.companyId, date:v.date, time:v.time,
       meetingWith:v.meetingWith, designation:v.designation, status:'in-progress',
       checkinTime:nowStr(), checkoutTime:'', itemsPitched:v.itemsToPitch, remarks:'',
       rfqShared:'FALSE', sampleRequired:'FALSE', gpsVerified:'FALSE',
-      nextAction:'', nextActionDate:'', photoUrl:'checkin_'+Date.now()};
+      nextAction:'', nextActionDate:'', photoUrl:''
+    };
     STATE.visits.push(visit);
 
-    // Capture waypoint for this company
+    // Upload photo to Google Drive via Apps Script
+    uploadPhotoToDrive(b64, file.type, visitId, company.name, v.date).then(url=>{
+      if(url) {
+        visit.photoUrl = url;
+        v.photoUrl = url;
+        apiUpdate('Visits', {id:visitId, photoUrl:url});
+        showToast('Photo saved to Drive ✓','success');
+      }
+    });
+
+    // Capture waypoint + save
     if(navigator.geolocation && STATE.onField) {
       navigator.geolocation.getCurrentPosition(pos=>{
         STATE.waypoints.push({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          label: 'checkin',
-          time: nowStr(),
-          companyId: v.companyId,
-          companyName: company.name||'Unknown'
+          lat: pos.coords.latitude, lng: pos.coords.longitude,
+          label:'checkin', time:nowStr(),
+          companyId:v.companyId, companyName:company.name||'Unknown'
         });
-        update.gpsVerified='TRUE';
-        visit.gpsVerified='TRUE';
-        apiUpdate('VisitPlan',update);
-        apiWrite('Visits',visit);
-      }, async()=>{
-        apiUpdate('VisitPlan',update);
-        apiWrite('Visits',visit);
-      }, {timeout:5000, enableHighAccuracy:true});
+        update.gpsVerified='TRUE'; visit.gpsVerified='TRUE';
+        apiUpdate('VisitPlan',update); apiWrite('Visits',visit);
+      }, ()=>{ apiUpdate('VisitPlan',update); apiWrite('Visits',visit); },
+      {timeout:5000, enableHighAccuracy:true});
     } else {
-      apiUpdate('VisitPlan',update);
-      apiWrite('Visits',visit);
+      apiUpdate('VisitPlan',update); apiWrite('Visits',visit);
     }
   };
   input.click();
+}
+
+async function uploadPhotoToDrive(b64, mimeType, visitId, companyName, date) {
+  try {
+    const r = await fetch(`${API}?action=uploadPhoto`, {
+      method:'POST',
+      body: JSON.stringify({
+        b64, mimeType,
+        filename: `checkin_${companyName}_${date}_${visitId}.jpg`,
+        repName: STATE.user.name
+      })
+    });
+    const d = await r.json();
+    return d.success ? d.url : '';
+  } catch(e) {
+    console.error('Drive upload failed:', e);
+    return '';
+  }
 }
 
 async function checkOut(id) {
