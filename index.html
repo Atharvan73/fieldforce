@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v5.9</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.0</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -500,7 +500,7 @@ function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 // Route Claude API calls through Apps Script to avoid CORS
 async function callClaudeViaProxy(messages, maxTokens=500) {
   const payload = {
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: maxTokens,
     messages
   };
@@ -888,8 +888,8 @@ async function doLogin(silent=false) {
   try {
     await loadFromCacheOrFetch();
   } catch(e) {
-    console.error('Login load error:', e);
-    showToast('Failed to load data — showing cached data','error');
+    console.error('Login load error:', e.message, e.stack);
+    if(!STATE.users?.length) showToast('Load error: '+e.message,'error');
     navigate('home');
   } finally {
     clearTimeout(loadTimeout);
