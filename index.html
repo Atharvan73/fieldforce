@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v4.9</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v5.0</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -2010,8 +2010,7 @@ function renderPlan() {
 
       ${effectiveSt==='planned'?`
         <div class="row" style="gap:6px;margin-bottom:6px">
-          <button class="btn btn-success btn-sm" style="flex:1;justify-content:center" onclick="checkIn('${p.id}')"><i class="ti ti-map-pin"></i> Check in</button>
-          <button class="btn btn-sm" style="flex:1;justify-content:center" onclick="capturePhoto('${p.id}')"><i class="ti ti-camera"></i> Photo</button>
+          <button class="btn btn-success btn-sm" style="flex:1;justify-content:center" onclick="checkIn('${p.id}')"><i class="ti ti-camera"></i> Photo & Check in</button>
           ${!p.collabMasterId?`<button class="btn btn-danger btn-sm" style="padding:5px 8px" onclick="deletePlanItem('${p.id}')"><i class="ti ti-trash"></i></button>`:''}
         </div>
         <div class="row" style="gap:6px;margin-bottom:6px">
@@ -2022,7 +2021,6 @@ function renderPlan() {
       ${effectiveSt==='in-progress'?`
         <div class="row" style="gap:6px">
           <button class="btn btn-danger btn-sm" style="flex:1;justify-content:center" onclick="checkOut('${p.id}')"><i class="ti ti-door-exit"></i> Check out</button>
-          <button class="btn btn-sm" style="flex:1;justify-content:center" onclick="capturePhoto('${p.id}')"><i class="ti ti-camera"></i> Photo</button>
         </div>`:''}
 
       ${effectiveSt==='completed'&&!hasRemarks?`
@@ -2988,39 +2986,34 @@ function openVisitDetail(id) {
 async function checkIn(id) {
   const v = STATE.planItems.find(x=>x.id===id); if(!v) return;
 
-  // Optimistic update — re-render immediately
-  const update = {id, status:'in-progress', checkinTime:nowStr(), gpsVerified:'FALSE'};
-  Object.assign(v, update);
-  showToast('Checked in ✓','success');
-  renderPlan();
+  // Mandatory photo before check-in
+  const input = document.createElement('input');
+  input.type='file'; input.accept='image/*'; input.capture='environment';
+  input.onchange = async () => {
+    // Optimistic update — re-render immediately
+    const update = {id, status:'in-progress', checkinTime:nowStr(), gpsVerified:'FALSE'};
+    Object.assign(v, update);
+    showToast('Checked in ✓','success');
+    renderPlan();
 
-  // Create visit record instantly in STATE
-  const visit = {id:uid(), repId:STATE.user.id, companyId:v.companyId, date:v.date, time:v.time,
-    meetingWith:v.meetingWith, designation:v.designation, status:'in-progress',
-    checkinTime:nowStr(), checkoutTime:'', itemsPitched:v.itemsToPitch, remarks:'',
-    rfqShared:'FALSE', sampleRequired:'FALSE', gpsVerified:'FALSE',
-    nextAction:'', nextActionDate:'', photoUrl:''};
-  STATE.visits.push(visit);
+    const visit = {id:uid(), repId:STATE.user.id, companyId:v.companyId, date:v.date, time:v.time,
+      meetingWith:v.meetingWith, designation:v.designation, status:'in-progress',
+      checkinTime:nowStr(), checkoutTime:'', itemsPitched:v.itemsToPitch, remarks:'',
+      rfqShared:'FALSE', sampleRequired:'FALSE', gpsVerified:'FALSE',
+      nextAction:'', nextActionDate:'', photoUrl:'checkin_'+Date.now()};
+    STATE.visits.push(visit);
 
-  // Save to API in background
-  if(navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      async pos => {
-        update.gpsVerified = 'TRUE';
-        visit.gpsVerified = 'TRUE';
-        await apiUpdate('VisitPlan', update);
-        await apiWrite('Visits', visit);
-      },
-      async () => {
-        await apiUpdate('VisitPlan', update);
-        await apiWrite('Visits', visit);
-      },
-      {timeout:3000}
-    );
-  } else {
-    await apiUpdate('VisitPlan', update);
-    await apiWrite('Visits', visit);
-  }
+    if(navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async pos => { update.gpsVerified='TRUE'; visit.gpsVerified='TRUE'; await apiUpdate('VisitPlan',update); await apiWrite('Visits',visit); },
+        async () => { await apiUpdate('VisitPlan',update); await apiWrite('Visits',visit); },
+        {timeout:3000}
+      );
+    } else {
+      await apiUpdate('VisitPlan',update); await apiWrite('Visits',visit);
+    }
+  };
+  input.click();
 }
 
 async function checkOut(id) {
@@ -3040,11 +3033,20 @@ async function checkOut(id) {
 }
 
 function openPostVisitForm(planId, visitId) {
-  // Find existing visit log if any
   const plan = STATE.planItems.find(p=>p.id===planId)||{};
   const existing = visitId ? STATE.visits.find(v=>v.id===visitId) : null;
   const c = co(plan.companyId);
+  const contacts = getCompanyContacts(plan.companyId);
   const panel = document.getElementById('panel-visit');
+
+  // Build people list — start with whoever was planned
+  const initPeople = [{
+    name: existing?.meetingWith||plan.meetingWith||'',
+    desig: existing?.designation||plan.designation||'',
+    phone: '',
+    email: '',
+    isKnown: contacts.some(ct=>ct.name===(existing?.meetingWith||plan.meetingWith||''))
+  }];
 
   panel.innerHTML = `
     <div class="panel-head">
@@ -3052,30 +3054,34 @@ function openPostVisitForm(planId, visitId) {
       <span class="panel-title">Update visit — ${c.name||'Visit'}</span>
     </div>
 
-    <!-- Meeting details confirmation -->
     <div class="card" style="margin-bottom:14px;border-color:rgba(99,102,241,.3)">
       <div class="text-label" style="margin-bottom:6px">Visit details</div>
       <div class="grid2">
         <div><div class="text-xs">Company</div><div style="font-size:12px;font-weight:500">${c.name||'—'}</div></div>
-        <div><div class="text-xs">Date & time</div><div style="font-size:12px;font-weight:500">${plan.date} · ${plan.time}</div></div>
+        <div><div class="text-xs">Date</div><div style="font-size:12px;font-weight:500">${plan.date}</div></div>
       </div>
     </div>
 
-    <!-- Who was actually met -->
-    <div class="text-label" style="margin-bottom:10px">Who did you meet?</div>
-    ${contactPickerHtml(plan.companyId, existing?.meetingWith||plan.meetingWith, existing?.designation||plan.designation)}
-    <div class="grid2" style="gap:8px;margin-bottom:8px">
-      <div><div class="inp-label">Name</div><input class="inp" id="pv-name" placeholder="e.g. Suresh Kumar" value="${existing?.meetingWith||plan.meetingWith||''}"></div>
-      <div><div class="inp-label">Designation</div><input class="inp" id="pv-desig" placeholder="e.g. Purchase Manager" value="${existing?.designation||plan.designation||''}"></div>
+    <!-- People met -->
+    <div class="row-between" style="margin-bottom:8px">
+      <div class="text-label">Who did you meet?</div>
+      <button class="btn btn-sm" style="font-size:10px" onclick="addPersonRow()"><i class="ti ti-plus"></i> Add person</button>
     </div>
-    <div class="grid2" style="gap:8px;margin-bottom:8px">
-      <div><div class="inp-label">Phone</div><input class="inp" type="tel" id="pv-phone" placeholder="e.g. 9876543210"></div>
-      <div><div class="inp-label">Email</div><input class="inp" type="email" id="pv-email" placeholder="e.g. name@company.com"></div>
+
+    ${contacts.length?`
+    <div style="background:var(--bg3);border-radius:8px;overflow:hidden;margin-bottom:10px">
+      <div style="padding:8px 12px;font-size:10px;font-weight:600;color:var(--text3);border-bottom:1px solid var(--border)">KNOWN CONTACTS — TAP TO ADD</div>
+      ${contacts.map(ct=>`<div onclick="addKnownContact('${ct.name.replace(/'/g,"\\'")}','${ct.designation.replace(/'/g,"\\'")}','${ct.phone||''}','${ct.email||''}')"
+        style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--indigo);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;flex-shrink:0">${ct.name.slice(0,2).toUpperCase()}</div>
+        <div style="flex:1"><div style="font-size:11px;font-weight:500">${ct.name}</div><div class="text-xs">${ct.designation}${ct.phone?' · '+ct.phone:''}</div></div>
+        <i class="ti ti-plus" style="font-size:13px;color:var(--indigo2)"></i>
+      </div>`).join('')}
+    </div>`:''}
+
+    <div id="pv-people-list">
+      ${pvPersonRow(0, initPeople[0].name, initPeople[0].desig, '', '', initPeople[0].isKnown)}
     </div>
-    <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
-      <input type="checkbox" id="pv-save-contact" style="accent-color:var(--indigo);width:15px;height:15px" checked>
-      <span style="font-size:11px;color:var(--text2)">Save to company contacts</span>
-    </label>
 
     <!-- What was discussed -->
     <div class="inp-group">
@@ -3104,20 +3110,18 @@ function openPostVisitForm(planId, visitId) {
       </label>
     </div>
 
-    <!-- Items pitched (editable) -->
     <div class="inp-group">
       <div class="inp-label">Items actually pitched</div>
       <input class="inp" id="pv-items" placeholder="e.g. Industrial Pumps 50HP, Gate Valves" value="${existing?.itemsPitched||plan.itemsToPitch||''}">
     </div>
 
-    <!-- Next action -->
     <div class="text-label" style="margin-bottom:10px">Next action</div>
     <div class="inp-group">
       <div class="inp-label">What needs to happen next?</div>
-      <input class="inp" id="pv-na" placeholder="e.g. Send quotation, Follow up on RFQ, Submit samples" value="${existing?.nextAction||''}">
+      <input class="inp" id="pv-na" placeholder="e.g. Send quotation, Follow up on RFQ" value="${existing?.nextAction||''}">
     </div>
     <div class="inp-group">
-      <div class="inp-label">By when? (date)</div>
+      <div class="inp-label">By when?</div>
       <input type="date" class="inp" id="pv-nd" value="${existing?.nextActionDate||''}">
     </div>
 
@@ -3127,16 +3131,107 @@ function openPostVisitForm(planId, visitId) {
   openPanel('visit');
 }
 
+let _pvPeopleCount = 1;
+
+function pvPersonRow(idx, name='', desig='', phone='', email='', isKnown=false) {
+  _pvPeopleCount = Math.max(_pvPeopleCount, idx+1);
+  return `<div id="pv-person-${idx}" style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px">
+    <div class="row-between" style="margin-bottom:8px">
+      <div style="font-size:11px;font-weight:600;color:var(--text3)">PERSON ${idx+1}</div>
+      <div class="row" style="gap:6px">
+        <button class="btn btn-sm" style="font-size:9px;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="scanCardForPerson(${idx})">
+          <i class="ti ti-id" style="font-size:11px"></i> Scan card
+        </button>
+        ${idx>0?`<button onclick="document.getElementById('pv-person-${idx}').remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:2px"><i class="ti ti-x" style="font-size:14px"></i></button>`:''}
+      </div>
+    </div>
+    <div class="grid2" style="gap:8px;margin-bottom:6px">
+      <div><div class="inp-label">Name</div><input class="inp" id="pv-name-${idx}" value="${name}" placeholder="e.g. Suresh Kumar"></div>
+      <div><div class="inp-label">Designation</div><input class="inp" id="pv-desig-${idx}" value="${desig}" placeholder="e.g. Purchase Manager"></div>
+    </div>
+    <div class="grid2" style="gap:8px;margin-bottom:6px">
+      <div><div class="inp-label">Phone</div><input class="inp" type="tel" id="pv-phone-${idx}" value="${phone}" placeholder="9876543210"></div>
+      <div><div class="inp-label">Email</div><input class="inp" type="email" id="pv-email-${idx}" value="${email}" placeholder="name@co.com"></div>
+    </div>
+    ${!isKnown?`<label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="pv-save-${idx}" style="accent-color:var(--indigo);width:14px;height:14px" ${name?'checked':''}>
+      <span style="font-size:10px;color:var(--text3)">Save to company contacts</span>
+    </label>`:`<div style="font-size:10px;color:var(--emerald)"><i class="ti ti-check" style="font-size:10px"></i> Known contact — already saved</div>`}
+  </div>`;
+}
+
+function addPersonRow() {
+  const list = document.getElementById('pv-people-list');
+  if(!list) return;
+  const idx = list.children.length;
+  const div = document.createElement('div');
+  div.innerHTML = pvPersonRow(idx);
+  list.appendChild(div.firstElementChild);
+}
+
+function addKnownContact(name, desig, phone, email) {
+  // Check if already added
+  const existing = [...document.querySelectorAll('[id^="pv-name-"]')].find(el=>el.value===name);
+  if(existing){ showToast(`${name} already added`,''); return; }
+  const list = document.getElementById('pv-people-list');
+  if(!list) return;
+  const idx = list.children.length;
+  const div = document.createElement('div');
+  div.innerHTML = pvPersonRow(idx, name, desig, phone, email, true);
+  list.appendChild(div.firstElementChild);
+  showToast(`${name} added`,'success');
+}
+
+function scanCardForPerson(idx) {
+  const input = document.createElement('input');
+  input.type='file'; input.accept='image/*'; input.capture='environment';
+  input.onchange = async () => {
+    if(!input.files[0]) return;
+    if(!CLAUDE_KEY){ showToast('Claude API key not configured','error'); return; }
+    showToast('Reading card...','');
+    const file = input.files[0];
+    const b64 = await new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.readAsDataURL(file); });
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':CLAUDE_KEY,'anthropic-version':'2023-06-01'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
+          {type:'text',text:'Extract contact details from this visiting card. Return ONLY a JSON object with keys: name, designation, phone, email. If a field is not visible, use empty string.'}
+        ]}]})
+      });
+      const data = await res.json();
+      const raw = data.content[0].text.replace(/```json|```/g,'').trim();
+      const card = JSON.parse(raw);
+      if(card.name) {
+        document.getElementById('pv-name-'+idx).value=card.name||'';
+        document.getElementById('pv-desig-'+idx).value=card.designation||'';
+        document.getElementById('pv-phone-'+idx).value=card.phone||'';
+        document.getElementById('pv-email-'+idx).value=card.email||'';
+        showToast('Card scanned ✓','success');
+      }
+    } catch(e) { showToast('Could not read card — fill manually','error'); }
+  };
+  input.click();
+}
+
 async function savePostVisit(planId, visitId) {
   const plan = STATE.planItems.find(p=>p.id===planId)||{};
   const remarks = document.getElementById('pv-remarks').value.trim();
   if(!remarks){showToast('Please add what was discussed','error');return;}
 
-  const meetingWith = document.getElementById('pv-name').value;
-  const designation = document.getElementById('pv-desig').value;
-  const phone = document.getElementById('pv-phone')?.value||'';
-  const email = document.getElementById('pv-email')?.value||'';
-  const saveContact = document.getElementById('pv-save-contact')?.checked;
+  // Collect all people met
+  const peopleEls = document.querySelectorAll('[id^="pv-name-"]');
+  const people = [...peopleEls].map((el,i)=>({
+    name: document.getElementById('pv-name-'+i)?.value.trim()||'',
+    desig: document.getElementById('pv-desig-'+i)?.value.trim()||'',
+    phone: document.getElementById('pv-phone-'+i)?.value.trim()||'',
+    email: document.getElementById('pv-email-'+i)?.value.trim()||'',
+    save: document.getElementById('pv-save-'+i)?.checked||false,
+  })).filter(p=>p.name);
+
+  const meetingWith = people.map(p=>p.name).join(', ') || document.getElementById('pv-name-0')?.value||'';
+  const designation = people[0]?.desig||'';
   const items = document.getElementById('pv-items').value;
   const rfq = document.getElementById('pv-rfq').checked?'TRUE':'FALSE';
   const smp = document.getElementById('pv-smp').checked?'TRUE':'FALSE';
@@ -3155,15 +3250,15 @@ async function savePostVisit(planId, visitId) {
     STATE.visits.push(visit);
   }
 
-  // Save contact if new person
-  if(saveContact && meetingWith && meetingWith!=='TBD') {
-    const existing = STATE.contacts.find(c=>c.companyId===plan.companyId&&c.name.toLowerCase()===meetingWith.toLowerCase());
-    if(!existing) {
-      await saveContactsForCompany(plan.companyId,[{name:meetingWith,designation,phone,email}]);
-    } else if(phone&&!existing.phone) {
-      // Update phone if we have new info
-      await apiUpdate('Contacts',{id:existing.id,phone,email});
-      existing.phone=phone; existing.email=email;
+  // Save new contacts for each person
+  for(const person of people) {
+    if(!person.save || !person.name || person.name==='TBD') continue;
+    const existingContact = STATE.contacts.find(c=>c.companyId===plan.companyId&&c.name.toLowerCase()===person.name.toLowerCase());
+    if(!existingContact) {
+      await saveContactsForCompany(plan.companyId,[{name:person.name,designation:person.desig,phone:person.phone,email:person.email}]);
+    } else if(person.phone&&!existingContact.phone) {
+      await apiUpdate('Contacts',{id:existingContact.id,phone:person.phone,email:person.email});
+      existingContact.phone=person.phone; existingContact.email=person.email;
     }
   }
 
