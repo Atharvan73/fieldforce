@@ -966,6 +966,8 @@ function renderRepHome(el) {
   const inc = calcInc(achieved);
   const tmrStr = new Date(Date.now()+86400000).toISOString().slice(0,10);
   const todayV = STATE.visits.filter(v=>v.repId===u.id&&v.date===todayStr());
+  const todayPlan = STATE.planItems.filter(p=>p.repId===u.id&&p.date===todayStr()&&p.status!=='cancelled');
+  const todayCount = Math.max(todayV.length, todayPlan.length);
   const tmrPlan = STATE.planItems.filter(p=>p.repId===u.id&&p.date===tmrStr&&p.status==='planned'&&p.source==='manual');
   const wk = weekRange(todayStr());
   const weekLogs = STATE.gpsLogs.filter(g=>g.repId===u.id&&g.date>=wk.start&&g.date<=wk.end);
@@ -975,7 +977,7 @@ function renderRepHome(el) {
   el.innerHTML = `
     <div class="row-between" style="margin-bottom:14px">
       <div><div style="font-size:16px;font-weight:600;letter-spacing:-.3px">Good morning, ${u.name.split(' ')[0]} 👋</div><div class="text-sm">${new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'short',year:'numeric'})}</div></div>
-      <div style="text-align:right"><div class="text-xs">Today's visits</div><div style="font-size:22px;font-weight:700">${todayV.length}</div></div>
+      <div style="text-align:right"><div class="text-xs">Today's visits</div><div style="font-size:22px;font-weight:700">${todayCount}</div></div>
     </div>
     <div class="card" style="border-color:rgba(99,102,241,.3);background:linear-gradient(135deg,rgba(99,102,241,.08),var(--bg2));margin-bottom:10px">
       <div class="text-label" style="color:var(--indigo2);margin-bottom:6px">Monthly target — ${new Date().toLocaleString('default',{month:'long'})}</div>
@@ -991,8 +993,18 @@ function renderRepHome(el) {
       <div class="card" style="padding:12px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--amber)">${STATE.targets.filter(t=>t.repId===u.id&&t.period==='weekly').length}</div><div class="text-xs">Week targets</div></div>
     </div>
     <div class="card">
-      <div class="row-between" style="margin-bottom:10px"><span style="font-size:13px;font-weight:600">Today's visits</span></div>
-      ${todayV.length ? todayV.map(v=>`<div class="row-between" style="padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openVisitDetail('${v.id}')"><div class="row">${dot(v.status)}<div><div style="font-size:12px;font-weight:500">${co(v.companyId).name||'Unknown'}</div><div class="text-xs">${v.time} · ${v.meetingWith}</div></div></div>${sbg(v.status)}</div>`).join('') : '<div class="empty" style="padding:16px 0"><i class="ti ti-calendar-off" style="font-size:24px"></i><p>No visits today</p></div>'}
+      <div class="row-between" style="margin-bottom:10px"><span style="font-size:13px;font-weight:600">Today's visits</span><button class="btn btn-sm" onclick="navigate('plan')" style="font-size:10px">Open planner →</button></div>
+      ${todayPlan.length ? todayPlan.map(p=>{
+        const v = todayV.find(x=>x.companyId===p.companyId&&x.date===todayStr());
+        const status = p.status==='in-progress'?'in-progress': v?.status==='completed'?'completed': p.status==='planned'?'planned':'planned';
+        return `<div class="row-between" style="padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="navigate('plan')">
+          <div class="row">${dot(status)}<div>
+            <div style="font-size:12px;font-weight:500">${co(p.companyId).name||'Unknown'}</div>
+            <div class="text-xs">${p.time} · ${p.meetingWith||'TBD'}</div>
+          </div></div>
+          ${sbg(status)}
+        </div>`;
+      }).join('') : '<div class="empty" style="padding:16px 0"><i class="ti ti-calendar-off" style="font-size:24px"></i><p>No visits planned today</p><span style="font-size:11px;color:var(--indigo2);cursor:pointer" onclick="navigate(\'plan\')">Plan a visit →</span></div>'}
     </div>
     <div class="card">
       <div class="row-between" style="margin-bottom:8px"><span style="font-size:13px;font-weight:600">Tomorrow's plan</span><button class="btn btn-primary btn-sm" onclick="navigate('plan')">Open planner →</button></div>
