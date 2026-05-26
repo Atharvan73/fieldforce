@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v4.6</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v4.9</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -2299,18 +2299,44 @@ function fillContact(name, desig, phone, email) {
 function openAddVisitPanel() {
   const panel = document.getElementById('panel-addvisit');
   const isM = STATE.user.role==='manager';
-  const myCos = STATE.user.role==='rep'
+  const myCos = (STATE.user.role==='rep'
     ? STATE.companies.filter(c=>c.assignedReps&&c.assignedReps.includes(STATE.user.id))
-    : STATE.companies;
+    : STATE.companies).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const allReps = STATE.users.filter(u=>u.id!==STATE.user.id);
   panel.innerHTML = `
     <div class="panel-head"><button class="panel-back" onclick="closePanel('addvisit')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">Add visit to plan</span></div>
-    <div class="inp-group"><div class="inp-label">Company</div>
-      <select class="inp" id="av-co" onchange="updateVisitContactPicker(this.value)">
-        <option value="">Select company…</option>
-        ${myCos.map(c=>`<option value="${c.id}">${c.name} — ${c.address?.split(',')[0]}</option>`).join('')}
-      </select>
+
+    <!-- Searchable company picker -->
+    <div class="inp-group">
+      <div class="inp-label">Company</div>
+      <div class="search-wrap" style="margin-bottom:4px">
+        <i class="ti ti-search"></i>
+        <input class="search-inp" id="av-co-search" placeholder="Search company…" autocomplete="off"
+          oninput="filterVisitCompanyList(this.value)">
+      </div>
+      <div id="av-co-list" style="border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;display:block">
+        ${myCos.map(c=>`
+        <div class="av-co-item" data-id="${c.id}" data-name="${(c.name||'').toLowerCase()}"
+          onclick="selectVisitCompany('${c.id}','${c.name.replace(/'/g,"\\'")}')"
+          style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-weight:500">${c.name}</div>
+            <div style="font-size:10px;color:var(--text3)">${c.address?.split(',').slice(0,2).join(', ')||''}</div>
+          </div>
+          <span style="font-size:9px;background:rgba(99,102,241,.08);color:var(--indigo2);padding:2px 6px;border-radius:10px;flex-shrink:0">${c.priority||''}</span>
+        </div>`).join('')}
+        <div id="av-co-add-btn" style="display:none;padding:10px 14px;cursor:pointer;font-size:12px;color:var(--indigo2);display:flex;align-items:center;gap:6px;border-top:1px solid var(--border)"
+          onclick="openAddCompanyFromVisit()">
+          <i class="ti ti-plus" style="font-size:14px"></i> Add new company
+        </div>
+      </div>
+      <input type="hidden" id="av-co" value="">
+      <div id="av-co-selected" style="display:none;margin-top:6px;padding:8px 12px;background:rgba(99,102,241,.08);border-radius:8px;border:1px solid rgba(99,102,241,.3);display:flex;align-items:center;justify-content:space-between">
+        <span id="av-co-selected-name" style="font-size:12px;font-weight:500;color:var(--indigo2)"></span>
+        <button onclick="clearVisitCompany()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px"><i class="ti ti-x"></i></button>
+      </div>
     </div>
+
     <div class="grid2" style="gap:8px;margin-bottom:12px">
       <div><div class="inp-label">Date</div><input type="date" class="inp" id="av-dt" value="${STATE.pld}"></div>
       <div><div class="inp-label">Time</div><input type="time" class="inp" id="av-tm" value="10:00"></div>
@@ -2360,8 +2386,48 @@ function updateVisitContactPicker(coId) {
   el.innerHTML = contactPickerHtml(coId,'','');
 }
 
+function filterVisitCompanyList(q) {
+  const lower = q.toLowerCase();
+  let hasVisible = false;
+  document.querySelectorAll('.av-co-item').forEach(el=>{
+    const match = el.dataset.name.includes(lower);
+    el.style.display = match ? '' : 'none';
+    if(match) hasVisible = true;
+  });
+  // Show "Add new company" if no results
+  const addBtn = document.getElementById('av-co-add-btn');
+  if(addBtn) addBtn.style.display = !hasVisible && q.length>1 ? 'flex' : 'none';
+}
+
+function selectVisitCompany(id, name) {
+  document.getElementById('av-co').value = id;
+  document.getElementById('av-co-list').style.display = 'none';
+  document.getElementById('av-co-search').closest('.search-wrap').style.display = 'none';
+  const sel = document.getElementById('av-co-selected');
+  sel.style.display = 'flex';
+  document.getElementById('av-co-selected-name').textContent = name;
+  updateVisitContactPicker(id);
+}
+
+function clearVisitCompany() {
+  document.getElementById('av-co').value = '';
+  document.getElementById('av-co-list').style.display = 'block';
+  document.getElementById('av-co-search').closest('.search-wrap').style.display = 'flex';
+  document.getElementById('av-co-search').value = '';
+  document.getElementById('av-co-selected').style.display = 'none';
+  filterVisitCompanyList('');
+  document.getElementById('av-contact-picker').innerHTML = '';
+}
+
+function openAddCompanyFromVisit() {
+  // Close visit panel, open add company panel, then return
+  closePanel('addvisit');
+  openAddCompanyPanel();
+  showToast('Add the company, then re-open Add Visit','');
+}
+
 async function saveVisitPlan() {
-  const coId=document.getElementById('av-co').value;
+  const coId = document.getElementById('av-co').value;
   const dt=document.getElementById('av-dt').value;
   if(!coId||!dt){showToast('Select a company and date','error');return;}
   const meetingWith = document.getElementById('av-wt').value||'TBD';
@@ -2920,30 +2986,57 @@ function openVisitDetail(id) {
 }
 
 async function checkIn(id) {
-  const v=STATE.planItems.find(x=>x.id===id);if(!v)return;
-  if(navigator.geolocation){
-    navigator.geolocation.getCurrentPosition(async pos=>{
-      const update={id,status:'in-progress',checkinTime:nowStr(),gpsVerified:'TRUE'};
-      await apiUpdate('VisitPlan',update);
-      Object.assign(v,update);
-      // also write to Visits sheet
-      const visit={id:uid(),repId:STATE.user.id,companyId:v.companyId,date:v.date,time:v.time,meetingWith:v.meetingWith,designation:v.designation,status:'in-progress',checkinTime:nowStr(),checkoutTime:'',itemsPitched:v.itemsToPitch,remarks:'',rfqShared:'FALSE',sampleRequired:'FALSE',gpsVerified:'TRUE',nextAction:'',nextActionDate:'',photoUrl:''};
-      await apiWrite('Visits',visit);
-      STATE.visits.push(visit);
-      showToast('Checked in ✓','success');
-      closePanel('visit');
-      renderLog();
-    },()=>{showToast('Location unavailable — checking in without GPS','');});
+  const v = STATE.planItems.find(x=>x.id===id); if(!v) return;
+
+  // Optimistic update — re-render immediately
+  const update = {id, status:'in-progress', checkinTime:nowStr(), gpsVerified:'FALSE'};
+  Object.assign(v, update);
+  showToast('Checked in ✓','success');
+  renderPlan();
+
+  // Create visit record instantly in STATE
+  const visit = {id:uid(), repId:STATE.user.id, companyId:v.companyId, date:v.date, time:v.time,
+    meetingWith:v.meetingWith, designation:v.designation, status:'in-progress',
+    checkinTime:nowStr(), checkoutTime:'', itemsPitched:v.itemsToPitch, remarks:'',
+    rfqShared:'FALSE', sampleRequired:'FALSE', gpsVerified:'FALSE',
+    nextAction:'', nextActionDate:'', photoUrl:''};
+  STATE.visits.push(visit);
+
+  // Save to API in background
+  if(navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async pos => {
+        update.gpsVerified = 'TRUE';
+        visit.gpsVerified = 'TRUE';
+        await apiUpdate('VisitPlan', update);
+        await apiWrite('Visits', visit);
+      },
+      async () => {
+        await apiUpdate('VisitPlan', update);
+        await apiWrite('Visits', visit);
+      },
+      {timeout:3000}
+    );
+  } else {
+    await apiUpdate('VisitPlan', update);
+    await apiWrite('Visits', visit);
   }
 }
 
 async function checkOut(id) {
-  const update={id,status:'completed',checkoutTime:nowStr()};
-  await apiUpdate('VisitPlan',update);
-  const v=STATE.planItems.find(x=>x.id===id);if(v)Object.assign(v,update);
-  const visit=STATE.visits.find(x=>x.companyId===v?.companyId&&x.status==='in-progress');
-  if(visit){await apiUpdate('Visits',{id:visit.id,status:'completed',checkoutTime:nowStr()});visit.status='completed';visit.checkoutTime=nowStr();}
-  showToast('Checked out ✓','success');closePanel('visit');renderLog();
+  const v = STATE.planItems.find(x=>x.id===id); if(!v) return;
+
+  // Optimistic update — re-render immediately
+  const update = {id, status:'completed', checkoutTime:nowStr()};
+  Object.assign(v, update);
+  const visit = STATE.visits.find(x=>x.companyId===v.companyId&&x.status==='in-progress');
+  if(visit){ visit.status='completed'; visit.checkoutTime=nowStr(); }
+  showToast('Checked out ✓','success');
+  renderPlan();
+
+  // Save to API in background
+  apiUpdate('VisitPlan', update);
+  if(visit) apiUpdate('Visits', {id:visit.id, status:'completed', checkoutTime:nowStr()});
 }
 
 function openPostVisitForm(planId, visitId) {
