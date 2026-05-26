@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v5.2</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v5.5</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -495,7 +495,7 @@ if('serviceWorker' in navigator) {
 // ── CONFIG ───────────────────────────────────────────────────────────────────
 const APP_VERSION = '3.2'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
-const CLAUDE_KEY = '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';
+function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 const KM_RATES = { 'two-wheeler': 3.5, 'four-wheeler': 8, 'public-transport': 3.5 };
 
 // ── MASTER DATA ───────────────────────────────────────────────────────────────
@@ -612,7 +612,7 @@ async function apiRead(sheet, {cache=true}={}) {
   }
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(()=>controller.abort(), 15000); // 15s timeout
+    const timeout = setTimeout(()=>controller.abort(), 20000);
     const r = await fetch(`${API}?action=read&sheet=${sheet}`, {signal:controller.signal});
     clearTimeout(timeout);
     const d = await r.json();
@@ -620,11 +620,11 @@ async function apiRead(sheet, {cache=true}={}) {
     if(cache && d.success) cacheSet(sheet, data);
     return data;
   } catch(e) {
-    console.error('Read error',sheet,e);
-    // Return stale cache if available, even if expired
+    console.error('Read error',sheet,e?.name==='AbortError'?'(timeout)':e);
+    // Always try stale cache as fallback — even if expired
     try {
       const raw = localStorage.getItem(CACHE_PREFIX+sheet);
-      if(raw) { const {data}=JSON.parse(raw); if(data) return data; }
+      if(raw) { const {data}=JSON.parse(raw); if(data?.length) { console.log('Using stale cache for',sheet); return data; } }
     } catch(e2) {}
     return [];
   }
@@ -698,14 +698,22 @@ function applyNorms(data) {
 }
 
 // Priority sheets — loaded first (needed for home/nav render)
-const PRIORITY_SHEETS = ['Users','Companies','Targets','Visits','VisitPlan','Contacts','RFQs'];
+const PRIORITY_SHEETS = ['Users','Companies','Targets','Visits','VisitPlan','Contacts','RFQs','Settings'];
 // Deferred sheets — loaded after first render
 const DEFERRED_SHEETS = ['POs','GPSLogs','TAClaims','CalendarEvents','Approvals','Tasks'];
 
 async function loadAll() {
-  const [users,companies,targets,visits,planItems,contacts,rfqs] = await Promise.all(
+  const [users,companies,targets,visits,planItems,contacts,rfqs,settings] = await Promise.all(
     PRIORITY_SHEETS.map(s=>apiRead(s))
   );
+  // Extract Claude key from Settings sheet and store in localStorage
+  if(settings?.length) {
+    const keySetting = settings.find(r=>(r.key||r.Key||'').toLowerCase()==='claudekey');
+    if(keySetting) {
+      const val = keySetting.value||keySetting.Value||'';
+      if(val) localStorage.setItem('ffp_claude_key', val);
+    }
+  }
   const data = {visits, planItems, calEvents:[], gpsLogs:[]};
   applyNorms(data);
   STATE.users=users;
@@ -756,14 +764,21 @@ async function loadFromCacheOrFetch() {
     }});
 
     navigate('home');
-    setTimeout(async () => { await loadAll(); renderPage(STATE.page); }, 500);
+    // Background refresh — don't await, just fire
+    loadAll().then(()=>renderPage(STATE.page)).catch(()=>{});
   } else {
     showSkeleton();
+    // Hard timeout — navigate home after 25s no matter what
+    const hardTimeout = setTimeout(()=>{
+      console.warn('loadAll timed out — navigating home with empty data');
+      navigate('home');
+    }, 25000);
     try {
       await loadAll();
     } catch(e) {
       console.error('loadAll failed:', e);
-      showToast('Partial data loaded — some sections may be empty','error');
+    } finally {
+      clearTimeout(hardTimeout);
     }
     navigate('home');
   }
@@ -3219,14 +3234,14 @@ function scanCardForPerson(idx) {
   input.type='file'; input.accept='image/*'; input.capture='environment';
   input.onchange = async () => {
     if(!input.files[0]) return;
-    if(!CLAUDE_KEY){ showToast('Claude API key not configured','error'); return; }
+    if(!getClaudeKey()){ showToast('Claude API key not configured','error'); return; }
     showToast('Reading card...','');
     const file = input.files[0];
     const b64 = await new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.readAsDataURL(file); });
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':CLAUDE_KEY,'anthropic-version':'2023-06-01'},
+        headers:{'Content-Type':'application/json','x-api-key':getClaudeKey(),'anthropic-version':'2023-06-01'},
         body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
           {type:'text',text:'Extract contact details from this visiting card. Return ONLY a JSON object with keys: name, designation, phone, email. If a field is not visible, use empty string.'}
@@ -3684,7 +3699,7 @@ function openCardScanner() {
       <button class="btn btn-primary btn-full" onclick="saveContact()">Save contact</button>
     </div>
     <div id="card-loading" style="display:none" class="loading"><div class="spinner"></div><span class="text-sm">Reading card with AI…</span></div>
-    ${!CLAUDE_KEY?'<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:16px;flex-shrink:0"></i><div class="text-xs" style="color:var(--amber)">Add your Claude API key to enable AI card reading. You can still enter details manually below.</div></div>':''}`
+    ${!getClaudeKey()?'<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:16px;flex-shrink:0"></i><div class="text-xs" style="color:var(--amber)">Add your Claude API key to enable AI card reading. You can still enter details manually below.</div></div>':''}`
   ;
   openPanel('card');
 }
@@ -3692,10 +3707,10 @@ function openCardScanner() {
 async function processCard(input) {
   const file=input.files[0];if(!file)return;
   document.getElementById('card-loading').style.display='flex';
-  if(CLAUDE_KEY){
+  if(getClaudeKey()){
     try {
       const b64=await fileToBase64(file);
-      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':CLAUDE_KEY,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:file.type,data:b64}},{type:'text',text:'Extract contact details from this visiting card. Return ONLY a JSON object with keys: name, designation, company, phone, email. If a field is not visible, use empty string.'}]}]})});
+      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':getClaudeKey(),'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:file.type,data:b64}},{type:'text',text:'Extract contact details from this visiting card. Return ONLY a JSON object with keys: name, designation, company, phone, email. If a field is not visible, use empty string.'}]}]})});
       const data=await res.json();
       const text=data.content?.[0]?.text||'{}';
       const clean=text.replace(/```json|```/g,'').trim();
