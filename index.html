@@ -587,47 +587,45 @@ function showToast(msg, type='') {
 // ── API CALLS ────────────────────────────────────────────────────────────────
 // ── CACHE ─────────────────────────────────────────────────────────────────────
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_PREFIX = 'ffp_c_';
 function cacheSet(key, data) {
-  try { localStorage.setItem('ffp_'+key, JSON.stringify({data, ts: Date.now()})); } catch(e) {}
+  try { localStorage.setItem(CACHE_PREFIX+key, JSON.stringify({data, ts: Date.now()})); } catch(e) {}
 }
 function cacheGet(key) {
   try {
-    const raw = localStorage.getItem('ffp_'+key);
+    const raw = localStorage.getItem(CACHE_PREFIX+key);
     if(!raw) return null;
     const {data, ts} = JSON.parse(raw);
     if(Date.now()-ts > CACHE_TTL) return null;
     return data;
   } catch(e) { return null; }
 }
-function cacheClear() {
-  Object.keys(localStorage).filter(k=>k.startsWith('ffp_cache_')).forEach(k=>localStorage.removeItem(k));
+function cacheInvalidate(sheet) {
+  try { localStorage.removeItem(CACHE_PREFIX+sheet); } catch(e) {}
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
 async function apiRead(sheet, {cache=true}={}) {
   if(cache) {
-    const cached = cacheGet('cache_'+sheet);
+    const cached = cacheGet(sheet);
     if(cached) return cached;
   }
   try {
     const r = await fetch(`${API}?action=read&sheet=${sheet}`);
     const d = await r.json();
     const data = d.success ? d.data : [];
-    if(cache && d.success) cacheSet('cache_'+sheet, data);
+    if(cache && d.success) cacheSet(sheet, data);
     return data;
   } catch(e) { console.error('Read error',sheet,e); return []; }
 }
 
 // Optimistic write — updates STATE immediately, saves in background
 function apiWriteOptimistic(sheet, payload, stateArray, rollbackFn) {
-  stateArray.push(payload); // instant STATE update
+  stateArray.push(payload);
+  cacheSet(sheet, stateArray);
   apiWrite(sheet, payload).then(ok => {
-    if(!ok && rollbackFn) {
-      rollbackFn();
-      renderPage(STATE.page);
-    }
+    if(!ok && rollbackFn) { rollbackFn(); renderPage(STATE.page); }
   });
-  cacheSet('cache_'+sheet, stateArray); // update cache
 }
 
 // Optimistic update — patches STATE immediately, saves in background
@@ -635,12 +633,9 @@ function apiUpdateOptimistic(sheet, payload, stateArray) {
   const item = stateArray.find(x=>x.id===payload.id);
   const snapshot = item ? {...item} : null;
   if(item) Object.assign(item, payload);
-  cacheSet('cache_'+sheet, stateArray);
+  cacheSet(sheet, stateArray);
   apiUpdate(sheet, payload).then(ok => {
-    if(!ok && snapshot && item) {
-      Object.assign(item, snapshot);
-      renderPage(STATE.page);
-    }
+    if(!ok && snapshot && item) { Object.assign(item, snapshot); renderPage(STATE.page); }
   });
 }
 
@@ -649,7 +644,7 @@ async function apiWrite(sheet, payload) {
     const r = await fetch(`${API}?action=write&sheet=${sheet}`, { method:'POST', body:JSON.stringify(payload) });
     const d = await r.json();
     if(!d.success) showToast('Save failed: '+d.error,'error');
-    else { cacheSet('cache_'+sheet, null); } // invalidate cache on write
+    else cacheInvalidate(sheet);
     return d.success;
   } catch(e) { showToast('Network error','error'); return false; }
 }
@@ -657,7 +652,7 @@ async function apiUpdate(sheet, payload) {
   try {
     const r = await fetch(`${API}?action=update&sheet=${sheet}`, { method:'POST', body:JSON.stringify(payload) });
     const d = await r.json();
-    if(d.success) cacheSet('cache_'+sheet, null); // invalidate cache on update
+    if(d.success) cacheInvalidate(sheet);
     return d.success;
   } catch(e) { return false; }
 }
@@ -726,24 +721,21 @@ async function loadAll() {
 
 // Load from cache instantly, then refresh in background
 async function loadFromCacheOrFetch() {
-  // Try to load from cache first
-  const cachedKeys = PRIORITY_SHEETS.reduce((acc,s)=>{ acc[s]=cacheGet('cache_'+s); return acc; }, {});
-  const hasCache = PRIORITY_SHEETS.every(s=>cachedKeys[s]!==null);
+  const cachedData = PRIORITY_SHEETS.map(s=>cacheGet(s));
+  const hasCache = cachedData.every(d=>d!==null);
 
   if(hasCache) {
-    // Render immediately from cache
-    const [users,companies,targets,visits,planItems,contacts,rfqs] = PRIORITY_SHEETS.map(s=>cachedKeys[s]);
+    const [users,companies,targets,visits,planItems,contacts,rfqs] = cachedData;
     const data = {visits:[...visits], planItems:[...planItems], calEvents:[], gpsLogs:[]};
     applyNorms(data);
-    STATE.users=users; STATE.companies=companies.filter(c=>String(c.active||'').trim().toUpperCase()!=='FALSE');
+    STATE.users=users;
+    STATE.companies=companies.filter(c=>String(c.active||'').trim().toUpperCase()!=='FALSE');
     STATE.targets=targets.filter(t=>String(t.active||'').trim().toUpperCase()!=='FALSE');
     STATE.visits=data.visits; STATE.planItems=data.planItems; STATE.contacts=contacts;
     STATE.rfqs=rfqs||[]; STATE.pos=[]; STATE.gpsLogs=[]; STATE.taClaims=[]; STATE.calEvents=[]; STATE.approvals=[]; STATE.tasks=[];
     if(!STATE.viewRep && STATE.user.role==='manager') STATE.viewRep = myReps()[0]?.id;
-    navigate('home');
 
-    // Also load deferred from cache
-    DEFERRED_SHEETS.forEach(s=>{ const c=cacheGet('cache_'+s); if(c) {
+    DEFERRED_SHEETS.forEach(s=>{ const c=cacheGet(s); if(c) {
       if(s==='POs') STATE.pos=c;
       if(s==='GPSLogs') { c.forEach(g=>g.date=normDate(g.date)); STATE.gpsLogs=c; }
       if(s==='TAClaims') STATE.taClaims=c;
@@ -752,13 +744,9 @@ async function loadFromCacheOrFetch() {
       if(s==='Tasks') STATE.tasks=c;
     }});
 
-    // Background refresh after 300ms
-    setTimeout(async () => {
-      await loadAll(); // fetches fresh data
-      renderPage(STATE.page); // re-render with fresh data
-    }, 300);
+    navigate('home');
+    setTimeout(async () => { await loadAll(); renderPage(STATE.page); }, 500);
   } else {
-    // No cache — show skeleton then load
     showSkeleton();
     await loadAll();
     navigate('home');
@@ -780,7 +768,7 @@ function showSkeleton() {
 async function refreshData(btn) {
   if(btn) btnLoad(btn, true);
   // Clear cache so fresh data is fetched
-  PRIORITY_SHEETS.concat(DEFERRED_SHEETS).forEach(s=>{ try{localStorage.removeItem('ffp_cache_'+s);}catch(e){} });
+  PRIORITY_SHEETS.concat(DEFERRED_SHEETS).forEach(s=>cacheInvalidate(s));
   showToast('Refreshing...','');
   await loadAll();
   renderPage(STATE.page);
