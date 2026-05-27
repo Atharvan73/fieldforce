@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v7.4</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v7.6</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -829,15 +829,11 @@ async function loadFromCacheOrFetch() {
 }
 
 function showSkeleton() {
-  const content = document.getElementById('content-area');
-  if(!content) return;
-  content.innerHTML = `<div style="padding:16px">
-    ${[1,2,3].map(()=>`<div style="background:var(--bg2);border-radius:12px;padding:16px;margin-bottom:12px">
-      <div style="background:var(--bg3);border-radius:6px;height:14px;width:60%;margin-bottom:10px;animation:pulse 1.2s infinite"></div>
-      <div style="background:var(--bg3);border-radius:6px;height:10px;width:80%;margin-bottom:6px;animation:pulse 1.2s infinite"></div>
-      <div style="background:var(--bg3);border-radius:6px;height:10px;width:40%;animation:pulse 1.2s infinite"></div>
-    </div>`).join('')}
-  </div>`;
+  const homePage = document.getElementById('page-home');
+  if(!homePage) return;
+  if(homePage.innerHTML.trim().length > 50) return;
+  const skeletonCard = '<div style="background:var(--bg2);border-radius:12px;padding:16px;margin-bottom:12px"><div style="background:var(--bg3);border-radius:6px;height:14px;width:60%;margin-bottom:10px;animation:pulse 1.2s infinite"></div><div style="background:var(--bg3);border-radius:6px;height:10px;width:80%;margin-bottom:6px;animation:pulse 1.2s infinite"></div><div style="background:var(--bg3);border-radius:6px;height:10px;width:40%;animation:pulse 1.2s infinite"></div></div>';
+  homePage.innerHTML = '<div style="padding:16px">' + skeletonCard + skeletonCard + skeletonCard + '</div>';
 }
 
 async function refreshData(btn) {
@@ -902,7 +898,6 @@ async function doLogin(silent=false) {
   STATE.user = STATE.users.find(u=>u.id===selectedLoginId);
   if(!STATE.user) { showToast('User not found','error'); return; }
 
-  // Save session so app remembers who is logged in
   localStorage.setItem('ffp_user_id', selectedLoginId);
 
   document.getElementById('login-screen').style.display='none';
@@ -912,11 +907,15 @@ async function doLogin(silent=false) {
   renderNav();
   updateNotifDot();
 
+  // Small delay to ensure DOM is fully painted before rendering
+  await new Promise(r=>setTimeout(r,50));
+
   try {
     await loadFromCacheOrFetch();
   } catch(e) {
     console.error('Login load error:', e.message);
-    navigate('home');
+    // Only navigate if page-home exists
+    if(document.getElementById('page-home')) navigate('home');
   }
 }
 function logout() {
@@ -1034,7 +1033,13 @@ function renderPage(p) {
     log: renderLog, targets: renderTargets, gps: renderGPS,
     team: renderTeam, cal: renderCal, rfq: renderRFQ, tasks: renderTasks
   };
-  if(map[p]) map[p]();
+function renderPage(p) {
+  const map = {
+    home: renderHome, companies: renderCompanies, plan: renderPlan,
+    log: renderLog, targets: renderTargets, gps: renderGPS,
+    team: renderTeam, cal: renderCal, rfq: renderRFQ, tasks: renderTasks
+  };
+  try { if(map[p]) map[p](); } catch(e) { console.error('renderPage error:', p, e.message); }
 }
 
 // ── PANELS ────────────────────────────────────────────────────────────────────
@@ -1046,11 +1051,14 @@ function backBtn(panelId) { return `<div class="panel-head"><button class="panel
 // ── HOME ──────────────────────────────────────────────────────────────────────
 function renderHome() {
   const el = document.getElementById('page-home');
+  if(!el) return;
   const isM = STATE.user.role==='manager';
   if(isM) { renderMgrHome(el); } else { renderRepHome(el); }
 }
 function renderRepHome(el) {
+  if(!el) return;
   const u = STATE.user;
+  if(!u) return;
   const mt = STATE.targets.filter(t=>t.repId===u.id&&t.period==='monthly');
   const monthTarget = mt.reduce((s,t)=>s+Number(t.saleTarget||0),0);
   const myPOs = STATE.pos.filter(p=>p.repId===u.id&&p.status==='verified');
@@ -1122,6 +1130,7 @@ function renderRepHome(el) {
     </div>`;
 }
 function renderMgrHome(el) {
+  if(!el || !STATE.user) return;
   const reps = myReps();
   const pend = STATE.approvals.filter(a=>a.status==='pending').length + STATE.pos.filter(p=>p.status==='pending').length;
   const myTodayV = STATE.visits.filter(v=>v.repId===STATE.user.id&&v.date===todayStr());
