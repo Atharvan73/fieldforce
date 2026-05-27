@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.7</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.9</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -721,18 +721,29 @@ const PRIORITY_SHEETS = ['Users','Companies','Targets','Visits','VisitPlan','Con
 const DEFERRED_SHEETS = ['POs','GPSLogs','TAClaims','CalendarEvents','Approvals','Tasks'];
 
 async function loadAll(navigateAfter=false) {
-  // Load core sheets with a 12s timeout each
   const CORE_SHEETS = ['Users','Companies','Targets','Visits','VisitPlan','Contacts','RFQs'];
 
-  const coreResults = await Promise.allSettled(
-    CORE_SHEETS.map(s=>apiRead(s))
-  );
+  let preloaded = {};
+  // Use preloaded data if available (fetched during login screen)
+  if(_preloadPromise) {
+    try { preloaded = await _preloadPromise; _preloadPromise = null; } catch(e) {}
+  }
+
+  // Only fetch sheets not already preloaded
+  const toFetch = CORE_SHEETS.filter(s=>!preloaded[s]);
+  let fetched = {};
+  if(toFetch.length > 0) {
+    const results = await Promise.allSettled(toFetch.map(s=>apiRead(s)));
+    toFetch.forEach((s,i)=>{ if(results[i].status==='fulfilled') fetched[s]=results[i].value; });
+  }
+
+  const merged = {...preloaded, ...fetched};
   const [users,companies,targets,visits,planItems,contacts,rfqs] =
-    coreResults.map(r=>r.status==='fulfilled' ? r.value : []);
+    CORE_SHEETS.map(s=>merged[s]||[]);
 
   const data = {visits:visits||[], planItems:planItems||[], calEvents:[], gpsLogs:[]};
   applyNorms(data);
-  STATE.users=users||[];
+  STATE.users = STATE.users?.length ? STATE.users : (users||[]); // keep existing users if already set
   STATE.companies=(companies||[]).filter(c=>String(c.active||'').trim().toUpperCase()!=='FALSE');
   STATE.targets=(targets||[]).filter(t=>String(t.active||'').trim().toUpperCase()!=='FALSE');
   STATE.visits=data.visits; STATE.planItems=data.planItems; STATE.contacts=contacts||[];
@@ -740,30 +751,24 @@ async function loadAll(navigateAfter=false) {
   if(!STATE.viewRep && STATE.user?.role==='manager') STATE.viewRep = myReps()[0]?.id;
 
   // Cache core sheets
-  CORE_SHEETS.forEach((s,i)=>{
-    const val = coreResults[i].status==='fulfilled' ? coreResults[i].value : null;
-    if(val) cacheSet(s, val);
-  });
+  CORE_SHEETS.forEach(s=>{ if(merged[s]) cacheSet(s, merged[s]); });
 
-  // Navigate home immediately after core sheets — don't wait for Settings/deferred
-  if(navigateAfter) navigate('home');
+  // Only navigate if the app shell is visible
+  if(navigateAfter && document.getElementById('app')?.style.display==='flex') {
+    navigate('home');
+  }
 
-  // Load Settings + deferred sheets in background
+  // Load Settings + deferred in background
   setTimeout(async () => {
-    // Settings (Claude key)
     try {
-      const settings = await apiRead('Settings');
+      const settings = preloaded['Settings'] || await apiRead('Settings');
       if(settings?.length) {
         const keySetting = settings.find(r=>(r.key||r.Key||'').toLowerCase()==='claudekey');
-        if(keySetting) {
-          const val = keySetting.value||keySetting.Value||'';
-          if(val) localStorage.setItem('ffp_claude_key', val);
-        }
+        if(keySetting) { const val=keySetting.value||keySetting.Value||''; if(val) localStorage.setItem('ffp_claude_key',val); }
         cacheSet('Settings', settings);
       }
     } catch(e) {}
 
-    // Deferred sheets
     const dResults = await Promise.allSettled(DEFERRED_SHEETS.map(s=>apiRead(s)));
     const [pos,gpsLogs,taClaims,calEvents,approvals,tasks] = dResults.map(r=>r.status==='fulfilled'?r.value:[]);
     DEFERRED_SHEETS.forEach((s,i)=>{ if(dResults[i].status==='fulfilled') cacheSet(s,dResults[i].value); });
@@ -802,9 +807,10 @@ async function loadFromCacheOrFetch() {
     navigate('home');
     loadAll(false).then(()=>renderPage(STATE.page)).catch(()=>{});
   } else {
-    // No cache — show skeleton, loadAll navigates home itself when core sheets are ready
+    // No cache — show skeleton, load data, then navigate
     showSkeleton();
-    await loadAll(true);
+    await loadAll(false);
+    navigate('home');
   }
 }
 
@@ -831,9 +837,21 @@ async function refreshData(btn) {
   if(btn) btnLoad(btn, false);
 }
 let selectedLoginId = null;
+let _preloadPromise = null; // pre-fetched data while on login screen
+
 async function initLogin() {
   const users = await apiRead('Users');
   STATE.users = users;
+
+  // Start preloading all other sheets immediately in background
+  // so by the time user clicks login, data is ready
+  const PRELOAD_SHEETS = ['Companies','Targets','Visits','VisitPlan','Contacts','RFQs','Settings'];
+  _preloadPromise = Promise.allSettled(PRELOAD_SHEETS.map(s=>apiRead(s)))
+    .then(results => {
+      const obj = {};
+      PRELOAD_SHEETS.forEach((s,i)=>{ if(results[i].status==='fulfilled') obj[s]=results[i].value; });
+      return obj;
+    }).catch(()=>({}));
 
   // Check if user was previously logged in — auto-login
   const savedId = localStorage.getItem('ffp_user_id');
@@ -880,21 +898,11 @@ async function doLogin(silent=false) {
   renderNav();
   updateNotifDot();
 
-  // Safety timeout — if loading takes more than 20s, show error and retry option
-  const loadTimeout = setTimeout(()=>{
-    showToast('Loading is taking longer than usual...','');
-    // Try to navigate home with whatever data we have
-    if(STATE.users.length) navigate('home');
-  }, 20000);
-
   try {
     await loadFromCacheOrFetch();
   } catch(e) {
-    console.error('Login load error:', e.message, e.stack);
-    if(!STATE.users?.length) showToast('Load error: '+e.message,'error');
+    console.error('Login load error:', e.message);
     navigate('home');
-  } finally {
-    clearTimeout(loadTimeout);
   }
 }
 function logout() {
