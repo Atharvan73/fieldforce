@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v7.3</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v7.4</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -718,7 +718,7 @@ function applyNorms(data) {
 // Priority sheets — loaded first (needed for home/nav render)
 const PRIORITY_SHEETS = ['Users','Companies','Targets','Visits','VisitPlan','Contacts','RFQs','Settings'];
 // Deferred sheets — loaded after first render
-const DEFERRED_SHEETS = ['POs','GPSLogs','GPSLive','TAClaims','CalendarEvents','Approvals','Tasks'];
+const DEFERRED_SHEETS = ['POs','GPSLogs','GPSLive','TAClaims','CalendarEvents','Approvals','Tasks','FieldStatus'];
 
 async function loadAll(navigateAfter=false) {
   const CORE_SHEETS = ['Users','Companies','Targets','Visits','VisitPlan','Contacts','RFQs'];
@@ -770,11 +770,25 @@ async function loadAll(navigateAfter=false) {
     } catch(e) {}
 
     const dResults = await Promise.allSettled(DEFERRED_SHEETS.map(s=>apiRead(s)));
-    const [pos,gpsLogs,gpsLive,taClaims,calEvents,approvals,tasks] = dResults.map(r=>r.status==='fulfilled'?r.value:[]);
+    const [pos,gpsLogs,gpsLive,taClaims,calEvents,approvals,tasks,fieldStatus] = dResults.map(r=>r.status==='fulfilled'?r.value:[]);
     DEFERRED_SHEETS.forEach((s,i)=>{ if(dResults[i].status==='fulfilled') cacheSet(s,dResults[i].value); });
     const d2 = {visits:STATE.visits, planItems:STATE.planItems, calEvents:calEvents||[], gpsLogs:gpsLogs||[]};
     applyNorms(d2);
     STATE.pos=pos||[]; STATE.gpsLogs=d2.gpsLogs; STATE.gpsLive=gpsLive||[]; STATE.taClaims=taClaims||[];
+    STATE.calEvents=d2.calEvents; STATE.approvals=approvals||[]; STATE.tasks=tasks||[];
+
+    // Restore on-field state from FieldStatus sheet
+    if(STATE.user && fieldStatus?.length) {
+      const myStatus = fieldStatus.find(f=>f.repId===STATE.user.id);
+      if(myStatus && String(myStatus.onField).toUpperCase()==='TRUE') {
+        STATE.onField = true;
+        STATE.fieldVehicle = myStatus.vehicle||'two-wheeler';
+        if(!STATE.waypoints?.length && myStatus.lat) {
+          STATE.waypoints = [{lat:Number(myStatus.lat), lng:Number(myStatus.lng), label:'Start', time:myStatus.time||'', companyId:null, companyName:'Start (Home/Office)'}];
+        }
+        if(['gps','home'].includes(STATE.page)) renderPage(STATE.page);
+      }
+    }
     STATE.calEvents=d2.calEvents; STATE.approvals=approvals||[]; STATE.tasks=tasks||[];
     if(['gps','cal','targets','tasks'].includes(STATE.page)) renderPage(STATE.page);
   }, 50);
@@ -897,20 +911,6 @@ async function doLogin(silent=false) {
   document.getElementById('top-av').style.background = STATE.user.role==='manager'?'#6366F1':'#10B981';
   renderNav();
   updateNotifDot();
-
-  // Restore on-field session if rep was on field when app was closed
-  try {
-    const session = JSON.parse(localStorage.getItem('ffp_field_session')||'{}');
-    if(session.onField && session.date===todayStr() && session.repId===STATE.user.id) {
-      STATE.onField = true;
-      STATE.fieldVehicle = session.vehicle||'two-wheeler';
-      STATE.waypoints = session.waypoints||[];
-      showToast('Restored on-field session ✓','success');
-    } else if(session.onField && session.date!==todayStr()) {
-      // Session from a previous day — clear it
-      localStorage.removeItem('ffp_field_session');
-    }
-  } catch(e) {}
 
   try {
     await loadFromCacheOrFetch();
@@ -3768,56 +3768,47 @@ function startField() {
   STATE.waypoints=[];
   STATE.currentDayKm=0;
   closePanel('vehicle');
-  localStorage.setItem('ffp_field_session', JSON.stringify({
-    onField: true, vehicle: STATE.fieldVehicle, date: todayStr(), waypoints: [], repId: STATE.user.id
-  }));
   showToast('Getting your location...','');
   if(navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(pos=>{
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      const acc = Math.round(pos.coords.accuracy);
-      STATE.waypoints.push({
-        lat, lng, label: 'Start', time: nowStr(),
-        companyId: null, companyName: 'Start (Home/Office)'
-      });
-      localStorage.setItem('ffp_field_session', JSON.stringify({
-        onField: true, vehicle: STATE.fieldVehicle, date: todayStr(), waypoints: STATE.waypoints, repId: STATE.user.id
-      }));
-      console.log('[FieldForce GPS] Start location captured:', {lat, lng, accuracy: acc, time: nowStr(), mapsUrl});
+      const lat=pos.coords.latitude, lng=pos.coords.longitude;
+      STATE.waypoints.push({lat, lng, label:'Start', time:nowStr(), companyId:null, companyName:'Start (Home/Office)'});
+      saveFieldStatus(true, lat, lng);
+      console.log('[FieldForce GPS] On field:', {lat, lng, accuracy:Math.round(pos.coords.accuracy)});
       showToast('GPS tracking started ✓','success');
-      STATE._startLocationConfirmed = {lat, lng, acc, time: nowStr(), mapsUrl};
-
-      // Save start waypoint immediately to GPSLogs sheet as a live entry
-      const liveLog = {
-        id: 'live_'+STATE.user.id+'_'+todayStr(),
-        repId: STATE.user.id,
-        date: todayStr(),
-        type: 'waypoint',
-        label: 'Start',
-        lat: lat.toFixed(6),
-        lng: lng.toFixed(6),
-        accuracy: acc,
-        companyName: 'Start (Home/Office)',
-        time: nowStr(),
-        vehicle: STATE.fieldVehicle,
-        status: 'on-field'
-      };
-      apiWrite('GPSLive', liveLog).catch(()=>{}); // silent fail ok
       renderGPS();
-    }, (err)=>{
-      const msg = err.code===1?'Location permission denied':err.code===2?'Location unavailable':'Location timeout';
-      showToast(`GPS tracking started · ${msg} — location not captured`,'error');
+    }, ()=>{
+      saveFieldStatus(true, null, null);
+      showToast('GPS tracking started (location unavailable)','');
       renderGPS();
     }, {enableHighAccuracy:true, timeout:15000, maximumAge:0});
+  } else {
+    saveFieldStatus(true, null, null);
   }
   navigate('gps');
+}
+
+function saveFieldStatus(onField, lat, lng) {
+  const payload = {
+    id: STATE.user.id,
+    repId: STATE.user.id,
+    repName: STATE.user.name,
+    onField: onField ? 'TRUE' : 'FALSE',
+    vehicle: STATE.fieldVehicle||'',
+    lat: lat||'', lng: lng||'',
+    time: nowStr(), date: todayStr()
+  };
+  // Try update first (overwrites existing row), fall back to write
+  fetch(`${API}?action=update&sheet=FieldStatus`, {method:'POST', body:JSON.stringify(payload)})
+    .then(r=>r.json())
+    .then(d=>{ if(!d.success) apiWrite('FieldStatus', payload); })
+    .catch(()=>{ apiWrite('FieldStatus', payload); });
 }
 async function stopField() {
   if(!confirm('Mark yourself off field? This will save today\'s KM log.')) return;
   stopGPS();
   STATE.onField=false;
-  localStorage.removeItem('ffp_field_session'); // clear persisted session
+  saveFieldStatus(false, null, null); // write FALSE to sheet immediately
   showToast('Getting final location...','');
 
   const saveLog = async(finalLat, finalLng) => {
