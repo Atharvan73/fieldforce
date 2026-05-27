@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.6</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.7</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -720,57 +720,69 @@ const PRIORITY_SHEETS = ['Users','Companies','Targets','Visits','VisitPlan','Con
 // Deferred sheets — loaded after first render
 const DEFERRED_SHEETS = ['POs','GPSLogs','TAClaims','CalendarEvents','Approvals','Tasks'];
 
-async function loadAll() {
-  // Load priority sheets — Settings failure should not block the rest
-  const results = await Promise.allSettled(
-    PRIORITY_SHEETS.map(s=>apiRead(s))
+async function loadAll(navigateAfter=false) {
+  // Load core sheets with a 12s timeout each
+  const CORE_SHEETS = ['Users','Companies','Targets','Visits','VisitPlan','Contacts','RFQs'];
+
+  const coreResults = await Promise.allSettled(
+    CORE_SHEETS.map(s=>apiRead(s))
   );
+  const [users,companies,targets,visits,planItems,contacts,rfqs] =
+    coreResults.map(r=>r.status==='fulfilled' ? r.value : []);
 
-  const [users,companies,targets,visits,planItems,contacts,rfqs,settings] =
-    results.map(r=>r.status==='fulfilled' ? r.value : []);
-
-  // Extract Claude key from Settings sheet
-  if(settings?.length) {
-    const keySetting = settings.find(r=>(r.key||r.Key||'').toLowerCase()==='claudekey');
-    if(keySetting) {
-      const val = keySetting.value||keySetting.Value||'';
-      if(val) localStorage.setItem('ffp_claude_key', val);
-    }
-  }
-  const data = {visits, planItems, calEvents:[], gpsLogs:[]};
+  const data = {visits:visits||[], planItems:planItems||[], calEvents:[], gpsLogs:[]};
   applyNorms(data);
-  STATE.users=users;
-  STATE.companies=companies.filter(c=>String(c.active||'').trim().toUpperCase()!=='FALSE');
-  STATE.targets=targets.filter(t=>String(t.active||'').trim().toUpperCase()!=='FALSE');
-  STATE.visits=data.visits; STATE.planItems=data.planItems; STATE.contacts=contacts;
+  STATE.users=users||[];
+  STATE.companies=(companies||[]).filter(c=>String(c.active||'').trim().toUpperCase()!=='FALSE');
+  STATE.targets=(targets||[]).filter(t=>String(t.active||'').trim().toUpperCase()!=='FALSE');
+  STATE.visits=data.visits; STATE.planItems=data.planItems; STATE.contacts=contacts||[];
   STATE.rfqs=rfqs||[];
-  STATE.pos=[]; STATE.gpsLogs=[]; STATE.taClaims=[]; STATE.calEvents=[]; STATE.approvals=[]; STATE.tasks=[];
-  if(!STATE.viewRep && STATE.user.role==='manager') STATE.viewRep = myReps()[0]?.id;
+  if(!STATE.viewRep && STATE.user?.role==='manager') STATE.viewRep = myReps()[0]?.id;
 
-  // Deferred load — runs after first render, silently fills in the rest
+  // Cache core sheets
+  CORE_SHEETS.forEach((s,i)=>{
+    const val = coreResults[i].status==='fulfilled' ? coreResults[i].value : null;
+    if(val) cacheSet(s, val);
+  });
+
+  // Navigate home immediately after core sheets — don't wait for Settings/deferred
+  if(navigateAfter) navigate('home');
+
+  // Load Settings + deferred sheets in background
   setTimeout(async () => {
+    // Settings (Claude key)
+    try {
+      const settings = await apiRead('Settings');
+      if(settings?.length) {
+        const keySetting = settings.find(r=>(r.key||r.Key||'').toLowerCase()==='claudekey');
+        if(keySetting) {
+          const val = keySetting.value||keySetting.Value||'';
+          if(val) localStorage.setItem('ffp_claude_key', val);
+        }
+        cacheSet('Settings', settings);
+      }
+    } catch(e) {}
+
+    // Deferred sheets
     const dResults = await Promise.allSettled(DEFERRED_SHEETS.map(s=>apiRead(s)));
     const [pos,gpsLogs,taClaims,calEvents,approvals,tasks] = dResults.map(r=>r.status==='fulfilled'?r.value:[]);
-    const d2 = {visits:STATE.visits, planItems:STATE.planItems, calEvents, gpsLogs};
+    DEFERRED_SHEETS.forEach((s,i)=>{ if(dResults[i].status==='fulfilled') cacheSet(s,dResults[i].value); });
+    const d2 = {visits:STATE.visits, planItems:STATE.planItems, calEvents:calEvents||[], gpsLogs:gpsLogs||[]};
     applyNorms(d2);
-    STATE.pos=pos; STATE.gpsLogs=d2.gpsLogs; STATE.taClaims=taClaims;
-    STATE.calEvents=d2.calEvents; STATE.approvals=approvals; STATE.tasks=tasks||[];
-    // Re-render only if user is on a page that needs deferred data
+    STATE.pos=pos||[]; STATE.gpsLogs=d2.gpsLogs; STATE.taClaims=taClaims||[];
+    STATE.calEvents=d2.calEvents; STATE.approvals=approvals||[]; STATE.tasks=tasks||[];
     if(['gps','cal','targets','tasks'].includes(STATE.page)) renderPage(STATE.page);
-  }, 100);
+  }, 50);
 }
 
 // Load from cache instantly, then refresh in background
 async function loadFromCacheOrFetch() {
-  // Core sheets needed to render home — Settings is optional
   const CORE_SHEETS = ['Users','Companies','Targets','Visits','VisitPlan','Contacts','RFQs'];
-  const cachedData = PRIORITY_SHEETS.map(s=>cacheGet(s));
   const coreMap = CORE_SHEETS.map(s=>cacheGet(s));
-  const hasCache = coreMap.every(d=>d!==null); // only require core sheets
+  const hasCache = coreMap.every(d=>d!==null);
 
   if(hasCache) {
     const [users,companies,targets,visits,planItems,contacts,rfqs] = coreMap;
-    const settings = cacheGet('Settings')||[];
     const data = {visits:[...visits], planItems:[...planItems], calEvents:[], gpsLogs:[]};
     applyNorms(data);
     STATE.users=users;
@@ -779,7 +791,6 @@ async function loadFromCacheOrFetch() {
     STATE.visits=data.visits; STATE.planItems=data.planItems; STATE.contacts=contacts;
     STATE.rfqs=rfqs||[]; STATE.pos=[]; STATE.gpsLogs=[]; STATE.taClaims=[]; STATE.calEvents=[]; STATE.approvals=[]; STATE.tasks=[];
     if(!STATE.viewRep && STATE.user.role==='manager') STATE.viewRep = myReps()[0]?.id;
-
     DEFERRED_SHEETS.forEach(s=>{ const c=cacheGet(s); if(c) {
       if(s==='POs') STATE.pos=c;
       if(s==='GPSLogs') { c.forEach(g=>g.date=normDate(g.date)); STATE.gpsLogs=c; }
@@ -788,24 +799,12 @@ async function loadFromCacheOrFetch() {
       if(s==='Approvals') STATE.approvals=c;
       if(s==='Tasks') STATE.tasks=c;
     }});
-
     navigate('home');
-    // Background refresh — don't await, just fire
-    loadAll().then(()=>renderPage(STATE.page)).catch(()=>{});
+    loadAll(false).then(()=>renderPage(STATE.page)).catch(()=>{});
   } else {
+    // No cache — show skeleton, loadAll navigates home itself when core sheets are ready
     showSkeleton();
-    const hardTimeout = setTimeout(()=>{
-      console.warn('loadAll timed out — navigating home');
-      navigate('home');
-    }, 25000);
-    try {
-      await loadAll();
-    } catch(e) {
-      console.error('loadAll failed:', e);
-    } finally {
-      clearTimeout(hardTimeout);
-    }
-    navigate('home');
+    await loadAll(true);
   }
 }
 
