@@ -1027,18 +1027,13 @@ function navigate(p) {
   const nb=document.getElementById('ni-'+p); if(nb) nb.classList.add('active');
   const sb=document.getElementById('si-'+p); if(sb) sb.classList.add('active');
 }
-
 function renderPage(p) {
-  const map = {
-    home: renderHome, companies: renderCompanies, plan: renderPlan,
-    log: renderLog, targets: renderTargets, gps: renderGPS,
-    team: renderTeam, cal: renderCal, rfq: renderRFQ, tasks: renderTasks
-  };
-  try { 
-    if(map[p]) map[p](); 
-  } catch(e) { 
-    console.error('renderPage error:', p, e.message); 
-  }
+  const map = {
+    home: renderHome, companies: renderCompanies, plan: renderPlan,
+    log: renderLog, targets: renderTargets, gps: renderGPS,
+    team: renderTeam, cal: renderCal, rfq: renderRFQ, tasks: renderTasks
+  };
+  try { if(map[p]) map[p](); } catch(e) { console.error('renderPage error:', p, e.message); }
 }
 
 // ── PANELS ────────────────────────────────────────────────────────────────────
@@ -5161,25 +5156,25 @@ async function snoozeTask(taskId) {
 
 function showCollabNotifications() {
   const notifs = JSON.parse(localStorage.getItem('collabNotifs')||'[]');
-  const mine = notifs.filter(n=>n.repId===STATE.user?.id);
+  const mine = notifs.filter(function(n){return n.repId===STATE.user?.id;});
   if(!mine.length){ showToast('No new notifications',''); return; }
-
-  mine.forEach(n=>n.seen=true);
-  const all = notifs.map(n=>mine.find(m=>m.id===n.id)||n);
-  localStorage.setItem('collabNotifs', JSON.stringify(all));
+  mine.forEach(function(n){n.seen=true;});
+  localStorage.setItem('collabNotifs', JSON.stringify(notifs));
   updateNotifDot();
-
   const panel = document.getElementById('panel-visit');
-  let html = '<div class="panel-head"><button class="panel-back" onclick="closePanel(\'visit\')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">Notifications</span></div>';
-  mine.slice().reverse().forEach(n=>{
-    html += '<div class="card" style="margin-bottom:8px"><div class="row" style="gap:8px;align-items:flex-start">'
-      + '<i class="ti ti-users" style="color:var(--indigo2);font-size:16px;flex-shrink:0;margin-top:2px"></i>'
-      + '<div>'
-      + '<div style="font-size:12px;font-weight:500">' + (n.message||'') + '</div>'
-      + '<div style="font-size:10px;color:var(--text3);margin-top:3px">' + ((n.createdAt||'').slice(0,10)) + '</div>'
-      + '<button class="btn btn-sm" style="margin-top:6px;font-size:10px" onclick="STATE.pld=\'' + n.date + '\';closePanel(\'visit\');navigate(\'plan\')">'
-      + '<i class="ti ti-calendar"></i> View in plan</button>'
-      + '</div></div></div>';
+  let html = "";
+  html += "<div class=\"panel-head\">";
+  html += "<button class=\"panel-back\" onclick=\"closePanel('visit')\">";
+  html += "<i class=\"ti ti-arrow-left\" style=\"font-size:20px\"></i></button>";
+  html += "<span class=\"panel-title\">Notifications</span></div>";
+  mine.slice().reverse().forEach(function(n){
+    const d = (n.date||'').replace(/'/g,'');
+    html += "<div class=\"card\" style=\"margin-bottom:8px\">";
+    html += "<i class=\"ti ti-users\" style=\"color:var(--indigo2);font-size:16px;flex-shrink:0\"></i>";
+    html += "<div style=\"font-size:12px;font-weight:500\">" + (n.message||'') + "</div>";
+    html += "<div style=\"font-size:10px;color:var(--text3)\">" + ((n.createdAt||'').slice(0,10)) + "</div>";
+    html += "<button class=\"btn btn-sm\" data-d=\"" + d + "\" onclick=\"STATE.pld=this.dataset.d;closePanel('visit');navigate('plan')\">View in plan</button>";
+    html += "</div></div>";
   });
   panel.innerHTML = html;
   openPanel('visit');
