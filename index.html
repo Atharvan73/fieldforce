@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v6.9</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v7.0</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -897,6 +897,20 @@ async function doLogin(silent=false) {
   document.getElementById('top-av').style.background = STATE.user.role==='manager'?'#6366F1':'#10B981';
   renderNav();
   updateNotifDot();
+
+  // Restore on-field session if rep was on field when app was closed
+  try {
+    const session = JSON.parse(localStorage.getItem('ffp_field_session')||'{}');
+    if(session.onField && session.date===todayStr() && session.repId===STATE.user.id) {
+      STATE.onField = true;
+      STATE.fieldVehicle = session.vehicle||'two-wheeler';
+      STATE.waypoints = session.waypoints||[];
+      showToast('Restored on-field session ✓','success');
+    } else if(session.onField && session.date!==todayStr()) {
+      // Session from a previous day — clear it
+      localStorage.removeItem('ffp_field_session');
+    }
+  } catch(e) {}
 
   try {
     await loadFromCacheOrFetch();
@@ -3197,6 +3211,8 @@ async function checkIn(id) {
             label:'checkin', time:nowStr(),
             companyId:v.companyId, companyName:companyName
           });
+          // Persist waypoints so they survive app restart
+          try { const s=JSON.parse(localStorage.getItem('ffp_field_session')||'{}'); s.waypoints=STATE.waypoints; localStorage.setItem('ffp_field_session',JSON.stringify(s)); } catch(e) {}
           update.gpsVerified='TRUE'; visit.gpsVerified='TRUE';
           apiUpdate('VisitPlan',update); apiWrite('Visits',visit);
         }, ()=>{ apiUpdate('VisitPlan',update); apiWrite('Visits',visit); },
@@ -3726,18 +3742,21 @@ function startField() {
   STATE.waypoints=[];
   STATE.currentDayKm=0;
   closePanel('vehicle');
+  // Persist so app reopens in on-field state
+  localStorage.setItem('ffp_field_session', JSON.stringify({
+    onField: true, vehicle: STATE.fieldVehicle, date: todayStr(), waypoints: [], repId: STATE.user.id
+  }));
   showToast('Getting your location...','');
-  // Capture starting location
   if(navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(pos=>{
       STATE.waypoints.push({
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        label: 'Start',
-        time: nowStr(),
-        companyId: null,
-        companyName: 'Start (Home/Office)'
+        lat: pos.coords.latitude, lng: pos.coords.longitude,
+        label: 'Start', time: nowStr(),
+        companyId: null, companyName: 'Start (Home/Office)'
       });
+      localStorage.setItem('ffp_field_session', JSON.stringify({
+        onField: true, vehicle: STATE.fieldVehicle, date: todayStr(), waypoints: STATE.waypoints
+      }));
       showToast('GPS tracking started ✓ · Location captured','success');
       renderGPS();
     }, ()=>{
@@ -3751,6 +3770,7 @@ async function stopField() {
   if(!confirm('Mark yourself off field? This will save today\'s KM log.')) return;
   stopGPS();
   STATE.onField=false;
+  localStorage.removeItem('ffp_field_session'); // clear persisted session
   showToast('Getting final location...','');
 
   const saveLog = async(finalLat, finalLng) => {
