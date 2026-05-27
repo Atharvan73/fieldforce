@@ -1027,19 +1027,18 @@ function navigate(p) {
   const nb=document.getElementById('ni-'+p); if(nb) nb.classList.add('active');
   const sb=document.getElementById('si-'+p); if(sb) sb.classList.add('active');
 }
+
 function renderPage(p) {
-  const map = {
-    home: renderHome, companies: renderCompanies, plan: renderPlan,
-    log: renderLog, targets: renderTargets, gps: renderGPS,
-    team: renderTeam, cal: renderCal, rfq: renderRFQ, tasks: renderTasks
-  };
-function renderPage(p) {
-  const map = {
-    home: renderHome, companies: renderCompanies, plan: renderPlan,
-    log: renderLog, targets: renderTargets, gps: renderGPS,
-    team: renderTeam, cal: renderCal, rfq: renderRFQ, tasks: renderTasks
-  };
-  try { if(map[p]) map[p](); } catch(e) { console.error('renderPage error:', p, e.message); }
+  const map = {
+    home: renderHome, companies: renderCompanies, plan: renderPlan,
+    log: renderLog, targets: renderTargets, gps: renderGPS,
+    team: renderTeam, cal: renderCal, rfq: renderRFQ, tasks: renderTasks
+  };
+  try { 
+    if(map[p]) map[p](); 
+  } catch(e) { 
+    console.error('renderPage error:', p, e.message); 
+  }
 }
 
 // ── PANELS ────────────────────────────────────────────────────────────────────
