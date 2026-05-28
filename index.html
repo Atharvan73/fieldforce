@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v7.7</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v7.9</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -3211,43 +3211,87 @@ async function checkIn(id) {
     };
     STATE.visits.push(visit);
 
-    // Upload photo first, then save everything
+    // Save visit to sheet IMMEDIATELY — don't wait for photo upload
     const companyName = company.name||'Unknown';
-    showToast('Uploading photo...','');
+    const companyAddress = company.address||'';
 
-    // Upload in background but save visit only after we have the URL
-    uploadPhotoToDrive(b64, file.type, visitId, companyName, v.date).then(async url=>{
-      visit.photoUrl = url||'';
-      v.photoUrl = url||'';
-      if(url) showToast('Photo saved ✓','success');
-
-      // Now save to sheet with correct photoUrl
-      if(navigator.geolocation && STATE.onField) {
-        navigator.geolocation.getCurrentPosition(pos=>{
-          STATE.waypoints.push({
-            lat: pos.coords.latitude, lng: pos.coords.longitude,
-            label:'checkin', time:nowStr(),
-            companyId:v.companyId, companyName:companyName
+    if(navigator.geolocation && STATE.onField) {
+      navigator.geolocation.getCurrentPosition(pos=>{
+        STATE.waypoints.push({
+          lat: pos.coords.latitude, lng: pos.coords.longitude,
+          label:'checkin', time:nowStr(),
+          companyId:v.companyId, companyName:companyName,
+          source:'gps'
+        });
+        apiWrite('GPSLive', {
+          id: 'live_'+STATE.user.id+'_'+v.companyId+'_'+Date.now(),
+          repId: STATE.user.id, date: v.date, type: 'waypoint', label: 'Check-in',
+          lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6),
+          accuracy: Math.round(pos.coords.accuracy),
+          companyName: companyName, companyId: v.companyId,
+          time: nowStr(), status: 'on-field'
+        }).catch(()=>{});
+        saveFieldStatus(true, pos.coords.latitude, pos.coords.longitude);
+        update.gpsVerified='TRUE'; visit.gpsVerified='TRUE';
+        apiUpdate('VisitPlan', update);
+        apiWrite('Visits', visit);
+      }, async ()=>{
+        // GPS failed — geocode the company address via Apps Script as fallback
+        console.log('[GPS] Failed at check-in, attempting geocode for:', companyName, companyAddress);
+        try {
+          const gr = await fetch(`${API}?action=geocode`, {
+            method:'POST',
+            body: JSON.stringify({name: companyName, address: companyAddress})
           });
-          // Persist waypoints so they survive app restart
-          try { const s=JSON.parse(localStorage.getItem('ffp_field_session')||'{}'); s.waypoints=STATE.waypoints; localStorage.setItem('ffp_field_session',JSON.stringify(s)); } catch(e) {}
-          // Save check-in waypoint immediately so manager can see it live
-          apiWrite('GPSLive', {
-            id: 'live_'+STATE.user.id+'_'+v.companyId+'_'+Date.now(),
-            repId: STATE.user.id, date: v.date, type: 'waypoint', label: 'Check-in',
-            lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6),
-            accuracy: Math.round(pos.coords.accuracy),
-            companyName: companyName, companyId: v.companyId,
-            time: nowStr(), status: 'on-field'
-          }).catch(()=>{});
-          // Persist updated waypoints to FieldStatus so they survive app restart
-          saveFieldStatus(true, pos.coords.latitude, pos.coords.longitude);
-          update.gpsVerified='TRUE'; visit.gpsVerified='TRUE';
-          apiUpdate('VisitPlan',update); apiWrite('Visits',visit);
-        }, ()=>{ apiUpdate('VisitPlan',update); apiWrite('Visits',visit); },
-        {timeout:5000, enableHighAccuracy:true});
+          const gd = await gr.json();
+          if(gd.success && gd.lat) {
+            STATE.waypoints.push({
+              lat: gd.lat, lng: gd.lng,
+              label:'checkin', time:nowStr(),
+              companyId:v.companyId, companyName:companyName,
+              source:'geocode' // flag so we know this was geocoded not GPS
+            });
+            saveFieldStatus(true, gd.lat, gd.lng);
+            console.log('[GPS] Geocode succeeded for', companyName, gd.lat, gd.lng);
+          } else {
+            // Geocode also failed — add waypoint with no coords, Apps Script will try again at route calc
+            STATE.waypoints.push({
+              lat: null, lng: null,
+              label:'checkin', time:nowStr(),
+              companyId:v.companyId, companyName:companyName,
+              address: companyAddress,
+              source:'none'
+            });
+            console.log('[GPS] Geocode failed too for', companyName);
+          }
+        } catch(e) {
+          STATE.waypoints.push({
+            lat: null, lng: null,
+            label:'checkin', time:nowStr(),
+            companyId:v.companyId, companyName:companyName,
+            address: companyAddress,
+            source:'none'
+          });
+        }
+        saveFieldStatus(true, null, null);
+        apiUpdate('VisitPlan', update);
+        apiWrite('Visits', visit);
+      }, {timeout:5000, enableHighAccuracy:true});
+    } else {
+      apiUpdate('VisitPlan', update);
+      apiWrite('Visits', visit);
+    }
+
+    // Upload photo in background — update visit record with URL when done
+    showToast('Uploading photo...','');
+    uploadPhotoToDrive(b64, file.type, visitId, companyName, v.date).then(url=>{
+      if(url) {
+        visit.photoUrl = url;
+        v.photoUrl = url;
+        apiUpdate('Visits', {id: visitId, photoUrl: url});
+        showToast('Photo saved ✓','success');
       } else {
-        apiUpdate('VisitPlan',update); apiWrite('Visits',visit);
+        v.photoUrl = '';
       }
     });
   };
