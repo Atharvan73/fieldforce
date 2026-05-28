@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v7.9</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.0</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -493,7 +493,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '3.2'; // bump this to force SW cache invalidation
+const APP_VERSION = '3.3'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -570,7 +570,7 @@ let STATE = {
   exp: null, showAI: false, onField: false, fieldVehicle: null, viewRep: null,
   logView: 'mine', planView: 'mine', coView: 'all',
   calMonth: { y: new Date().getFullYear(), m: new Date().getMonth() },
-  gpsWatcher: null, gpsTrail: [], currentDayKm: 0, waypoints: [],
+  gpsWatcher: null, gpsTrail: [], currentDayKm: 0, waypoints: [], stoppingField: false,
 };
 
 // ── UTILS ────────────────────────────────────────────────────────────────────
@@ -3686,7 +3686,17 @@ function renderGPS() {
   const rId=isM?STATE.viewRep:STATE.user.id;
   const r=rep(rId);
   const wk=weekRange(todayStr());
-  const logs=STATE.gpsLogs.filter(g=>g.repId===rId&&g.date>=wk.start&&g.date<=wk.end);
+  const rawLogs=STATE.gpsLogs.filter(g=>g.repId===rId&&g.date>=wk.start&&g.date<=wk.end);
+  // Defensive de-dupe: one log per day. Older builds could append a duplicate row;
+  // keep whichever entry has the most detailed route (most waypoints) so the day
+  // is never counted twice in KM/TA.
+  const byDate={};
+  rawLogs.forEach(g=>{
+    let wpLen=0; try{ wpLen=JSON.parse(g.waypoints||'[]').length; }catch(e){}
+    const cur=byDate[g.date];
+    if(!cur || wpLen>cur._wpLen){ byDate[g.date]={...g,_wpLen:wpLen}; }
+  });
+  const logs=Object.values(byDate).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   const weekKm=logs.reduce((s,g)=>s+Number(g.totalKm||0),0);
   const weekTA=logs.reduce((s,g)=>s+Number(g.taAmount||0),0);
   const claim=STATE.taClaims.find(c=>c.repId===rId&&c.weekStart===wk.start);
@@ -3870,14 +3880,25 @@ function saveFieldStatus(onField, lat, lng) {
     .catch(()=>{ apiWrite('FieldStatus', payload); });
 }
 async function stopField() {
+  if(STATE.stoppingField) return;            // guard: ignore repeat taps while a save is in flight
   if(!confirm('Mark yourself off field? This will save today\'s KM log.')) return;
+  STATE.stoppingField=true;
   stopGPS();
   STATE.onField=false;
+  renderGPS();                               // flip the banner now so the button can't be tapped again
   showToast('Getting final location...','');
 
   const saveLog = async(finalLat, finalLng) => {
+   try {
+    // Snapshot shared state into locals, then clear it immediately. This way a
+    // stray re-trigger has nothing left to reuse or corrupt mid-flight.
+    const wps = [...(STATE.waypoints||[])];
+    const gpsKm = STATE.currentDayKm;
+    const veh0 = STATE.fieldVehicle;
+    STATE.waypoints=[]; STATE.gpsTrail=[]; STATE.currentDayKm=0; STATE.fieldVehicle=null;
+
     if(finalLat) {
-      STATE.waypoints.push({
+      wps.push({
         lat: finalLat, lng: finalLng,
         label: 'End', time: nowStr(),
         companyId: null, companyName: 'End (Home/Office)'
@@ -3887,15 +3908,15 @@ async function stopField() {
     // Write off-field status with end location to sheet
     saveFieldStatus(false, finalLat, finalLng);
 
-    let totalKm = STATE.currentDayKm;
+    let totalKm = gpsKm;
     let routeLegs = [];
 
-    if(STATE.waypoints.length >= 2) {
+    if(wps.length >= 2) {
       showToast('Calculating road distance via Google Maps...','');
       try {
         const r = await fetch(`${API}?action=calcRoute`, {
           method:'POST',
-          body: JSON.stringify({waypoints: STATE.waypoints})
+          body: JSON.stringify({waypoints: wps})
         });
         const d = await r.json();
         if(d.success && d.totalKm>0) {
@@ -3908,27 +3929,38 @@ async function stopField() {
     }
 
     // Allow manual override if no waypoints or GPS failed
-    if(totalKm===0||STATE.waypoints.length<2) {
-      const manual = prompt(`Enter today's total distance (km):\n(GPS tracking gave: ${STATE.currentDayKm.toFixed(1)} km)`);
+    if(totalKm===0||wps.length<2) {
+      const manual = prompt(`Enter today's total distance (km):\n(GPS tracking gave: ${gpsKm.toFixed(1)} km)`);
       if(manual && !isNaN(parseFloat(manual))) totalKm = parseFloat(manual);
     }
 
+    // Upsert: if a log already exists for this rep today, update it in place
+    // instead of appending a second row (prevents the day being double-counted).
+    const existing = STATE.gpsLogs.find(g=>g.repId===STATE.user.id && g.date===todayStr());
+    const veh = veh0 || existing?.vehicle || 'two-wheeler';
     const log = {
-      id:uid(), repId:STATE.user.id, date:todayStr(),
+      id: existing?.id || uid(), repId:STATE.user.id, date:todayStr(),
       dayOfWeek:new Date().toLocaleDateString('en-IN',{weekday:'short'}),
-      totalKm:Number(totalKm).toFixed(2), vehicle:STATE.fieldVehicle,
-      kmRate:kmRate(STATE.fieldVehicle),
-      taAmount:taAmt(Number(totalKm), STATE.fieldVehicle),
-      onFieldStart: STATE.waypoints[0]?.time||'',
+      totalKm:Number(totalKm).toFixed(2), vehicle:veh,
+      kmRate:kmRate(veh),
+      taAmount:taAmt(Number(totalKm), veh),
+      onFieldStart: wps[0]?.time||'',
       onFieldEnd: nowStr(),
-      waypoints: JSON.stringify(STATE.waypoints),
+      waypoints: JSON.stringify(wps),
       routeLegs: JSON.stringify(routeLegs)
     };
-    await apiWrite('GPSLogs', log);
-    STATE.gpsLogs.push(log);
-    STATE.currentDayKm=0; STATE.gpsTrail=[]; STATE.fieldVehicle=null; STATE.waypoints=[];
+    if(existing) {
+      await apiUpdate('GPSLogs', log);
+      Object.assign(existing, log);
+    } else {
+      await apiWrite('GPSLogs', log);
+      STATE.gpsLogs.push(log);
+    }
     showToast(`Off field ✓ · ${Number(totalKm).toFixed(1)} km · ${fmtINR(log.taAmount)} TA earned`,'success');
     renderGPS();
+   } finally {
+    STATE.stoppingField=false;               // always release the lock, even on error
+   }
   };
 
   if(navigator.geolocation) {
