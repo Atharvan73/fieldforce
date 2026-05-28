@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v7.6</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v7.7</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -783,9 +783,24 @@ async function loadAll(navigateAfter=false) {
       if(myStatus && String(myStatus.onField).toUpperCase()==='TRUE') {
         STATE.onField = true;
         STATE.fieldVehicle = myStatus.vehicle||'two-wheeler';
-        if(!STATE.waypoints?.length && myStatus.lat) {
-          STATE.waypoints = [{lat:Number(myStatus.lat), lng:Number(myStatus.lng), label:'Start', time:myStatus.time||'', companyId:null, companyName:'Start (Home/Office)'}];
+        // Restore waypoints from sheet if available
+        if(myStatus.waypoints) {
+          try {
+            const saved = JSON.parse(myStatus.waypoints);
+            if(Array.isArray(saved) && saved.length>0) {
+              STATE.waypoints = saved;
+            }
+          } catch(e) {}
         }
+        // Fallback: if no waypoints saved but we have start lat/lng, reconstruct start point
+        if(!STATE.waypoints?.length && myStatus.lat) {
+          STATE.waypoints = [{
+            lat:Number(myStatus.lat), lng:Number(myStatus.lng),
+            label:'Start', time:myStatus.time||'',
+            companyId:null, companyName:'Start (Home/Office)'
+          }];
+        }
+        showToast('On-field session restored ✓','success');
         if(['gps','home'].includes(STATE.page)) renderPage(STATE.page);
       }
     }
@@ -3225,6 +3240,8 @@ async function checkIn(id) {
             companyName: companyName, companyId: v.companyId,
             time: nowStr(), status: 'on-field'
           }).catch(()=>{});
+          // Persist updated waypoints to FieldStatus so they survive app restart
+          saveFieldStatus(true, pos.coords.latitude, pos.coords.longitude);
           update.gpsVerified='TRUE'; visit.gpsVerified='TRUE';
           apiUpdate('VisitPlan',update); apiWrite('Visits',visit);
         }, ()=>{ apiUpdate('VisitPlan',update); apiWrite('Visits',visit); },
@@ -3799,7 +3816,8 @@ function saveFieldStatus(onField, lat, lng) {
     onField: onField ? 'TRUE' : 'FALSE',
     vehicle: STATE.fieldVehicle||'',
     lat: lat||'', lng: lng||'',
-    time: nowStr(), date: todayStr()
+    time: nowStr(), date: todayStr(),
+    waypoints: onField ? JSON.stringify(STATE.waypoints||[]) : ''
   };
   // Try update first (overwrites existing row), fall back to write
   fetch(`${API}?action=update&sheet=FieldStatus`, {method:'POST', body:JSON.stringify(payload)})
@@ -3811,7 +3829,6 @@ async function stopField() {
   if(!confirm('Mark yourself off field? This will save today\'s KM log.')) return;
   stopGPS();
   STATE.onField=false;
-  saveFieldStatus(false, null, null); // write FALSE to sheet immediately
   showToast('Getting final location...','');
 
   const saveLog = async(finalLat, finalLng) => {
@@ -3822,6 +3839,9 @@ async function stopField() {
         companyId: null, companyName: 'End (Home/Office)'
       });
     }
+
+    // Write off-field status with end location to sheet
+    saveFieldStatus(false, finalLat, finalLng);
 
     let totalKm = STATE.currentDayKm;
     let routeLegs = [];
@@ -3870,8 +3890,11 @@ async function stopField() {
   if(navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       pos => saveLog(pos.coords.latitude, pos.coords.longitude),
-      () => saveLog(null, null),
-      {enableHighAccuracy:true, timeout:8000}
+      () => {
+        showToast('Location unavailable — saving without end coordinates','');
+        saveLog(null, null);
+      },
+      {enableHighAccuracy:true, timeout:15000, maximumAge:0}
     );
   } else {
     saveLog(null, null);
