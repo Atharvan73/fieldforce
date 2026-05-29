@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.1</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.2</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -494,7 +494,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '3.4'; // bump this to force SW cache invalidation
+const APP_VERSION = '3.5'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -3178,126 +3178,102 @@ function openVisitDetail(id) {
   openPanel('visit');
 }
 
-async function checkIn(id) {
-  const v = STATE.planItems.find(x=>x.id===id); if(!v) return;
-  const company = co(v.companyId);
+// In-flight check-in guard (#3): prevents a double-tap creating two visits.
+const _checkinInFlight = new Set();
 
+async function checkIn(id) {
+  if(_checkinInFlight.has(id)) return;                 // #3 re-entry guard
+  const v = STATE.planItems.find(x=>x.id===id); if(!v) return;
+  if(v.status==='in-progress'||v.status==='completed') return; // already checked in
+  const company = co(v.companyId);
+  const companyName = company?.name || 'Unknown';      // #4 undefined-company guards
+  const companyAddress = company?.address || '';
+  _checkinInFlight.add(id);
+
+  // #1 — Record the visit IMMEDIATELY, before (and independent of) the photo.
+  // The photo is now an optional follow-up, so a cancelled camera can never
+  // leave a check-in unsaved.
+  const visitId = uid();
+  const ct = nowStr();
+  const update = {id, status:'in-progress', checkinTime:ct, gpsVerified:'FALSE'};
+  Object.assign(v, update);
+  v.photoUrl = '';
+  const visit = {
+    id:visitId, repId:STATE.user.id, companyId:v.companyId, date:v.date, time:v.time,
+    meetingWith:v.meetingWith, designation:v.designation, status:'in-progress',
+    checkinTime:ct, checkoutTime:'', itemsPitched:v.itemsToPitch, remarks:'',
+    rfqShared:'FALSE', sampleRequired:'FALSE', gpsVerified:'FALSE',
+    nextAction:'', nextActionDate:'', photoUrl:''
+  };
+  STATE.visits.push(visit);
+  showToast('Checked in ✓','success');
+  renderPlan();
+
+  // Persist right away — don't wait on GPS or photo.
+  apiUpdate('VisitPlan', update);
+  apiWrite('Visits', visit);
+
+  // Attach location in the background and upgrade the record to GPS-verified.
+  const attachLocation = (lat,lng,source,accuracy)=>{
+    if(lat!=null){
+      STATE.waypoints.push({lat,lng,label:'checkin',time:ct,companyId:v.companyId,companyName,source});
+      saveFieldStatus(true, lat, lng);
+      if(source==='gps'){
+        apiWrite('GPSLive', {
+          id:'live_'+STATE.user.id+'_'+v.companyId+'_'+Date.now(),
+          repId:STATE.user.id, date:v.date, type:'waypoint', label:'Check-in',
+          lat:Number(lat).toFixed(6), lng:Number(lng).toFixed(6),
+          accuracy: accuracy!=null?Math.round(accuracy):'',
+          companyName, companyId:v.companyId, time:ct, status:'on-field'
+        }).catch(()=>{});
+        v.gpsVerified='TRUE'; visit.gpsVerified='TRUE';
+        apiUpdate('VisitPlan', {id, gpsVerified:'TRUE'});
+        apiUpdate('Visits', {id:visitId, gpsVerified:'TRUE'});
+        renderPlan();
+      }
+    } else {
+      STATE.waypoints.push({lat:null,lng:null,label:'checkin',time:ct,companyId:v.companyId,companyName,address:companyAddress,source:'none'});
+      saveFieldStatus(true, null, null);
+    }
+  };
+
+  if(navigator.geolocation && STATE.onField){
+    navigator.geolocation.getCurrentPosition(
+      pos=>attachLocation(pos.coords.latitude, pos.coords.longitude, 'gps', pos.coords.accuracy),
+      async ()=>{
+        // GPS failed — geocode the company address via Apps Script as a fallback.
+        try {
+          const gr = await fetch(`${API}?action=geocode`, {method:'POST', body:JSON.stringify({name:companyName, address:companyAddress})});
+          const gd = await gr.json();
+          if(gd.success && gd.lat) attachLocation(gd.lat, gd.lng, 'geocode');
+          else attachLocation(null, null, 'none');
+        } catch(e) { attachLocation(null, null, 'none'); }
+      },
+      {timeout:10000, enableHighAccuracy:true, maximumAge:30000}   // #5 aligned timeout + allow a recent fix
+    );
+  }
+
+  // Optional photo — attach to the (already saved) visit if the rep provides one.
+  const releaseLock = ()=>_checkinInFlight.delete(id);
   const input = document.createElement('input');
   input.type='file'; input.accept='image/*'; input.capture='environment';
   input.onchange = async () => {
+    releaseLock();
     if(!input.files[0]) return;
     const file = input.files[0];
-
-    // Read as base64
-    const b64 = await new Promise(res=>{
-      const r = new FileReader();
-      r.onload = ()=>res(r.result.split(',')[1]);
-      r.readAsDataURL(file);
-    });
-
-    // Optimistic update — re-render immediately with placeholder
-    const update = {id, status:'in-progress', checkinTime:nowStr(), gpsVerified:'FALSE'};
-    Object.assign(v, update);
-    v.photoUrl = 'uploading';
-    showToast('Checked in ✓ · Uploading photo...','success');
-    renderPlan();
-
-    const visitId = uid();
-    const visit = {
-      id:visitId, repId:STATE.user.id, companyId:v.companyId, date:v.date, time:v.time,
-      meetingWith:v.meetingWith, designation:v.designation, status:'in-progress',
-      checkinTime:nowStr(), checkoutTime:'', itemsPitched:v.itemsToPitch, remarks:'',
-      rfqShared:'FALSE', sampleRequired:'FALSE', gpsVerified:'FALSE',
-      nextAction:'', nextActionDate:'', photoUrl:''
-    };
-    STATE.visits.push(visit);
-
-    // Save visit to sheet IMMEDIATELY — don't wait for photo upload
-    const companyName = company.name||'Unknown';
-    const companyAddress = company.address||'';
-
-    if(navigator.geolocation && STATE.onField) {
-      navigator.geolocation.getCurrentPosition(pos=>{
-        STATE.waypoints.push({
-          lat: pos.coords.latitude, lng: pos.coords.longitude,
-          label:'checkin', time:nowStr(),
-          companyId:v.companyId, companyName:companyName,
-          source:'gps'
-        });
-        apiWrite('GPSLive', {
-          id: 'live_'+STATE.user.id+'_'+v.companyId+'_'+Date.now(),
-          repId: STATE.user.id, date: v.date, type: 'waypoint', label: 'Check-in',
-          lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6),
-          accuracy: Math.round(pos.coords.accuracy),
-          companyName: companyName, companyId: v.companyId,
-          time: nowStr(), status: 'on-field'
-        }).catch(()=>{});
-        saveFieldStatus(true, pos.coords.latitude, pos.coords.longitude);
-        update.gpsVerified='TRUE'; visit.gpsVerified='TRUE';
-        apiUpdate('VisitPlan', update);
-        apiWrite('Visits', visit);
-      }, async ()=>{
-        // GPS failed — geocode the company address via Apps Script as fallback
-        console.log('[GPS] Failed at check-in, attempting geocode for:', companyName, companyAddress);
-        try {
-          const gr = await fetch(`${API}?action=geocode`, {
-            method:'POST',
-            body: JSON.stringify({name: companyName, address: companyAddress})
-          });
-          const gd = await gr.json();
-          if(gd.success && gd.lat) {
-            STATE.waypoints.push({
-              lat: gd.lat, lng: gd.lng,
-              label:'checkin', time:nowStr(),
-              companyId:v.companyId, companyName:companyName,
-              source:'geocode' // flag so we know this was geocoded not GPS
-            });
-            saveFieldStatus(true, gd.lat, gd.lng);
-            console.log('[GPS] Geocode succeeded for', companyName, gd.lat, gd.lng);
-          } else {
-            // Geocode also failed — add waypoint with no coords, Apps Script will try again at route calc
-            STATE.waypoints.push({
-              lat: null, lng: null,
-              label:'checkin', time:nowStr(),
-              companyId:v.companyId, companyName:companyName,
-              address: companyAddress,
-              source:'none'
-            });
-            console.log('[GPS] Geocode failed too for', companyName);
-          }
-        } catch(e) {
-          STATE.waypoints.push({
-            lat: null, lng: null,
-            label:'checkin', time:nowStr(),
-            companyId:v.companyId, companyName:companyName,
-            address: companyAddress,
-            source:'none'
-          });
-        }
-        saveFieldStatus(true, null, null);
-        apiUpdate('VisitPlan', update);
-        apiWrite('Visits', visit);
-      }, {timeout:5000, enableHighAccuracy:true});
-    } else {
-      apiUpdate('VisitPlan', update);
-      apiWrite('Visits', visit);
-    }
-
-    // Upload photo in background — update visit record with URL when done
+    const b64 = await new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.readAsDataURL(file); });
+    v.photoUrl='uploading'; renderPlan();
     showToast('Uploading photo...','');
     uploadPhotoToDrive(b64, file.type, visitId, companyName, v.date).then(url=>{
-      if(url) {
-        visit.photoUrl = url;
-        v.photoUrl = url;
-        apiUpdate('Visits', {id: visitId, photoUrl: url});
-        showToast('Photo saved ✓','success');
-      } else {
-        v.photoUrl = '';
-      }
+      if(url){ visit.photoUrl=url; v.photoUrl=url; apiUpdate('Visits',{id:visitId, photoUrl:url}); showToast('Photo saved ✓','success'); }
+      else { v.photoUrl=''; renderPlan(); }
     });
   };
+  input.oncancel = releaseLock;            // user dismissed the picker
+  setTimeout(releaseLock, 60000);          // safety net if neither event fires
   input.click();
 }
+
 
 async function uploadPhotoToDrive(b64, mimeType, visitId, companyName, date) {
   try {
