@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.5</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.2</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -494,7 +494,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '3.8'; // bump this to force SW cache invalidation
+const APP_VERSION = '3.9'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -748,7 +748,7 @@ async function loadAll(navigateAfter=false) {
   STATE.companies=(companies||[]).filter(c=>String(c.active||'').trim().toUpperCase()!=='FALSE');
   STATE.targets=(targets||[]).filter(t=>String(t.active||'').trim().toUpperCase()!=='FALSE');
   STATE.visits=data.visits; STATE.planItems=data.planItems; STATE.contacts=contacts||[];
-  STATE.rfqs=rfqs||[]; normalizeRFQs(STATE.rfqs);
+  STATE.rfqs=rfqs||[];
   if(!STATE.viewRep && STATE.user?.role==='manager') STATE.viewRep = myReps()[0]?.id;
 
   // Cache core sheets
@@ -824,7 +824,7 @@ async function loadFromCacheOrFetch() {
     STATE.companies=companies.filter(c=>String(c.active||'').trim().toUpperCase()!=='FALSE');
     STATE.targets=targets.filter(t=>String(t.active||'').trim().toUpperCase()!=='FALSE');
     STATE.visits=data.visits; STATE.planItems=data.planItems; STATE.contacts=contacts;
-    STATE.rfqs=rfqs||[]; STATE.pos=[]; STATE.gpsLogs=[]; STATE.taClaims=[]; STATE.calEvents=[]; STATE.approvals=[]; STATE.tasks=[]; normalizeRFQs(STATE.rfqs);
+    STATE.rfqs=rfqs||[]; STATE.pos=[]; STATE.gpsLogs=[]; STATE.taClaims=[]; STATE.calEvents=[]; STATE.approvals=[]; STATE.tasks=[];
     if(!STATE.viewRep && STATE.user.role==='manager') STATE.viewRep = myReps()[0]?.id;
     DEFERRED_SHEETS.forEach(s=>{ const c=cacheGet(s); if(c) {
       if(s==='POs') STATE.pos=c;
@@ -4207,29 +4207,6 @@ function capturePhoto(visitId) {
 // ── RFQ TRACKER ───────────────────────────────────────────────────────────────
 
 const RFQ_STATUSES = ['New Lead','Quoted','Order Received','Order Lost','Unmatched PO'];
-
-// Resolve an RFQ's status defensively. Sheet headers on this data have drifted
-// in case before (customerEmail vs customeremail), and the email watcher can
-// write blanks/variants. Read the field case-insensitively, map known synonyms,
-// and treat blank/unknown as "New Lead" so an RFQ can never silently vanish
-// from every bucket on a status-string mismatch.
-const RFQ_STATUS_SYNONYMS = {
-  'new lead':'New Lead','new':'New Lead','lead':'New Lead','open':'New Lead','pending':'New Lead','enquiry':'New Lead','inquiry':'New Lead',
-  'quoted':'Quoted','quote sent':'Quoted','quotation sent':'Quoted','awaited':'Quoted','quoted/awaited':'Quoted',
-  'order received':'Order Received','order':'Order Received','won':'Order Received','closed won':'Order Received','po received':'Order Received',
-  'order lost':'Order Lost','lost':'Order Lost','closed lost':'Order Lost',
-  'unmatched po':'Unmatched PO'
-};
-function normalizeRFQStatus(r) {
-  let s = String((r && (r.status ?? r.Status ?? r.STATUS)) || '').trim();
-  if(!s) return 'New Lead';
-  if(RFQ_STATUSES.includes(s)) return s;
-  return RFQ_STATUS_SYNONYMS[s.toLowerCase()] || 'New Lead';
-}
-function normalizeRFQs(arr) {
-  (arr||[]).forEach(r=>{ r.status = normalizeRFQStatus(r); });
-  return arr;
-}
 
 function rfqStatusBadge(status) {
   const map = {
