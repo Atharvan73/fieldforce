@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.2</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.6</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -494,7 +494,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '3.9'; // bump this to force SW cache invalidation
+const APP_VERSION = '4.0'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -3658,8 +3658,36 @@ async function rejectPO(id) {
 
 // ── GPS & TRAVEL ──────────────────────────────────────────────────────────────
 // ── GPS shared helpers ────────────────────────────────────────────────────────
+// Selected week for the GPS/TA views (Monday ISO date; empty = current week).
+function gpsViewWeek() { return weekRange(STATE.gpsWeekStart || todayStr()); }
+function changeGpsWeek(delta, which) {
+  const cur = gpsViewWeek();
+  const d = new Date(cur.start); d.setDate(d.getDate() + delta*7);
+  const curMon = weekRange(todayStr()).start;
+  let ns = d.toISOString().slice(0,10);
+  if(ns > curMon) ns = curMon;            // never navigate into the future
+  STATE.gpsWeekStart = ns;
+  (which==='teamgps' ? renderTeamGPS : renderGPS)();
+}
+function gpsWeekNavHtml(which) {
+  const wk = gpsViewWeek();
+  const curMon = weekRange(todayStr()).start;
+  const isCurrent = wk.start === curMon;
+  const diff = Math.round((new Date(curMon) - new Date(wk.start)) / (7*86400000));
+  const label = isCurrent ? 'This week' : diff===1 ? 'Last week' : `${diff} weeks ago`;
+  return `
+    <div class="row-between" style="margin-bottom:12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:6px 8px">
+      <button class="btn btn-sm" onclick="changeGpsWeek(-1,'${which}')" title="Previous week"><i class="ti ti-chevron-left"></i></button>
+      <div style="text-align:center;line-height:1.3">
+        <div style="font-size:12px;font-weight:600">${wk.start} → ${wk.end}</div>
+        <div style="font-size:10px;color:var(--text3)">${label}</div>
+      </div>
+      <button class="btn btn-sm" onclick="changeGpsWeek(1,'${which}')" ${isCurrent?'disabled style="opacity:.35;cursor:default"':''} title="Next week"><i class="ti ti-chevron-right"></i></button>
+    </div>`;
+}
+
 function gpsWeekData(rId) {
-  const wk=weekRange(todayStr());
+  const wk=gpsViewWeek();
   const rawLogs=STATE.gpsLogs.filter(g=>g.repId===rId&&g.date>=wk.start&&g.date<=wk.end);
   // Defensive de-dupe: one log per day. Older builds could append a duplicate row;
   // keep whichever entry has the most detailed route so a day is never counted twice.
@@ -3782,6 +3810,7 @@ function renderGPS() {
       <div style="margin-top:8px;font-size:10px;color:var(--text3)">Distance will be calculated by road when you mark off field</div>
     </div>`:''}
 
+    ${gpsWeekNavHtml('gps')}
     ${gpsDailyLogsHtml(logs, me.name)}
     ${gpsWeeklyHtml(me.id, {canSubmit:true})}
     ${GPS_INFO_BOX}`;
@@ -3814,6 +3843,7 @@ function renderTeamGPS() {
         </div>`;
       }).join('')}
     </div>
+    ${rId?gpsWeekNavHtml('teamgps'):''}
     ${rId?gpsDailyLogsHtml(logs, r?.name):'<div class="text-sm" style="text-align:center;padding:12px;color:var(--text3)">No reps assigned</div>'}
     ${rId?gpsWeeklyHtml(rId, {isManagerView:true}):''}
     ${GPS_INFO_BOX}`;
