@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.9</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.0</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -495,7 +495,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '4.3'; // bump this to force SW cache invalidation
+const APP_VERSION = '4.4'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -682,11 +682,17 @@ async function apiWrite(sheet, payload) {
   } catch(e) { showToast('Network error','error'); return false; }
 }
 async function apiDelete(sheetName, id) {
-  const r = await fetch(`${API}?action=delete&sheet=${sheetName}`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({id})
-  });
-  return r.json().catch(()=>({success:false}));
+  try {
+    const r = await fetch(`${API}?action=delete&sheet=${sheetName}`, {
+      method: 'POST',
+      body: JSON.stringify({id})
+    });
+    const d = await r.json();
+    if(!d.success) throw new Error(d.error || 'Delete failed');
+    return d;
+  } catch(e) {
+    throw e;   // re-throw so callers can roll back via .catch
+  }
 }
 
 async function apiUpdate(sheet, payload) {
