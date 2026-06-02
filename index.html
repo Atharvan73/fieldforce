@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.7</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.8</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -495,7 +495,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '4.1'; // bump this to force SW cache invalidation
+const APP_VERSION = '4.2'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -574,6 +574,7 @@ let STATE = {
   logView: 'mine', planView: 'mine', coView: 'all',
   calMonth: { y: new Date().getFullYear(), m: new Date().getMonth() },
   gpsWatcher: null, gpsTrail: [], currentDayKm: 0, waypoints: [], stoppingField: false,
+  gpsMgrMode: 'mine',    // manager GPS toggle: 'mine' | 'team'
 };
 
 // ── UTILS ────────────────────────────────────────────────────────────────────
@@ -680,6 +681,14 @@ async function apiWrite(sheet, payload) {
     return d.success;
   } catch(e) { showToast('Network error','error'); return false; }
 }
+async function apiDelete(sheetName, id) {
+  const r = await fetch(`${API}?action=delete&sheet=${sheetName}`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id})
+  });
+  return r.json().catch(()=>({success:false}));
+}
+
 async function apiUpdate(sheet, payload) {
   try {
     const r = await fetch(`${API}?action=update&sheet=${sheet}`, { method:'POST', body:JSON.stringify(payload) });
@@ -1189,7 +1198,13 @@ function renderMgrHome(el) {
     </div>
     ${pend>0?`<div class="card" style="border-color:rgba(245,158,11,.3)">
       <div style="font-size:13px;font-weight:600;margin-bottom:10px"><i class="ti ti-bell" style="color:var(--amber);vertical-align:-2px"></i> Pending actions</div>
-      ${STATE.approvals.filter(a=>a.status==='pending').map(ar=>`<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:16px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Company removal request</div><div class="text-sm">${rep(ar.repId).name} · ${co(ar.companyId).name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="resolveApproval('${ar.id}','approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="resolveApproval('${ar.id}','rejected')">Reject</button></div></div></div>`).join('')}
+      ${STATE.approvals.filter(a=>a.status==='pending').map(ar=>{
+        if(ar.type==='remove_contact'){
+          const ct=STATE.contacts.find(c=>c.id===ar.poId);
+          return`<div class="warn-box"><i class="ti ti-user-minus" style="color:var(--amber);font-size:16px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Contact removal request</div><div class="text-sm">${rep(ar.repId)?.name} wants to remove <strong>${ct?.name||'contact'}</strong> from ${co(ar.companyId)?.name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="resolveApproval('${ar.id}','approved')">Remove</button><button class="btn btn-danger btn-sm" onclick="resolveApproval('${ar.id}','rejected')">Reject</button></div></div></div>`;
+        }
+        return`<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:16px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Company removal request</div><div class="text-sm">${rep(ar.repId)?.name} · ${co(ar.companyId)?.name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="resolveApproval('${ar.id}','approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="resolveApproval('${ar.id}','rejected')">Reject</button></div></div></div>`;
+      }).join('')}
       ${STATE.pos.filter(p=>p.status==='pending').map(po=>`<div class="info-box"><i class="ti ti-file-invoice" style="color:var(--blue);font-size:16px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:#93C5FD">PO Verification · ${fmt(po.amount)}</div><div class="text-sm">${rep(po.repId).name} · ${co(po.companyId).name}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="verifyPO('${po.id}')">Verify</button><button class="btn btn-danger btn-sm" onclick="rejectPO('${po.id}')">Reject</button></div></div></div>`).join('')}
     </div>`:''}`;
 }
@@ -1641,6 +1656,7 @@ function openCoDetail(cId) {
               ${ct.email?`<div class="text-xs" style="color:var(--text3)"><i class="ti ti-mail" style="font-size:9px"></i> ${ct.email}</div>`:''}
             </div>
             <button class="btn btn-sm" style="padding:2px 8px;font-size:10px;flex-shrink:0" onclick="toggleEl('edit-ct-${ct.id}')"><i class="ti ti-edit"></i> Edit</button>
+            <button class="btn btn-sm" style="padding:2px 6px;font-size:10px;flex-shrink:0;color:var(--red);border-color:rgba(239,68,68,.3)" onclick="removeContact('${ct.id}','${c.id}')"><i class="ti ti-trash"></i></button>
           </div>
           <div id="edit-ct-${ct.id}" style="display:none;background:var(--bg3);border-radius:10px;padding:12px;margin-bottom:8px">
             <div class="grid2" style="gap:8px;margin-bottom:8px">
@@ -1994,6 +2010,32 @@ async function saveNewContactToCompany(coId) {
 // ── Contact edit helpers ──────────────────────────────────────────────────────
 function toggleEl(id) { const el=document.getElementById(id); if(el) el.style.display=el.style.display==='none'?'block':'none'; }
 function escAtt(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+// Dispatcher — managers delete directly, reps send a request.
+async function removeContact(ctId, coId) {
+  const ct = STATE.contacts.find(x=>x.id===ctId);
+  if(!ct) return;
+  if(STATE.user.role==='manager') {
+    if(!confirm(`Remove "${ct.name}" from this company?`)) return;
+    STATE.contacts = STATE.contacts.filter(x=>x.id!==ctId);
+    await apiDelete('Contacts', ctId);
+    showToast('Contact removed ✓','success');
+    openCoDetail(coId);
+  } else {
+    const reason = prompt(`Why do you want to remove "${ct.name}"?\n(Your manager will be asked to approve this.)`);
+    if(!reason) return;
+    const ar = {
+      id: uid(), type: 'remove_contact',
+      repId: STATE.user.id, companyId: coId,
+      poId: ctId,        // poId reused as the contact id
+      reason, status: 'pending',
+      requestDate: todayStr(), resolvedBy: '', resolvedDate: ''
+    };
+    STATE.approvals.push(ar);
+    await apiWrite('Approvals', ar);
+    showToast('Removal request sent to manager ✓','success');
+  }
+}
 
 async function saveEditContact(ctId, coId) {
   const name = document.getElementById('ect-name-'+ctId)?.value?.trim();
@@ -3818,10 +3860,53 @@ const GPS_INFO_BOX = `
 function renderGPS() {
   const el=document.getElementById('page-gps');
   const me=STATE.user;
+  const isM = me.role==='manager';
+
+  // Manager mode toggle ─ My GPS or a Rep's GPS, without leaving the page.
+  const mgrToggle = isM ? `
+    <div class="row-between" style="margin-bottom:12px">
+      <div style="font-size:16px;font-weight:600">${STATE.gpsMgrMode==='mine'?'My GPS &amp; Travel':'Rep\'s GPS &amp; Travel'}</div>
+      <select class="inp" style="width:auto;font-size:11px;padding:4px 8px" onchange="STATE.gpsMgrMode=this.value;renderGPS()">
+        <option value="mine"${STATE.gpsMgrMode==='mine'?' selected':''}>My GPS &amp; Travel</option>
+        <option value="team"${STATE.gpsMgrMode==='team'?' selected':''}>Rep\'s GPS &amp; Travel</option>
+      </select>
+    </div>` : `<div style="font-size:16px;font-weight:600;margin-bottom:12px">My GPS &amp; Travel</div>`;
+
+  // ── Rep's GPS (team mode for manager) ───────────────────────────────────────
+  if(isM && STATE.gpsMgrMode==='team') {
+    const reps=myReps();
+    if(!STATE.viewRep || !reps.some(r=>r.id===STATE.viewRep)) STATE.viewRep=reps[0]?.id||null;
+    const rId=STATE.viewRep;
+    const r=rep(rId);
+    const {logs}=rId?gpsWeekData(rId):{logs:[]};
+    el.innerHTML=`
+      ${mgrToggle}
+      <div class="chip-row">${reps.map(r2=>`<span class="chip${STATE.viewRep===r2.id?' active':''}" onclick="STATE.viewRep='${r2.id}';renderGPS()">${r2.name.split(' ')[0]}</span>`).join('')}</div>
+      <div style="margin-bottom:12px">
+        ${reps.map(r2=>{
+          const liveEntries=(STATE.gpsLive||[]).filter(g=>g.repId===r2.id&&g.date===todayStr()).sort((a,b)=>b.time?.localeCompare(a.time||'')||0);
+          const latest=liveEntries[0]; const isOnField=latest?.status==='on-field';
+          return`<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg2);border:1px solid ${isOnField?'rgba(16,185,129,.3)':'var(--border)'};border-radius:10px;margin-bottom:6px">
+            <div style="width:8px;height:8px;border-radius:50%;background:${isOnField?'var(--emerald)':'var(--text3)'};flex-shrink:0${isOnField?';animation:pulse 1.5s infinite':''}"></div>
+            <div style="flex:1"><div style="font-size:12px;font-weight:500">${r2.name}</div>
+              <div style="font-size:10px;color:var(--text3)">${isOnField?`On field · Last seen at ${latest.companyName} · ${latest.time}`:'Off field today'}</div>
+            </div>
+            ${isOnField&&latest.lat?`<a href="https://maps.google.com/?q=${latest.lat},${latest.lng}" target="_blank" style="font-size:10px;color:var(--indigo2);text-decoration:none"><i class="ti ti-map-pin" style="font-size:14px"></i></a>`:''}
+          </div>`;
+        }).join('')}
+      </div>
+      ${rId?gpsWeekNavHtml('gps'):''}
+      ${rId?gpsDailyLogsHtml(logs,r?.name):'<div class="text-sm" style="text-align:center;padding:12px;color:var(--text3)">No reps assigned</div>'}
+      ${rId?gpsWeeklyHtml(rId,{isManagerView:true}):''}
+      ${GPS_INFO_BOX}`;
+    return;
+  }
+
+  // ── My own GPS (self view) ──────────────────────────────────────────────────
   const {logs} = gpsWeekData(me.id);
   const liveWaypoints = STATE.waypoints||[];
   el.innerHTML=`
-    <div style="font-size:16px;font-weight:600;margin-bottom:12px">My GPS &amp; Travel</div>
+    ${mgrToggle}
 
     <div class="on-field-banner${STATE.onField?' active':''}">
       <div class="field-dot${STATE.onField?' active':''}"></div>
@@ -4113,7 +4198,13 @@ function renderTeam() {
     }).join('')}
     ${STATE.approvals.filter(a=>a.status==='pending').length?`<div class="card" style="border-color:rgba(245,158,11,.3)">
       <div style="font-size:13px;font-weight:600;margin-bottom:10px"><i class="ti ti-bell" style="color:var(--amber);vertical-align:-2px"></i> Approval queue</div>
-      ${STATE.approvals.filter(a=>a.status==='pending').map(ar=>`<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:15px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Company removal request</div><div class="text-sm">${rep(ar.repId).name} · ${co(ar.companyId).name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="resolveApproval('${ar.id}','approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="resolveApproval('${ar.id}','rejected')">Reject</button></div></div></div>`).join('')}
+      ${STATE.approvals.filter(a=>a.status==='pending').map(ar=>{
+        if(ar.type==='remove_contact'){
+          const ct=STATE.contacts.find(c=>c.id===ar.poId);
+          return`<div class="warn-box"><i class="ti ti-user-minus" style="color:var(--amber);font-size:15px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Contact removal request</div><div class="text-sm">${rep(ar.repId)?.name} wants to remove <strong>${ct?.name||'contact'}</strong> from ${co(ar.companyId)?.name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="resolveApproval('${ar.id}','approved')">Remove</button><button class="btn btn-danger btn-sm" onclick="resolveApproval('${ar.id}','rejected')">Reject</button></div></div></div>`;
+        }
+        return`<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:15px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Company removal request</div><div class="text-sm">${rep(ar.repId)?.name} · ${co(ar.companyId)?.name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="resolveApproval('${ar.id}','approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="resolveApproval('${ar.id}','rejected')">Reject</button></div></div></div>`;
+      }).join('')}
     </div>`:''}`;
 }
 async function resolveApproval(id, status) {
@@ -4121,7 +4212,11 @@ async function resolveApproval(id, status) {
   const a=STATE.approvals.find(x=>x.id===id);
   if(a){a.status=status;a.resolvedBy=STATE.user.id;}
 
-  if(status==='approved' && a?.type==='remove_company' && a?.companyId) {
+  if(status==='approved' && a?.type==='remove_contact' && a?.poId) {
+    STATE.contacts = STATE.contacts.filter(x=>x.id!==a.poId);
+    await apiDelete('Contacts', a.poId);
+    showToast('Contact removed ✓','success');
+  } else if(status==='approved' && a?.type==='remove_company' && a?.companyId) {
     // Check if this company is assigned to other reps too
     const otherRepsWithCompany = STATE.targets.filter(t=>
       t.companyId===a.companyId &&
