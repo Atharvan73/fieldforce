@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.6</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.7</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -414,6 +414,7 @@ select.inp { cursor: pointer; }
         <div class="page" id="page-cal"></div>
         <div class="page" id="page-rfq"></div>
         <div class="page" id="page-tasks"></div>
+        <div class="page" id="page-contacts"></div>
       </div>
 
       <!-- PANELS (sit inside content area) -->
@@ -494,7 +495,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '4.0'; // bump this to force SW cache invalidation
+const APP_VERSION = '4.1'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -566,6 +567,7 @@ let STATE = {
   contacts: [], pos: [], gpsLogs: [], taClaims: [], calEvents: [], approvals: [],
   rfqs: [], tasks: [],
   rfqSearch: '', rfqCatFilter: 'all', rfqRepFilter: 'all', rfqCoFilter: '', rfqCustFilter: '',
+  ctSearch: '', ctCoFilter: '',
   coSearch: '', coIndustryFilter: 'all', coSort: 'alpha-asc',
   page: 'home', period: 'annual', cpf: 'all', pld: todayStr(), vd: todayStr(),
   exp: null, showAI: false, onField: false, fieldVehicle: null, viewRep: null,
@@ -806,7 +808,7 @@ async function loadAll(navigateAfter=false) {
       }
     }
     STATE.calEvents=d2.calEvents; STATE.approvals=approvals||[]; STATE.tasks=tasks||[];
-    if(['gps','teamgps','cal','targets','tasks'].includes(STATE.page)) renderPage(STATE.page);
+    if(['gps','teamgps','cal','targets','tasks','contacts'].includes(STATE.page)) renderPage(STATE.page);
   }, 50);
 }
 
@@ -971,11 +973,11 @@ function renderNav() {
         'Overview':    [['home','home','Home'],['team','users','Team Overview'],['teamgps','route','Team GPS']],
         'My field':    [['plan','calendar-plus','My Daily Plan'],['log','clipboard-list','My Visit Log'],['gps','map-pin','My GPS & TA']],
         'Sales':       [['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks']],
-        'Management':  [['companies','building','Companies'],['targets','target','Targets'],['cal','calendar','Calendar']]
+        'Management':  [['companies','building','Companies'],['contacts','address-book','Contacts'],['targets','target','Targets'],['cal','calendar','Calendar']]
       }
     : {
         'Dashboard':   [['home','home','Home']],
-        'Field work':  [['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['companies','building','Companies']],
+        'Field work':  [['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['companies','building','Companies'],['contacts','address-book','Contacts']],
         'Sales':       [['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks']],
         'Performance': [['targets','target','Targets'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']]
       };
@@ -1047,7 +1049,8 @@ function renderPage(p) {
   const map = {
     home: renderHome, companies: renderCompanies, plan: renderPlan,
     log: renderLog, targets: renderTargets, gps: renderGPS,
-    team: renderTeam, teamgps: renderTeamGPS, cal: renderCal, rfq: renderRFQ, tasks: renderTasks
+    team: renderTeam, teamgps: renderTeamGPS, cal: renderCal, rfq: renderRFQ,
+    tasks: renderTasks, contacts: renderContacts
   };
   try { if(map[p]) map[p](); } catch(e) { console.error('renderPage error:', p, e.message); }
 }
@@ -1628,13 +1631,30 @@ function openCoDetail(cId) {
     </div>
     ${getCompanyContacts(c.id).length
       ? getCompanyContacts(c.id).map(ct=>`
-        <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-          <div style="width:28px;height:28px;border-radius:50%;background:var(--indigo);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;flex-shrink:0">${ct.name.slice(0,2).toUpperCase()}</div>
-          <div style="flex:1">
-            <div style="font-size:11px;font-weight:500">${ct.name}</div>
-            <div class="text-xs">${ct.designation||'—'}</div>
-            ${ct.phone?`<div class="text-xs" style="color:var(--indigo2)"><i class="ti ti-phone" style="font-size:9px"></i> ${ct.phone}</div>`:''}
-            ${ct.email?`<div class="text-xs" style="color:var(--text3)"><i class="ti ti-mail" style="font-size:9px"></i> ${ct.email}</div>`:''}
+        <div style="border-bottom:1px solid var(--border);padding-bottom:4px">
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 0">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--indigo);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;flex-shrink:0">${ct.name.slice(0,2).toUpperCase()}</div>
+            <div style="flex:1">
+              <div style="font-size:11px;font-weight:500">${ct.name}</div>
+              <div class="text-xs">${ct.designation||'—'}</div>
+              ${ct.phone?`<div class="text-xs" style="color:var(--indigo2)"><i class="ti ti-phone" style="font-size:9px"></i> ${ct.phone}</div>`:''}
+              ${ct.email?`<div class="text-xs" style="color:var(--text3)"><i class="ti ti-mail" style="font-size:9px"></i> ${ct.email}</div>`:''}
+            </div>
+            <button class="btn btn-sm" style="padding:2px 8px;font-size:10px;flex-shrink:0" onclick="toggleEl('edit-ct-${ct.id}')"><i class="ti ti-edit"></i> Edit</button>
+          </div>
+          <div id="edit-ct-${ct.id}" style="display:none;background:var(--bg3);border-radius:10px;padding:12px;margin-bottom:8px">
+            <div class="grid2" style="gap:8px;margin-bottom:8px">
+              <div><div class="inp-label">Name *</div><input class="inp" id="ect-name-${ct.id}" value="${escAtt(ct.name)}" style="font-size:11px;padding:7px 10px"></div>
+              <div><div class="inp-label">Designation</div><input class="inp" id="ect-desig-${ct.id}" value="${escAtt(ct.designation||'')}" style="font-size:11px;padding:7px 10px"></div>
+            </div>
+            <div class="grid2" style="gap:8px;margin-bottom:10px">
+              <div><div class="inp-label">Phone</div><input class="inp" type="tel" id="ect-phone-${ct.id}" value="${escAtt(ct.phone||'')}" style="font-size:11px;padding:7px 10px"></div>
+              <div><div class="inp-label">Email</div><input class="inp" type="email" id="ect-email-${ct.id}" value="${escAtt(ct.email||'')}" style="font-size:11px;padding:7px 10px"></div>
+            </div>
+            <div class="row" style="gap:8px">
+              <button class="btn btn-primary btn-sm" style="flex:1;justify-content:center" onclick="saveEditContact('${ct.id}','${c.id}')">Save</button>
+              <button class="btn btn-sm" style="flex:1;justify-content:center" onclick="toggleEl('edit-ct-${ct.id}')">Cancel</button>
+            </div>
           </div>
         </div>`).join('')
       : '<div class="text-sm" style="color:var(--text3);padding:8px 0">No contacts added yet</div>'}
@@ -1969,6 +1989,27 @@ async function saveNewContactToCompany(coId) {
   showToast('Contact saved ✓','success');
   // Refresh the company detail panel
   openCoDetail(coId);
+}
+
+// ── Contact edit helpers ──────────────────────────────────────────────────────
+function toggleEl(id) { const el=document.getElementById(id); if(el) el.style.display=el.style.display==='none'?'block':'none'; }
+function escAtt(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+async function saveEditContact(ctId, coId) {
+  const name = document.getElementById('ect-name-'+ctId)?.value?.trim();
+  if(!name){ showToast('Name is required','error'); return; }
+  const patch = {
+    id: ctId,
+    name,
+    designation: document.getElementById('ect-desig-'+ctId)?.value?.trim()||'',
+    phone:       document.getElementById('ect-phone-'+ctId)?.value?.trim()||'',
+    email:       document.getElementById('ect-email-'+ctId)?.value?.trim()||''
+  };
+  const ct = STATE.contacts.find(x=>x.id===ctId);
+  if(ct) Object.assign(ct, patch);
+  await apiUpdate('Contacts', patch);
+  showToast('Contact updated ✓','success');
+  openCoDetail(coId);   // re-render the company panel with fresh data
 }
 
 async function requestRemoval(coId) {
@@ -4354,6 +4395,56 @@ function rfqViewDropdown() {
       </div>`).join('')}
     </div>
   </div>`;
+}
+
+// ── CONTACTS DIRECTORY ────────────────────────────────────────────────────────
+function renderContacts() {
+  const el = document.getElementById('page-contacts');
+  const myCoIds = new Set(STATE.companies.map(c=>c.id));
+  const search = (STATE.ctSearch||'').toLowerCase().trim();
+  const coFil  = STATE.ctCoFilter||'';
+
+  let cts = STATE.contacts.filter(ct=>myCoIds.has(ct.companyId));
+  if(search) cts = cts.filter(ct=>
+    (ct.name||'').toLowerCase().includes(search) ||
+    (ct.designation||'').toLowerCase().includes(search) ||
+    (co(ct.companyId)?.name||'').toLowerCase().includes(search));
+  if(coFil) cts = cts.filter(ct=>ct.companyId===coFil);
+  cts.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+
+  const cos = STATE.companies.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+
+  el.innerHTML=`
+    <div class="row-between" style="margin-bottom:12px">
+      <div style="font-size:16px;font-weight:600">Contacts</div>
+      <span style="font-size:11px;color:var(--text3)">${cts.length} contact${cts.length!==1?'s':''}</span>
+    </div>
+    <input class="inp" placeholder="Search name, designation, company…" value="${escAtt(STATE.ctSearch||'')}"
+      oninput="STATE.ctSearch=this.value;renderContacts()" style="margin-bottom:8px">
+    <select class="inp" style="margin-bottom:14px" onchange="STATE.ctCoFilter=this.value;renderContacts()">
+      <option value="">All companies</option>
+      ${cos.map(c=>`<option value="${c.id}"${coFil===c.id?' selected':''}>${escAtt(c.name)}</option>`).join('')}
+    </select>
+    ${cts.length ? cts.map(ct=>{
+      const company = co(ct.companyId);
+      return`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer" onclick="navigate('companies');setTimeout(()=>openCoDetail('${ct.companyId}'),350)">
+        <div style="width:34px;height:34px;border-radius:50%;background:var(--indigo);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0">${String(ct.name||'?').slice(0,2).toUpperCase()}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600">${ct.name}</div>
+          <div style="font-size:10px;color:var(--text3)">
+            ${ct.designation||'—'}
+            ${company?`&nbsp;·&nbsp;<span style="color:var(--indigo2)">${company.name}</span>`:''}
+          </div>
+          ${ct.phone?`<div style="font-size:10px;color:var(--text3);margin-top:2px"><i class="ti ti-phone" style="font-size:9px"></i> ${ct.phone}</div>`:''}
+          ${ct.email?`<div style="font-size:10px;color:var(--text3)"><i class="ti ti-mail" style="font-size:9px"></i> ${ct.email}</div>`:''}
+        </div>
+        <i class="ti ti-chevron-right" style="font-size:14px;color:var(--text3);flex-shrink:0"></i>
+      </div>`;
+    }).join('')
+    : `<div style="text-align:center;padding:48px 0;color:var(--text3)">
+        <i class="ti ti-address-book" style="font-size:36px;display:block;margin-bottom:8px;opacity:.4"></i>
+        <div class="text-sm">${search||coFil?'No contacts match your filters':'No contacts yet'}</div>
+      </div>`}`;
 }
 
 function renderRFQ() {
