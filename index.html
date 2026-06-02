@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.8</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v8.9</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -495,7 +495,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '4.2'; // bump this to force SW cache invalidation
+const APP_VERSION = '4.3'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -2017,17 +2017,22 @@ async function removeContact(ctId, coId) {
   if(!ct) return;
   if(STATE.user.role==='manager') {
     if(!confirm(`Remove "${ct.name}" from this company?`)) return;
+    // Optimistic: update STATE and re-render immediately, delete from sheet in background.
     STATE.contacts = STATE.contacts.filter(x=>x.id!==ctId);
-    await apiDelete('Contacts', ctId);
-    showToast('Contact removed ✓','success');
     openCoDetail(coId);
+    showToast('Contact removed ✓','success');
+    apiDelete('Contacts', ctId).catch(()=>{
+      STATE.contacts.push(ct);   // rollback on server error
+      openCoDetail(coId);
+      showToast('Could not delete — please try again','error');
+    });
   } else {
     const reason = prompt(`Why do you want to remove "${ct.name}"?\n(Your manager will be asked to approve this.)`);
     if(!reason) return;
     const ar = {
       id: uid(), type: 'remove_contact',
       repId: STATE.user.id, companyId: coId,
-      poId: ctId,        // poId reused as the contact id
+      poId: ctId,
       reason, status: 'pending',
       requestDate: todayStr(), resolvedBy: '', resolvedDate: ''
     };
