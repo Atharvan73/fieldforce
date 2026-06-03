@@ -356,7 +356,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.0</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.1</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -495,7 +495,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '4.4'; // bump this to force SW cache invalidation
+const APP_VERSION = '4.5'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -579,7 +579,12 @@ let STATE = {
 
 // ── UTILS ────────────────────────────────────────────────────────────────────
 function todayStr() { return new Date().toISOString().slice(0,10); }
-function nowStr() { return new Date().toTimeString().slice(0,5); }
+function nowStr()   { return new Date().toTimeString().slice(0,5); }
+function fmtDate(d) {
+  if(!d) return '';
+  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[3]+'-'+m[2]+'-'+m[1] : String(d);
+}
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function fmt(n) { n = Number(n)||0; if(n>=1e7) return '₹'+(n/1e7).toFixed(2)+'Cr'; if(n>=1e5) return '₹'+(n/1e5).toFixed(2)+'L'; if(n>=1e3) return '₹'+(n/1e3).toFixed(1)+'K'; return '₹'+n; }
 function fmtINR(n) { return '₹'+Math.round(Number(n)||0).toLocaleString('en-IN'); }
@@ -2743,7 +2748,7 @@ function openManageCollaborators(planId) {
     </div>
     <div class="card" style="margin-bottom:14px;border-color:rgba(99,102,241,.3)">
       <div style="font-size:13px;font-weight:600">${c?.name||'Visit'}</div>
-      <div class="text-xs" style="color:var(--text3)">${p.date} · ${p.time} · ${p.meetingWith||'TBD'}</div>
+      <div class="text-xs" style="color:var(--text3)">${fmtDate(p.date)} · ${p.time} · ${p.meetingWith||'TBD'}</div>
     </div>
     <div class="text-label" style="margin-bottom:8px">Who is joining this visit?</div>
     ${allOthers.map(r=>`
@@ -3183,7 +3188,7 @@ function openVisitDetail(id) {
     <!-- Status & date -->
     <div class="row" style="gap:6px;margin-bottom:12px;flex-wrap:wrap">
       ${sbg(v.status)}
-      <span class="badge badge-gray">${v.date}</span>
+      <span class="badge badge-gray">${fmtDate(v.date)}</span>
       ${v.gpsVerified==='TRUE'?'<span class="badge badge-green">GPS verified</span>':''}
       ${isM&&r?`<span style="font-size:10px;background:rgba(99,102,241,.1);color:var(--indigo2);padding:2px 8px;border-radius:10px">${r.name}</span>`:''}
     </div>
@@ -3773,7 +3778,7 @@ function gpsWeekNavHtml(which) {
     <div class="row-between" style="margin-bottom:12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:6px 8px">
       <button class="btn btn-sm" onclick="changeGpsWeek(-1,'${which}')" title="Previous week"><i class="ti ti-chevron-left"></i></button>
       <div style="text-align:center;line-height:1.3">
-        <div style="font-size:12px;font-weight:600">${wk.start} → ${wk.end}</div>
+        <div style="font-size:12px;font-weight:600">${fmtDate(wk.start)} → ${fmtDate(wk.end)}</div>
         <div style="font-size:10px;color:var(--text3)">${label}</div>
       </div>
       <button class="btn btn-sm" onclick="changeGpsWeek(1,'${which}')" ${isCurrent?'disabled style="opacity:.35;cursor:default"':''} title="Next week"><i class="ti ti-chevron-right"></i></button>
@@ -3811,7 +3816,7 @@ function gpsDailyLogsHtml(logs, repName) {
         return`<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">
           <div class="row-between" style="padding:10px 12px;background:var(--bg2);cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
             <div>
-              <div style="font-size:12px;font-weight:600">${g.date} · ${g.dayOfWeek}</div>
+              <div style="font-size:12px;font-weight:600">${fmtDate(g.date)} · ${g.dayOfWeek}</div>
               <div class="text-xs">${vehicleTag(g.vehicle)} · ${wps.length} stops</div>
             </div>
             <div style="text-align:right">
@@ -3847,7 +3852,7 @@ function gpsWeeklyHtml(rId, opts) {
   return `
     <div class="card" style="border-color:rgba(245,158,11,.3)">
       <div class="row-between" style="margin-bottom:10px">
-        <span style="font-size:13px;font-weight:600">Weekly TA — ${wk.start} to ${wk.end}</span>
+        <span style="font-size:13px;font-weight:600">Weekly TA — ${fmtDate(wk.start)} to ${fmtDate(wk.end)}</span>
         <span class="badge ${claim?.status==='approved'?'badge-green':claim?.status==='submitted'?'badge-amber':'badge-gray'}">${claim?.status==='approved'?'Approved ✓':claim?.status==='submitted'?'Submitted':'Not submitted'}</span>
       </div>
       <div class="grid3" style="text-align:center;margin-bottom:12px">
@@ -5112,7 +5117,7 @@ function openRFQDetail(id) {
     <div class="card" style="margin-bottom:12px">
       <div class="text-label" style="margin-bottom:8px">RFQ details</div>
       <div style="font-size:13px;font-weight:600;margin-bottom:4px">${rfq.rfqSubject||rfq.subject||'—'}</div>
-      <div class="text-xs" style="margin-bottom:8px">📅 Received: ${rfq.rfqDate||'—'}</div>
+      <div class="text-xs" style="margin-bottom:8px">📅 Received: ${fmtDate(rfq.rfqDate)||'—'}</div>
       <div class="rmk-box">${rfq.rfqSummary||rfq.summary||'No summary available'}</div>
       ${rfq.products||rfq.notes?`<div style="margin-top:8px"><div class="text-label" style="margin-bottom:4px">Items / Products</div><div class="text-sm">${rfq.products||rfq.notes||'—'}</div></div>`:''}
     </div>
@@ -5135,8 +5140,8 @@ function openRFQDetail(id) {
     ${rfq.status==='Quoted'||rfq.status==='Order Received'?`
     <div class="card" style="margin-bottom:12px">
       <div class="text-label" style="margin-bottom:8px">Quotation & Order</div>
-      ${rfq.quotedDate?`<div class="text-xs">Quoted on: <strong>${rfq.quotedDate}</strong></div>`:''}
-      ${rfq.poDate?`<div class="text-xs">Order on: <strong>${rfq.poDate}</strong></div>`:''}
+      ${rfq.quotedDate?`<div class="text-xs">Quoted on: <strong>${fmtDate(rfq.quotedDate)}</strong></div>`:''}
+      ${rfq.poDate?`<div class="text-xs">Order on: <strong>${fmtDate(rfq.poDate)}</strong></div>`:''}
       ${rfq.poSummary?`<div class="rmk-box" style="margin-top:6px">${rfq.poSummary}</div>`:''}
     </div>`:''}
 
