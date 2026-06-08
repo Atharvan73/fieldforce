@@ -3121,11 +3121,25 @@ function renderLog() {
       <div style="font-size:16px;font-weight:600">Visit Log</div>
       ${viewSwitcherHtml('logView', STATE.logView, 'renderLog()')}
     </div>
-    <div class="chip-row">${dates.map(d=>{
-      const dt=new Date(d);
-      const lbl=d===todayStr()?'Today':dt.toLocaleDateString('en-IN',{weekday:'short',day:'numeric'});
-      return`<span class="chip${STATE.vd===d?' active':''}" onclick="STATE.vd='${d}';renderLog()">${lbl}</span>`;
-    }).join('')}</div>
+        <div class="row" style="gap:8px;margin-bottom:10px;align-items:center">
+      <div class="chip-row" style="flex:1;margin-bottom:0">${dates.map(d=>{
+        const dt=new Date(d);
+        const lbl=d===todayStr()?'Today':dt.toLocaleDateString('en-IN',{weekday:'short',day:'numeric'});
+        return`<span class="chip${STATE.vd===d?' active':''}" onclick="STATE.vd='${d}';renderLog()">${lbl}</span>`;
+      }).join('')}</div>
+      <label class="btn btn-sm" style="flex-shrink:0;position:relative;cursor:pointer;${!dates.includes(STATE.vd)?'border-color:var(--indigo);color:var(--indigo2);background:rgba(99,102,241,.1)':''}" title="Pick a date">
+        <i class="ti ti-calendar-search"></i>
+        <input type="date" max="${todayStr()}" value="${STATE.vd}" onchange="STATE.vd=this.value;renderLog()" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+      </label>
+    </div>
+    ${!dates.includes(STATE.vd)?`
+    <div class="row" style="gap:8px;margin-bottom:10px;align-items:center">
+      <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(99,102,241,.12);color:var(--indigo2);border:1px solid rgba(99,102,241,.3);border-radius:20px;padding:3px 10px;font-size:10px;font-weight:500">
+        <i class="ti ti-calendar" style="font-size:11px"></i> ${fmtDate(STATE.vd)}
+        <i class="ti ti-x" style="font-size:10px;cursor:pointer" onclick="STATE.vd='${todayStr()}';renderLog()"></i>
+      </span>
+      <span style="font-size:10px;color:var(--text3)">Viewing a past date — tap ✕ to return to this week</span>
+    </div>`:''}
 
     ${todayPlanned.length?`
       <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:var(--card-radius);padding:12px;margin-bottom:12px">
