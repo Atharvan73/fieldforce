@@ -157,6 +157,8 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 /* BUTTONS */
 .btn { display: inline-flex; align-items: center; gap: 5px; padding: 8px 14px; border-radius: var(--btn-radius); font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border2); background: var(--bg2); color: var(--text); font-family: 'DM Sans', sans-serif; transition: all .15s; }
 .btn:active { opacity: .8; transform: scale(.97); }
+.btn:disabled, .btn[disabled] { opacity: .55; cursor: not-allowed; pointer-events: none; }
+.btn:disabled:active, .btn[disabled]:active { transform: none; }
 .btn-primary { background: var(--indigo); color: #fff; border-color: var(--indigo); }
 .btn-success { background: var(--emerald); color: #fff; border-color: var(--emerald); }
 .btn-danger { background: rgba(239,68,68,.15); color: #FCA5A5; border-color: rgba(239,68,68,.3); }
@@ -356,7 +358,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.2</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.4</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -495,7 +497,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '4.6'; // bump this to force SW cache invalidation
+const APP_VERSION = '4.8'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -717,10 +719,36 @@ function debounce(key, fn, ms=200) {
 }
 
 // ── BUTTON LOADING STATE ──────────────────────────────────────────────────────
-function btnLoad(el, loading=true) {
+// Universal async-action wrapper: locks the clicked button (spinner + label), runs
+// the handler, then releases it. If the handler re-rendered the view, the button
+// node is gone and we leave it; otherwise (or on error) we restore it.
+async function act(btn, fn, label){
+  if(btn && btn.dataset && btn.dataset.loading==='1') return;
+  btnLoad(btn, true, label||'');
+  try {
+    await fn();
+  } catch(e){
+    console.error('action error:', e);
+    showToast('Something went wrong — please try again','error');
+    btnLoad(btn, false);
+    return;
+  }
+  if(btn && document.body.contains(btn)) btnLoad(btn, false);
+}
+
+function btnLoad(el, loading=true, label='') {
   if(!el) return;
-  if(loading) { el.dataset.origText=el.innerHTML; el.innerHTML='<i class="ti ti-loader-2" style="animation:spin .6s linear infinite"></i>'; el.disabled=true; }
-  else { el.innerHTML=el.dataset.origText||el.innerHTML; el.disabled=false; }
+  if(loading) {
+    if(el.dataset.loading==='1') return;            // already running — block re-entry
+    el.dataset.origText = el.innerHTML;
+    el.dataset.loading = '1';
+    el.innerHTML = '<i class="ti ti-loader-2" style="animation:spin .6s linear infinite"></i>' + (label ? ' '+label : '');
+    el.disabled = true;
+  } else {
+    el.innerHTML = el.dataset.origText || el.innerHTML;
+    el.disabled = false;
+    delete el.dataset.loading;
+  }
 }
 
 // ── DATA LOADING ─────────────────────────────────────────────────────────────
@@ -1212,11 +1240,11 @@ function renderMgrHome(el) {
       ${STATE.approvals.filter(a=>a.status==='pending').map(ar=>{
         if(ar.type==='remove_contact'){
           const ct=STATE.contacts.find(c=>c.id===ar.poId);
-          return`<div class="warn-box"><i class="ti ti-user-minus" style="color:var(--amber);font-size:16px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Contact removal request</div><div class="text-sm">${rep(ar.repId)?.name} wants to remove <strong>${ct?.name||'contact'}</strong> from ${co(ar.companyId)?.name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="resolveApproval('${ar.id}','approved')">Remove</button><button class="btn btn-danger btn-sm" onclick="resolveApproval('${ar.id}','rejected')">Reject</button></div></div></div>`;
+          return`<div class="warn-box"><i class="ti ti-user-minus" style="color:var(--amber);font-size:16px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Contact removal request</div><div class="text-sm">${rep(ar.repId)?.name} wants to remove <strong>${ct?.name||'contact'}</strong> from ${co(ar.companyId)?.name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="act(this,()=>resolveApproval('${ar.id}','approved'),'Approving…')">Remove</button><button class="btn btn-danger btn-sm" onclick="act(this,()=>resolveApproval('${ar.id}','rejected'),'Rejecting…')">Reject</button></div></div></div>`;
         }
-        return`<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:16px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Company removal request</div><div class="text-sm">${rep(ar.repId)?.name} · ${co(ar.companyId)?.name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="resolveApproval('${ar.id}','approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="resolveApproval('${ar.id}','rejected')">Reject</button></div></div></div>`;
+        return`<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:16px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Company removal request</div><div class="text-sm">${rep(ar.repId)?.name} · ${co(ar.companyId)?.name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="act(this,()=>resolveApproval('${ar.id}','approved'),'Approving…')">Approve</button><button class="btn btn-danger btn-sm" onclick="act(this,()=>resolveApproval('${ar.id}','rejected'),'Rejecting…')">Reject</button></div></div></div>`;
       }).join('')}
-      ${STATE.pos.filter(p=>p.status==='pending').map(po=>`<div class="info-box"><i class="ti ti-file-invoice" style="color:var(--blue);font-size:16px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:#93C5FD">PO Verification · ${fmt(po.amount)}</div><div class="text-sm">${rep(po.repId).name} · ${co(po.companyId).name}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="verifyPO('${po.id}')">Verify</button><button class="btn btn-danger btn-sm" onclick="rejectPO('${po.id}')">Reject</button></div></div></div>`).join('')}
+      ${STATE.pos.filter(p=>p.status==='pending').map(po=>`<div class="info-box"><i class="ti ti-file-invoice" style="color:var(--blue);font-size:16px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:#93C5FD">PO Verification · ${fmt(po.amount)}</div><div class="text-sm">${rep(po.repId).name} · ${co(po.companyId).name}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="act(this,()=>verifyPO('${po.id}'),'Verifying…')">Verify</button><button class="btn btn-danger btn-sm" onclick="act(this,()=>rejectPO('${po.id}'),'Rejecting…')">Reject</button></div></div></div>`).join('')}
     </div>`:''}`;
 }
 
@@ -1421,9 +1449,9 @@ function renderCompanies() {
               ${bestT?.items?`<div class="text-sm" style="margin-bottom:3px">${bestT.items.substring(0,55)}${bestT.items.length>55?'…':''}</div>`:''}
               ${bestT?.goals?`<div style="font-size:9px;color:var(--indigo2);background:rgba(99,102,241,.08);border-radius:4px;padding:2px 6px;display:inline-block;margin-bottom:6px">🎯 ${bestT.goals.substring(0,45)}${bestT.goals.length>45?'…':''}</div>`:''}
               <div class="row" style="gap:5px;margin-top:4px;flex-wrap:wrap">
-                ${!hasMonthly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(245,158,11,.3);color:var(--amber)" onclick="addFocusPeriod('${c.id}','monthly');event.stopPropagation()"><i class="ti ti-plus" style="font-size:10px"></i> Add to Monthly</button>`:''}
-                ${!hasWeekly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(16,185,129,.3);color:var(--emerald)" onclick="addFocusPeriod('${c.id}','weekly');event.stopPropagation()"><i class="ti ti-plus" style="font-size:10px"></i> Add to Weekly</button>`:''}
-                ${isM&&!allT.some(t=>t.companyId===c.id&&t.repId===STATE.user.id)?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="addToMyCompanies('${c.id}');event.stopPropagation()"><i class="ti ti-user-plus" style="font-size:10px"></i> Add to mine</button>`:''}
+                ${!hasMonthly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(245,158,11,.3);color:var(--amber)" onclick="event.stopPropagation();act(this,()=>addFocusPeriod('${c.id}','monthly'),'Adding…')"><i class="ti ti-plus" style="font-size:10px"></i> Add to Monthly</button>`:''}
+                ${!hasWeekly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(16,185,129,.3);color:var(--emerald)" onclick="event.stopPropagation();act(this,()=>addFocusPeriod('${c.id}','weekly'),'Adding…')"><i class="ti ti-plus" style="font-size:10px"></i> Add to Weekly</button>`:''}
+                ${isM&&!allT.some(t=>t.companyId===c.id&&t.repId===STATE.user.id)?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="event.stopPropagation();act(this,()=>addToMyCompanies('${c.id}'),'Adding…')"><i class="ti ti-user-plus" style="font-size:10px"></i> Add to mine</button>`:''}
                 <button class="btn btn-sm" style="font-size:9px" onclick="openCoDetail('${c.id}');event.stopPropagation()"><i class="ti ti-arrow-right" style="font-size:10px"></i> Full details</button>
               </div>
             </div>
@@ -1584,7 +1612,7 @@ function assignExistingCompany(coId) {
       <div class="inp-label">Items to sell</div>
       <input class="inp" id="aec-items" placeholder="e.g. Safety Equipment">
     </div>
-    <button class="btn btn-primary btn-full" onclick="saveAssignExisting('${coId}')">
+    <button class="btn btn-primary btn-full" onclick="act(this,()=>saveAssignExisting('${coId}'),'Assigning…')">
       <i class="ti ti-check"></i> Assign & Add to Target Companies
     </button>`;
 }
@@ -1679,7 +1707,7 @@ function openCoDetail(cId) {
               <div><div class="inp-label">Email</div><input class="inp" type="email" id="ect-email-${ct.id}" value="${escAtt(ct.email||'')}" style="font-size:11px;padding:7px 10px"></div>
             </div>
             <div class="row" style="gap:8px">
-              <button class="btn btn-primary btn-sm" style="flex:1;justify-content:center" onclick="saveEditContact('${ct.id}','${c.id}')">Save</button>
+              <button class="btn btn-primary btn-sm" style="flex:1;justify-content:center" onclick="act(this,()=>saveEditContact('${ct.id}','${c.id}'),'Saving…')">Save</button>
               <button class="btn btn-sm" style="flex:1;justify-content:center" onclick="toggleEl('edit-ct-${ct.id}')">Cancel</button>
             </div>
           </div>
@@ -1695,7 +1723,7 @@ function openCoDetail(cId) {
         <div><div class="inp-label">Email</div><input class="inp" type="email" id="nc-email-${c.id}" placeholder="e.g. name@co.com" style="font-size:11px;padding:7px 10px"></div>
       </div>
       <div class="row" style="gap:8px">
-        <button class="btn btn-primary btn-sm" style="flex:1;justify-content:center" onclick="saveNewContactToCompany('${c.id}')">Save contact</button>
+        <button class="btn btn-primary btn-sm" style="flex:1;justify-content:center" onclick="act(this,()=>saveNewContactToCompany('${c.id}'),'Saving…')">Save contact</button>
         <button class="btn btn-sm" style="flex:1;justify-content:center" onclick="document.getElementById('add-contact-form-${c.id}').style.display='none'">Cancel</button>
       </div>
     </div>
@@ -1704,9 +1732,9 @@ function openCoDetail(cId) {
         <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="openEditTargets('${c.id}')"><i class="ti ti-edit"></i> Edit targets</button>
         <button class="btn" style="flex:1;justify-content:center;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="openReassignCompany('${c.id}')"><i class="ti ti-arrows-exchange"></i> Reassign</button>
       </div>
-      <button class="btn btn-danger btn-full" style="margin-top:8px" onclick="managerRemoveCompany('${c.id}')"><i class="ti ti-trash"></i> Remove company</button>`:
+      <button class="btn btn-danger btn-full" style="margin-top:8px" onclick="act(this,()=>managerRemoveCompany('${c.id}'),'Removing…')"><i class="ti ti-trash"></i> Remove company</button>`:
     `<div style="margin-top:14px">
-      <button class="btn btn-danger btn-full" onclick="requestRemoval('${c.id}')"><i class="ti ti-send"></i> Request removal from manager</button>
+      <button class="btn btn-danger btn-full" onclick="act(this,()=>requestRemoval('${c.id}'),'Sending…')"><i class="ti ti-send"></i> Request removal from manager</button>
       <div class="text-xs" style="text-align:center;margin-top:6px;color:var(--text3)">Your manager will be notified to approve this request</div>
     </div>`}`;
   openPanel('co');
@@ -1816,7 +1844,7 @@ function openAddCompanyPanel() {
         <i class="ti ti-plus"></i> Add contact person
       </button>
 
-      <button class="btn btn-primary btn-full" onclick="saveCompanyManager()"><i class="ti ti-check"></i> Add company</button>`;
+      <button class="btn btn-primary btn-full" onclick="act(this,()=>saveCompanyManager(),'Adding…')"><i class="ti ti-check"></i> Add company</button>`;
 
   } else {
     // REP FLOW — assign to self, simple form
@@ -1877,7 +1905,7 @@ function openAddCompanyPanel() {
         <i class="ti ti-plus"></i> Add contact person
       </button>
 
-      <button class="btn btn-primary btn-full" style="margin-top:4px" onclick="saveCompanyRep()"><i class="ti ti-check"></i> Add company</button>`;
+      <button class="btn btn-primary btn-full" style="margin-top:4px" onclick="act(this,()=>saveCompanyRep(),'Adding…')"><i class="ti ti-check"></i> Add company</button>`;
   }
   openPanel('addco');
 }
@@ -2137,40 +2165,45 @@ function openReassignCompany(coId) {
         <div style="flex:1"><div style="font-size:12px;font-weight:500">Unassigned</div><div class="text-xs">No rep — manager view only</div></div>
       </label>
     </div>
-    <button class="btn btn-primary btn-full" onclick="saveReassignCompany('${coId}')"><i class="ti ti-arrows-exchange"></i> Save reassignment</button>`;
+    <button class="btn btn-primary btn-full" onclick="saveReassignCompany('${coId}', this)"><i class="ti ti-arrows-exchange"></i> Save reassignment</button>`;
 }
 
-async function saveReassignCompany(coId) {
+async function saveReassignCompany(coId, btn) {
   const sel = document.querySelector('input[name="reassign-rep"]:checked');
   if(!sel){ showToast('Select a rep or Unassigned','error'); return; }
   const newRepId = sel.value==='__unassigned__' ? '' : sel.value;
   const c = STATE.companies.find(x=>x.id===coId);
-  showToast('Reassigning...','');
+  btnLoad(btn, true, 'Reassigning…');
 
-  // 1. Move every target row for this company to the new rep (or blank it out).
-  const coTargets = STATE.targets.filter(t=>t.companyId===coId);
-  for(const t of coTargets){
-    await apiUpdate('Targets',{id:t.id, repId:newRepId});
-    t.repId = newRepId;
+  try {
+    // 1. Move every target row for this company to the new rep (or blank it out).
+    const coTargets = STATE.targets.filter(t=>t.companyId===coId);
+    for(const t of coTargets){
+      await apiUpdate('Targets',{id:t.id, repId:newRepId});
+      t.repId = newRepId;
+    }
+
+    // 2. If assigning to a rep who now has no annual row, create a minimal one
+    //    so the company actually appears in their list.
+    if(newRepId && !coTargets.some(t=>String(t.repId).trim()===newRepId && t.period==='annual')){
+      const annualT = { id:uid(), companyId:coId, repId:newRepId, period:'annual',
+        periodValue:'2025', saleTarget:0, items:'', goals:'', achieved:0, approvedBy:STATE.user.id };
+      await apiWrite('Targets', annualT);
+      STATE.targets.push(annualT);
+    }
+
+    // 3. Keep Companies.assignedReps in sync — this is what the rep-side
+    //    Add Visit / Add RFQ dropdowns read, so it must match the targets.
+    await apiUpdate('Companies',{id:coId, assignedReps:newRepId});
+    if(c) c.assignedReps = newRepId;
+
+    showToast(newRepId?`Reassigned to ${rep(newRepId)?.name} ✓`:'Set to unassigned ✓','success');
+    openCoDetail(coId);   // re-renders the panel — the loading button is replaced
+    if(STATE.page==='companies') renderCompanies();
+  } catch(e) {
+    btnLoad(btn, false);  // release only on failure; success swaps the whole panel
+    showToast('Reassignment failed — please try again','error');
   }
-
-  // 2. If assigning to a rep who now has no annual row, create a minimal one
-  //    so the company actually appears in their list.
-  if(newRepId && !coTargets.some(t=>String(t.repId).trim()===newRepId && t.period==='annual')){
-    const annualT = { id:uid(), companyId:coId, repId:newRepId, period:'annual',
-      periodValue:'2025', saleTarget:0, items:'', goals:'', achieved:0, approvedBy:STATE.user.id };
-    await apiWrite('Targets', annualT);
-    STATE.targets.push(annualT);
-  }
-
-  // 3. Keep Companies.assignedReps in sync — this is what the rep-side
-  //    Add Visit / Add RFQ dropdowns read, so it must match the targets.
-  await apiUpdate('Companies',{id:coId, assignedReps:newRepId});
-  if(c) c.assignedReps = newRepId;
-
-  showToast(newRepId?`Reassigned to ${rep(newRepId)?.name} ✓`:'Set to unassigned ✓','success');
-  openCoDetail(coId);
-  if(STATE.page==='companies') renderCompanies();
 }
 
 function openEditTargets(coId) {
@@ -2185,7 +2218,7 @@ function openEditTargets(coId) {
       <div class="text-xs" style="margin-bottom:6px">${t.items||'—'}</div>
       <div class="row" style="gap:6px">
         <input class="inp" placeholder="New target (₹)" id="et-tgt-${t.id}" style="flex:1;font-size:11px;padding:6px 8px">
-        <button class="btn btn-primary btn-sm" onclick="updateTarget('${t.id}')">Update</button>
+        <button class="btn btn-primary btn-sm" onclick="act(this,()=>updateTarget('${t.id}'),'Updating…')">Update</button>
       </div>
     </div>`).join('')}
     <div style="margin-top:14px"><div class="text-label" style="margin-bottom:10px">Add new target</div>
@@ -2196,7 +2229,7 @@ function openEditTargets(coId) {
     <div class="inp-group"><div class="inp-label">Sale target (₹)</div><input class="inp" type="number" id="nt-tgt" placeholder="e.g. 500000"></div>
     <div class="inp-group"><div class="inp-label">Items</div><input class="inp" id="nt-items" placeholder="e.g. Industrial Pumps"></div>
     <div class="inp-group"><div class="inp-label">Goals</div><input class="inp" id="nt-goals" placeholder="e.g. Annual contract by Q3"></div>
-    <button class="btn btn-primary btn-full" onclick="addTarget('${coId}')">Add target</button></div>`;
+    <button class="btn btn-primary btn-full" onclick="act(this,()=>addTarget('${coId}'),'Adding…')">Add target</button></div>`;
 }
 
 async function updateTarget(tId) {
@@ -2296,7 +2329,7 @@ function renderPlan() {
       ${effectiveSt==='planned'?`
         <div class="row" style="gap:6px;margin-bottom:6px">
           <button class="btn btn-success btn-sm" style="flex:1;justify-content:center" onclick="checkIn('${p.id}')"><i class="ti ti-camera"></i> Photo & Check in</button>
-          ${!p.collabMasterId?`<button class="btn btn-danger btn-sm" style="padding:5px 8px" onclick="deletePlanItem('${p.id}')"><i class="ti ti-trash"></i></button>`:''}
+          ${!p.collabMasterId?`<button class="btn btn-danger btn-sm" style="padding:5px 8px" onclick="act(this,()=>deletePlanItem('${p.id}'),'Removing…')"><i class="ti ti-trash"></i></button>`:''}
         </div>
         <div class="row" style="gap:6px;margin-bottom:6px">
           <button class="btn btn-sm" style="flex:1;justify-content:center;border-color:rgba(245,158,11,.3);color:var(--amber)" onclick="openRescheduleForm('${p.id}')"><i class="ti ti-calendar-plus" style="font-size:11px"></i> Reschedule</button>
@@ -2388,7 +2421,7 @@ function renderPlan() {
             <button class="btn btn-sm" style="font-size:9px;padding:3px 8px;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="openManageCollaborators('${p.id}')">
               <i class="ti ti-users" style="font-size:10px"></i> ${iAmCollab||isOwner?'Collab':'Join'}
             </button>
-            ${canManageCollab&&isOwner?`<button class="btn btn-danger btn-sm" style="padding:3px 6px;font-size:10px" onclick="deletePlanItem('${p.id}')"><i class="ti ti-trash"></i></button>`:''}
+            ${canManageCollab&&isOwner?`<button class="btn btn-danger btn-sm" style="padding:3px 6px;font-size:10px" onclick="act(this,()=>deletePlanItem('${p.id}'),'Removing…')"><i class="ti ti-trash"></i></button>`:''}
           </div>
         </div>`;
       }).join('')}</div>`:''}
@@ -2659,7 +2692,7 @@ function openAddVisitPanel() {
       </div>
     </div>`:''}
 
-    <button class="btn btn-primary btn-full" style="margin-top:4px" onclick="saveVisitPlan()">Add to visit plan</button>`;
+    <button class="btn btn-primary btn-full" style="margin-top:4px" onclick="act(this,()=>saveVisitPlan(),'Saving…')">Add to visit plan</button>`;
   openPanel('addvisit');
 }
 
@@ -2835,7 +2868,7 @@ function openManageCollaborators(planId) {
       </div>
       ${currentCollabs.includes(r.id)?'<span style="font-size:9px;color:var(--indigo2);background:rgba(99,102,241,.1);padding:2px 7px;border-radius:10px">Added</span>':''}
     </label>`).join('')}
-    <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="saveCollaborators('${planId}')">
+    <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="act(this,()=>saveCollaborators('${planId}'),'Saving…')">
       <i class="ti ti-check"></i> Save collaborators
     </button>`;
   openPanel('addvisit');
@@ -2921,7 +2954,7 @@ function openNotVisitedForm(planId) {
       <div class="inp-label">Reschedule to (optional)</div>
       <input type="date" class="inp" id="nv-reschedule">
     </div>
-    <button class="btn btn-danger btn-full" style="margin-bottom:8px" onclick="saveNotVisited('${planId}')">
+    <button class="btn btn-danger btn-full" style="margin-bottom:8px" onclick="act(this,()=>saveNotVisited('${planId}'),'Saving…')">
       <i class="ti ti-x"></i> Mark as not visited
     </button>
     <button class="btn btn-full" onclick="closePanel('visit');renderPlan()">Cancel — go back</button>`;
@@ -2963,7 +2996,7 @@ function openRescheduleForm(planId) {
     <div class="inp-group"><div class="inp-label">New date</div><input type="date" class="inp" id="rs-date"></div>
     <div class="inp-group"><div class="inp-label">New time</div><input type="time" class="inp" id="rs-time" value="${plan.time||'10:00'}"></div>
     <div class="inp-group"><div class="inp-label">Notes</div><input class="inp" id="rs-notes" placeholder="e.g. Call ahead before visiting"></div>
-    <button class="btn btn-primary btn-full" onclick="saveReschedule('${planId}')"><i class="ti ti-calendar-plus"></i> Reschedule</button>`;
+    <button class="btn btn-primary btn-full" onclick="act(this,()=>saveReschedule('${planId}'),'Rescheduling…')"><i class="ti ti-calendar-plus"></i> Reschedule</button>`;
   openPanel('visit');
 }
 
@@ -3061,7 +3094,7 @@ function openUnplannedVisitForm() {
     </div>
     <div class="inp-group"><div class="inp-label">Next action</div><input class="inp" id="uv-na" placeholder="e.g. Send quotation by Friday"></div>
     <div class="inp-group"><div class="inp-label">Next action date</div><input type="date" class="inp" id="uv-nd"></div>
-    <button class="btn btn-success btn-full" style="margin-top:4px" onclick="saveUnplannedVisit()">
+    <button class="btn btn-success btn-full" style="margin-top:4px" onclick="act(this,()=>saveUnplannedVisit(),'Saving…')">
       <i class="ti ti-check"></i> Save visit
     </button>`;
   openPanel('addvisit');
@@ -3591,7 +3624,7 @@ function openPostVisitForm(planId, visitId) {
       <input type="date" class="inp" id="pv-nd" value="${existing?.nextActionDate||''}">
     </div>
 
-    <button class="btn btn-primary btn-full" style="margin-top:4px" onclick="savePostVisit('${planId}','${visitId||''}')">
+    <button class="btn btn-primary btn-full" style="margin-top:4px" onclick="act(this,()=>savePostVisit('${planId}','${visitId||''}'),'Saving…')">
       <i class="ti ti-check"></i> Save visit update
     </button>`;
   openPanel('visit');
@@ -3795,7 +3828,7 @@ function renderTargets() {
         <span style="font-size:13px;font-weight:600">POs & Invoices</span>
         ${isM&&myPOs.filter(p=>p.status==='pending').length?`<span class="badge badge-amber">${myPOs.filter(p=>p.status==='pending').length} pending</span>`:''}
       </div>
-      ${myPOs.map(po=>{const c=co(po.companyId);return`<div class="list-item"><div style="color:${po.status==='verified'?'var(--emerald)':'var(--amber)'}"><i class="ti ti-${po.status==='verified'?'circle-check':'clock'}" style="font-size:20px"></i></div><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:500">${po.description}</div><div class="text-xs">${c.name} · ${po.date}</div></div><div style="text-align:right"><div style="font-size:11px;font-weight:600">${fmt(po.amount)}</div><span class="badge ${po.status==='verified'?'badge-green':'badge-amber'}">${po.status==='verified'?'Verified':'Pending'}</span>${isM&&po.status==='pending'?`<div class="row" style="gap:4px;margin-top:4px"><button class="btn btn-success btn-sm" style="font-size:8px;padding:2px 6px" onclick="verifyPO('${po.id}')">Verify</button><button class="btn btn-danger btn-sm" style="font-size:8px;padding:2px 6px" onclick="rejectPO('${po.id}')">Reject</button></div>`:''}</div></div>`;}).join('')}
+      ${myPOs.map(po=>{const c=co(po.companyId);return`<div class="list-item"><div style="color:${po.status==='verified'?'var(--emerald)':'var(--amber)'}"><i class="ti ti-${po.status==='verified'?'circle-check':'clock'}" style="font-size:20px"></i></div><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:500">${po.description}</div><div class="text-xs">${c.name} · ${po.date}</div></div><div style="text-align:right"><div style="font-size:11px;font-weight:600">${fmt(po.amount)}</div><span class="badge ${po.status==='verified'?'badge-green':'badge-amber'}">${po.status==='verified'?'Verified':'Pending'}</span>${isM&&po.status==='pending'?`<div class="row" style="gap:4px;margin-top:4px"><button class="btn btn-success btn-sm" style="font-size:8px;padding:2px 6px" onclick="act(this,()=>verifyPO('${po.id}'),'Verifying…')">Verify</button><button class="btn btn-danger btn-sm" style="font-size:8px;padding:2px 6px" onclick="act(this,()=>rejectPO('${po.id}'),'Rejecting…')">Reject</button></div>`:''}</div></div>`;}).join('')}
       ${!myPOs.length?'<div class="text-sm" style="text-align:center;color:var(--text3);padding:12px">No POs uploaded yet</div>':''}
     </div>`;
 }
@@ -3817,7 +3850,7 @@ function openUplPanel() {
       <div class="text-xs" style="margin-top:4px">PDF, JPG, PNG supported</div>
       <input type="file" id="upl-file" accept=".pdf,.jpg,.jpeg,.png" style="display:none">
     </div>
-    <button class="btn btn-primary btn-full" onclick="submitPO()">Submit for verification</button>`;
+    <button class="btn btn-primary btn-full" onclick="act(this,()=>submitPO(),'Submitting…')">Submit for verification</button>`;
   openPanel('upl');
 }
 
@@ -3948,8 +3981,8 @@ function gpsWeeklyHtml(rId, opts) {
         <div><div style="font-size:18px;font-weight:700;color:var(--amber)">${fmtINR(weekTA/weekKm||0)}/km</div><div class="text-xs">Avg rate</div></div>
         <div><div style="font-size:18px;font-weight:700;color:var(--emerald)">${fmtINR(weekTA)}</div><div class="text-xs">TA amount</div></div>
       </div>
-      ${opts.canSubmit&&!claim?`<button class="btn btn-primary btn-full" onclick="submitTAClaim('${rId}','${wk.start}','${wk.end}',${weekKm},${weekTA})">Submit TA claim for approval</button>`:''}
-      ${opts.isManagerView&&claim?.status==='submitted'?`<div class="row" style="gap:8px"><button class="btn btn-success" style="flex:1;justify-content:center" onclick="approveTA('${claim.id}')">Approve TA</button><button class="btn btn-danger" style="flex:1;justify-content:center" onclick="rejectTA('${claim.id}')">Flag issue</button></div>`:''}
+      ${opts.canSubmit&&!claim?`<button class="btn btn-primary btn-full" onclick="act(this,()=>submitTAClaim('${rId}','${wk.start}','${wk.end}',${weekKm},${weekTA}),'Submitting…')">Submit TA claim for approval</button>`:''}
+      ${opts.isManagerView&&claim?.status==='submitted'?`<div class="row" style="gap:8px"><button class="btn btn-success" style="flex:1;justify-content:center" onclick="act(this,()=>approveTA('${claim.id}'),'Approving…')">Approve TA</button><button class="btn btn-danger" style="flex:1;justify-content:center" onclick="act(this,()=>rejectTA('${claim.id}'),'Flagging…')">Flag issue</button></div>`:''}
       ${claim?.status==='approved'?`<div class="text-xs" style="color:var(--text3);text-align:center">Approved by ${claim.approvedBy} · Payment by Monday</div>`:''}
     </div>`;
 }
@@ -4305,9 +4338,9 @@ function renderTeam() {
       ${STATE.approvals.filter(a=>a.status==='pending').map(ar=>{
         if(ar.type==='remove_contact'){
           const ct=STATE.contacts.find(c=>c.id===ar.poId);
-          return`<div class="warn-box"><i class="ti ti-user-minus" style="color:var(--amber);font-size:15px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Contact removal request</div><div class="text-sm">${rep(ar.repId)?.name} wants to remove <strong>${ct?.name||'contact'}</strong> from ${co(ar.companyId)?.name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="resolveApproval('${ar.id}','approved')">Remove</button><button class="btn btn-danger btn-sm" onclick="resolveApproval('${ar.id}','rejected')">Reject</button></div></div></div>`;
+          return`<div class="warn-box"><i class="ti ti-user-minus" style="color:var(--amber);font-size:15px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Contact removal request</div><div class="text-sm">${rep(ar.repId)?.name} wants to remove <strong>${ct?.name||'contact'}</strong> from ${co(ar.companyId)?.name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="act(this,()=>resolveApproval('${ar.id}','approved'),'Approving…')">Remove</button><button class="btn btn-danger btn-sm" onclick="act(this,()=>resolveApproval('${ar.id}','rejected'),'Rejecting…')">Reject</button></div></div></div>`;
         }
-        return`<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:15px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Company removal request</div><div class="text-sm">${rep(ar.repId)?.name} · ${co(ar.companyId)?.name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="resolveApproval('${ar.id}','approved')">Approve</button><button class="btn btn-danger btn-sm" onclick="resolveApproval('${ar.id}','rejected')">Reject</button></div></div></div>`;
+        return`<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:15px;flex-shrink:0"></i><div style="flex:1"><div style="font-size:11px;font-weight:500;color:var(--amber)">Company removal request</div><div class="text-sm">${rep(ar.repId)?.name} · ${co(ar.companyId)?.name}</div><div class="text-xs">${ar.reason}</div><div class="row" style="gap:6px;margin-top:8px"><button class="btn btn-success btn-sm" onclick="act(this,()=>resolveApproval('${ar.id}','approved'),'Approving…')">Approve</button><button class="btn btn-danger btn-sm" onclick="act(this,()=>resolveApproval('${ar.id}','rejected'),'Rejecting…')">Reject</button></div></div></div>`;
       }).join('')}
     </div>`:''}`;
 }
@@ -4394,7 +4427,7 @@ function openAddCalPanel() {
     </div>
     <div class="inp-group"><div class="inp-label">Event type</div><select class="inp" id="ce-tp"><option value="visit">Visit</option><option value="followup">Follow-up</option><option value="meeting">Meeting</option></select></div>
     <div class="inp-group"><div class="inp-label">Title / Description</div><input class="inp" id="ce-tt" placeholder="e.g. Initial visit — ABC Industries"></div>
-    <button class="btn btn-primary btn-full" style="margin-top:4px" onclick="saveCalEvent()">Add to calendar</button>`;
+    <button class="btn btn-primary btn-full" style="margin-top:4px" onclick="act(this,()=>saveCalEvent(),'Adding…')">Add to calendar</button>`;
   openPanel('addcal');
 }
 async function saveCalEvent() {
@@ -4426,7 +4459,7 @@ function openCardScanner() {
       <div class="inp-group"><div class="inp-label">Phone</div><input class="inp" id="cr-phone" type="tel"></div>
       <div class="inp-group"><div class="inp-label">Email</div><input class="inp" id="cr-email" type="email"></div>
       <div class="inp-group"><div class="inp-label">Link to company in system</div><select class="inp" id="cr-co"><option value="">Select company…</option>${STATE.companies.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
-      <button class="btn btn-primary btn-full" onclick="saveContact()">Save contact</button>
+      <button class="btn btn-primary btn-full" onclick="act(this,()=>saveContact(),'Saving…')">Save contact</button>
     </div>
     <div id="card-loading" style="display:none" class="loading"><div class="spinner"></div><span class="text-sm">Reading card with AI…</span></div>
     ${!getClaudeKey()?'<div class="warn-box"><i class="ti ti-alert-triangle" style="color:var(--amber);font-size:16px;flex-shrink:0"></i><div class="text-xs" style="color:var(--amber)">Add your Claude API key to enable AI card reading. You can still enter details manually below.</div></div>':''}`
@@ -4860,7 +4893,7 @@ function openRFQAddContact(rfqId) {
         ${STATE.companies.map(c=>`<option value="${c.id}" ${cmp&&cmp.id===c.id?'selected':''}>${c.name}</option>`).join('')}
       </select>
     </div>
-    <button class="btn btn-primary btn-full" onclick="saveRFQContact('${rfqId}')"><i class="ti ti-check"></i> Save Contact</button>`;
+    <button class="btn btn-primary btn-full" onclick="act(this,()=>saveRFQContact('${rfqId}'),'Saving…')"><i class="ti ti-check"></i> Save Contact</button>`;
   openPanel('rfq-add-from');
 }
 
@@ -4925,7 +4958,7 @@ function openRFQAddCompany(rfqId) {
       <input type="checkbox" id="radc-save-contact" style="accent-color:var(--indigo);width:15px;height:15px" checked>
       <span style="font-size:11px;color:var(--text2)">${rfq.customerName||'Customer'} (${rfq.customerEmail||'no email'})</span>
     </label>
-    <button class="btn btn-primary btn-full" onclick="saveRFQCompany('${rfqId}')"><i class="ti ti-check"></i> Add Company</button>`;
+    <button class="btn btn-primary btn-full" onclick="act(this,()=>saveRFQCompany('${rfqId}'),'Saving…')"><i class="ti ti-check"></i> Add Company</button>`;
   openPanel('rfq-add-from');
 }
 
@@ -5120,7 +5153,7 @@ function openRFQCoQuickView(coName) {
       <div class="inp-label">Sale target (₹)</div>
       <input class="inp" type="number" id="qv-tgt" placeholder="e.g. 500000">
     </div>
-    <button class="btn btn-primary btn-full" onclick="saveAssignExisting('${existingCo.id}','qv-rep','qv-tgt')">
+    <button class="btn btn-primary btn-full" onclick="act(this,()=>saveAssignExisting('${existingCo.id}','qv-rep','qv-tgt'),'Assigning…')">
       <i class="ti ti-user-plus"></i> Assign to Target Companies
     </button>` : ''}
 
@@ -5144,7 +5177,7 @@ function openRFQCoQuickView(coName) {
       <div class="inp-label">Sale target (₹)</div>
       <input class="inp" type="number" id="qv-tgt" placeholder="e.g. 500000">
     </div>
-    <button class="btn btn-primary btn-full" onclick="saveNewCoFromQuickView('${coName.replace(/'/g,"\\'")}')">
+    <button class="btn btn-primary btn-full" onclick="act(this,()=>saveNewCoFromQuickView('${coName.replace(/'/g,"\\'")}'),'Adding…')">
       <i class="ti ti-plus"></i> Add & Assign
     </button>` : ''}
 
@@ -5252,7 +5285,7 @@ function openRFQDetail(id) {
     <div class="text-label" style="margin-bottom:8px">Update status</div>
     <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:14px">
       ${RFQ_STATUSES.filter(s=>s!=='Unmatched PO').map(s=>`
-        <button class="btn btn-sm ${rfq.status===s?'btn-primary':''}" style="font-size:10px" onclick="updateRFQStatus('${rfq.id}','${s}')">
+        <button class="btn btn-sm ${rfq.status===s?'btn-primary':''}" style="font-size:10px" onclick="act(this,()=>updateRFQStatus('${rfq.id}','${s}'),'Updating…')">
           ${s}
         </button>`).join('')}
     </div>
@@ -5262,7 +5295,7 @@ function openRFQDetail(id) {
       <div class="inp-label">Mark as quoted — add date</div>
       <input type="date" class="inp" id="rfq-quoted-date" value="${todayStr()}">
     </div>
-    <button class="btn btn-primary btn-full" style="margin-bottom:8px" onclick="markRFQQuoted('${rfq.id}')">
+    <button class="btn btn-primary btn-full" style="margin-bottom:8px" onclick="act(this,()=>markRFQQuoted('${rfq.id}'),'Updating…')">
       <i class="ti ti-check"></i> Mark as Quoted
     </button>`:''}
 
@@ -5275,10 +5308,10 @@ function openRFQDetail(id) {
       <div class="inp-label">PO amount (₹) — if order received</div>
       <input type="number" class="inp" id="rfq-po-amount" placeholder="e.g. 150000">
     </div>
-    <button class="btn btn-success btn-full" style="margin-bottom:8px" onclick="markOrderReceived('${rfq.id}')">
+    <button class="btn btn-success btn-full" style="margin-bottom:8px" onclick="act(this,()=>markOrderReceived('${rfq.id}'),'Updating…')">
       <i class="ti ti-trophy"></i> Mark Order Received
     </button>
-    <button class="btn btn-danger btn-full" onclick="updateRFQStatus('${rfq.id}','Order Lost')">
+    <button class="btn btn-danger btn-full" onclick="act(this,()=>updateRFQStatus('${rfq.id}','Order Lost'),'Updating…')">
       <i class="ti ti-x"></i> Mark Order Lost
     </button>`:''}`;
 
@@ -5380,7 +5413,7 @@ function openAddRFQPanel() {
       </div>
       <div><div class="inp-label">Date received</div><input type="date" class="inp" id="ar-date" value="${todayStr()}"></div>
     </div>
-    <button class="btn btn-primary btn-full" onclick="saveManualRFQ()"><i class="ti ti-check"></i> Add RFQ</button>`;
+    <button class="btn btn-primary btn-full" onclick="act(this,()=>saveManualRFQ(),'Adding…')"><i class="ti ti-check"></i> Add RFQ</button>`;
   openPanel('add-rfq');
 }
 
@@ -5521,9 +5554,9 @@ function renderTasks() {
           </div>
           ${rfq?`<div class="text-xs" style="color:var(--text3);margin-bottom:8px">${rfq.rfqSubject||''} · ${rfq.category||''}</div>`:''}
           <div class="row" style="gap:6px">
-            <button class="btn btn-success btn-sm" style="font-size:10px" onclick="completeTask('${t.id}')"><i class="ti ti-check"></i> Done</button>
+            <button class="btn btn-success btn-sm" style="font-size:10px" onclick="act(this,()=>completeTask('${t.id}'),'Saving…')"><i class="ti ti-check"></i> Done</button>
             ${rfq?`<button class="btn btn-primary btn-sm" style="font-size:10px" onclick="openRFQDetail('${rfq.id}');navigate('rfq')"><i class="ti ti-file-invoice"></i> View RFQ</button>`:''}
-            <button class="btn btn-sm" style="font-size:10px" onclick="snoozeTask('${t.id}')"><i class="ti ti-clock"></i> Snooze 2d</button>
+            <button class="btn btn-sm" style="font-size:10px" onclick="act(this,()=>snoozeTask('${t.id}'),'Snoozing…')"><i class="ti ti-clock"></i> Snooze 2d</button>
           </div>
         </div>`;
       }).join('')}`:''}
