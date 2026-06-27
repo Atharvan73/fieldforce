@@ -350,6 +350,8 @@ select.inp { cursor: pointer; }
 </div>
 
 <!-- MAIN APP -->
+<div id="pin-overlay" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:110;flex-direction:column;align-items:center;justify-content:flex-start;padding:32px 24px;overflow-y:auto"></div>
+
 <div id="app" style="display:none">
   <!-- TOP BAR -->
   <div id="topbar">
@@ -358,7 +360,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.10</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.11</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -528,7 +530,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '5.4'; // bump this to force SW cache invalidation
+const APP_VERSION = '5.5'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -948,30 +950,14 @@ async function refreshData(btn) {
 let selectedLoginId = null;
 let _preloadPromise = null; // pre-fetched data while on login screen
 
-async function initLogin() {
-  const users = await apiRead('Users');
-  STATE.users = users;
+let _pinUser = null;       // user awaiting PIN entry / setup
+function effectivePin(u){ return (u && u.pin && String(u.pin).trim()) || '1234'; }
+function needsPinSetup(u){ return effectivePin(u) === '1234'; }
 
-  // Start preloading all other sheets immediately in background
-  // so by the time user clicks login, data is ready
-  const PRELOAD_SHEETS = ['Companies','Targets','Visits','VisitPlan','Contacts','RFQs','Settings'];
-  _preloadPromise = Promise.allSettled(PRELOAD_SHEETS.map(s=>apiRead(s)))
-    .then(results => {
-      const obj = {};
-      PRELOAD_SHEETS.forEach((s,i)=>{ if(results[i].status==='fulfilled') obj[s]=results[i].value; });
-      return obj;
-    }).catch(()=>({}));
-
-  // Check if user was previously logged in — auto-login
-  const savedId = localStorage.getItem('ffp_user_id');
-  if(savedId && users.find(u=>u.id===savedId)) {
-    selectedLoginId = savedId;
-    await doLogin(true); // silent auto-login
-    return;
-  }
-
+function renderLoginCards() {
   const el = document.getElementById('user-list-login');
-  el.innerHTML = users.map(u => `
+  if(!el) return;
+  el.innerHTML = STATE.users.map(u => `
     <div class="user-card" id="uc-${u.id}" onclick="selectLoginUser('${u.id}',this)">
       <div class="user-card-av" style="background:${u.role==='manager'?'#6366F1':'#10B981'}">${u.avatar||u.name.slice(0,2).toUpperCase()}</div>
       <div class="user-card-info">
@@ -984,6 +970,30 @@ async function initLogin() {
       <i class="ti ti-check" id="chk-${u.id}" style="color:var(--indigo2);font-size:18px;display:none"></i>
     </div>`).join('');
 }
+
+async function initLogin() {
+  const users = await apiRead('Users');
+  STATE.users = users;
+
+  // Preload other sheets in the background so data is ready by login time.
+  const PRELOAD_SHEETS = ['Companies','Targets','Visits','VisitPlan','Contacts','RFQs','Settings'];
+  _preloadPromise = Promise.allSettled(PRELOAD_SHEETS.map(s=>apiRead(s)))
+    .then(results => {
+      const obj = {};
+      PRELOAD_SHEETS.forEach((s,i)=>{ if(results[i].status==='fulfilled') obj[s]=results[i].value; });
+      return obj;
+    }).catch(()=>({}));
+
+  renderLoginCards();
+
+  // Remembered session — re-enter via saved id, but still force PIN setup if never set.
+  const savedId = localStorage.getItem('ffp_user_id');
+  if(savedId && users.find(u=>u.id===savedId)) {
+    selectedLoginId = savedId;
+    await doLogin(true);
+  }
+}
+
 function selectLoginUser(id, el) {
   selectedLoginId = id;
   document.querySelectorAll('.user-card').forEach(c=>c.classList.remove('selected'));
@@ -992,41 +1002,146 @@ function selectLoginUser(id, el) {
   const chk = document.getElementById('chk-'+id);
   if(chk) chk.style.display='block';
 }
+
+// Step 1 — validate the selected profile, then gate on PIN.
 async function doLogin(silent=false) {
   if(!selectedLoginId) { showToast('Please select a profile','error'); return; }
-  STATE.user = STATE.users.find(u=>u.id===selectedLoginId);
-  if(!STATE.user) { showToast('User not found','error'); return; }
+  const u = STATE.users.find(x=>x.id===selectedLoginId);
+  if(!u) { showToast('User not found','error'); return; }
+  if(silent && !needsPinSetup(u)) { return completeLogin(u); }  // remembered + PIN already set
+  showPinStep(u);
+}
 
-  localStorage.setItem('ffp_user_id', selectedLoginId);
+// Step 2 — PIN entry overlay.
+function showPinStep(u) {
+  _pinUser = u;
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  const ov = document.getElementById('pin-overlay');
+  const first = needsPinSetup(u);
+  ov.innerHTML = `
+    <div style="width:100%;max-width:340px;margin:auto;text-align:center">
+      <div class="user-card-av" style="width:56px;height:56px;font-size:20px;margin:0 auto 12px;background:${u.role==='manager'?'#6366F1':'#10B981'}">${u.avatar||u.name.slice(0,2).toUpperCase()}</div>
+      <div style="font-size:18px;font-weight:700">${u.name}</div>
+      <div class="text-sm" style="margin-bottom:20px">${u.role==='manager'?'Manager':'Sales Rep'}</div>
+      <div class="inp-label" style="text-align:left;margin-bottom:6px">Enter your 4-digit PIN</div>
+      <input id="pin-input" type="password" inputmode="numeric" autocomplete="off" maxlength="4" class="inp"
+        style="text-align:center;letter-spacing:10px;font-size:22px;padding:12px"
+        oninput="this.value=this.value.replace(/[^0-9]/g,'');if(this.value.length===4)verifyPin()" />
+      <div id="pin-msg" style="font-size:11px;color:#FCA5A5;min-height:16px;margin-top:8px"></div>
+      ${first?`<div class="info-box" style="margin-top:6px;text-align:left"><i class="ti ti-info-circle" style="color:var(--blue);font-size:15px;flex-shrink:0"></i><div class="text-xs" style="color:#93C5FD">First time signing in? Your temporary PIN is <b>1234</b> — you'll set your own next.</div></div>`:''}
+      <button class="btn btn-primary btn-full" style="margin-top:14px" onclick="verifyPin()">Continue</button>
+      <button class="btn btn-full" style="margin-top:8px;background:none;border:none;color:var(--text3)" onclick="hidePinOverlay()">&larr; Choose a different profile</button>
+    </div>`;
+  ov.style.display = 'flex';
+  setTimeout(()=>{ const el=document.getElementById('pin-input'); if(el) el.focus(); }, 60);
+}
 
+function hidePinOverlay() {
+  const ov = document.getElementById('pin-overlay');
+  if(ov){ ov.style.display='none'; ov.innerHTML=''; }
+  _pinUser = null;
+  renderLoginCards();
+}
+function hidePinOverlayQuiet() {
+  const ov = document.getElementById('pin-overlay');
+  if(ov){ ov.style.display='none'; ov.innerHTML=''; }
+}
+
+function verifyPin() {
+  const u = _pinUser; if(!u) return;
+  const inp = document.getElementById('pin-input');
+  const val = ((inp && inp.value) || '').trim();
+  const msg = document.getElementById('pin-msg');
+  if(val.length !== 4){ if(msg) msg.textContent='Enter all 4 digits'; return; }
+  if(val !== effectivePin(u)){
+    if(msg) msg.textContent='Incorrect PIN — try again';
+    if(inp){ inp.value=''; inp.focus(); }
+    return;
+  }
+  if(needsPinSetup(u)) { showSetPinStep(u); return; }   // temporary PIN → force a change
+  completeLogin(u);
+}
+
+// Step 3 (first login / after reset) — choose a new PIN.
+function showSetPinStep(u) {
+  const ov = document.getElementById('pin-overlay');
+  ov.innerHTML = `
+    <div style="width:100%;max-width:340px;margin:auto;text-align:center">
+      <div class="login-logo" style="width:52px;height:52px;font-size:22px;margin:0 auto 12px"><i class="ti ti-lock"></i></div>
+      <div style="font-size:18px;font-weight:700">Set your PIN</div>
+      <div class="text-sm" style="margin-bottom:18px">Choose a new 4-digit PIN for ${u.name.split(' ')[0]}</div>
+      <div class="inp-label" style="text-align:left;margin-bottom:6px">New PIN</div>
+      <input id="pin-new" type="password" inputmode="numeric" autocomplete="off" maxlength="4" class="inp"
+        style="text-align:center;letter-spacing:10px;font-size:22px;padding:12px;margin-bottom:12px" oninput="this.value=this.value.replace(/[^0-9]/g,'')" />
+      <div class="inp-label" style="text-align:left;margin-bottom:6px">Confirm PIN</div>
+      <input id="pin-confirm" type="password" inputmode="numeric" autocomplete="off" maxlength="4" class="inp"
+        style="text-align:center;letter-spacing:10px;font-size:22px;padding:12px" oninput="this.value=this.value.replace(/[^0-9]/g,'')" />
+      <div id="pin-msg" style="font-size:11px;color:#FCA5A5;min-height:16px;margin-top:8px"></div>
+      <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="act(this,()=>saveNewPin(),'Saving…')">Save &amp; continue</button>
+    </div>`;
+  setTimeout(()=>{ const el=document.getElementById('pin-new'); if(el) el.focus(); }, 60);
+}
+
+async function saveNewPin() {
+  const u = _pinUser; if(!u) return;
+  const a = ((document.getElementById('pin-new')||{}).value)||'';
+  const b = ((document.getElementById('pin-confirm')||{}).value)||'';
+  const msg = document.getElementById('pin-msg');
+  const fail = t => { if(msg) msg.textContent=t; };
+  if(a.length!==4) return fail('PIN must be 4 digits');
+  if(a==='1234') return fail('Please choose a PIN other than 1234');
+  if(a!==b) return fail('PINs do not match');
+  const ok = await apiUpdate('Users', {id:u.id, pin:a});
+  if(!ok) return fail('Could not save — please try again');
+  u.pin = a;
+  const su = STATE.users.find(x=>x.id===u.id); if(su) su.pin = a;
+  showToast('PIN set \u2713','success');
+  completeLogin(u);
+}
+
+// Final step — enter the app.
+async function completeLogin(u) {
+  _pinUser = null;
+  STATE.user = u;
+  selectedLoginId = u.id;
+  localStorage.setItem('ffp_user_id', u.id);
+  hidePinOverlayQuiet();
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
-  document.getElementById('top-av').textContent = STATE.user.avatar||STATE.user.name.slice(0,2).toUpperCase();
-  document.getElementById('top-av').style.background = STATE.user.role==='manager'?'#6366F1':'#10B981';
+  document.getElementById('top-av').textContent = u.avatar||u.name.slice(0,2).toUpperCase();
+  document.getElementById('top-av').style.background = u.role==='manager'?'#6366F1':'#10B981';
   renderNav();
   updateNotifDot();
-
-  // Small delay to ensure DOM is fully painted before rendering
   await new Promise(r=>setTimeout(r,50));
-
   try {
     await loadFromCacheOrFetch();
   } catch(e) {
     console.error('Login load error:', e.message);
-    // Only navigate if page-home exists
     if(document.getElementById('page-home')) navigate('home');
   }
 }
+
 function logout() {
   if(confirm('Log out?')) {
     localStorage.removeItem('ffp_user_id');
     STATE.user=null;
     selectedLoginId=null;
+    _pinUser=null;
     document.getElementById('login-screen').style.display='flex';
     document.getElementById('app').style.display='none';
     stopGPS();
     initLogin();
   }
+}
+
+// Manager: reset a rep's PIN back to the temporary 1234 (they set a new one next login).
+async function resetRepPin(repId) {
+  const r = rep(repId);
+  if(!confirm(`Reset ${(r&&r.name)||'this rep'}'s PIN to 1234? They'll be asked to set a new one on next login.`)) return;
+  const ok = await apiUpdate('Users',{id:repId, pin:'1234'});
+  if(ok){ const u=STATE.users.find(x=>x.id===repId); if(u) u.pin='1234'; showToast('PIN reset to 1234 \u2713','success'); }
+  else showToast('Could not reset PIN','error');
 }
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
@@ -4509,6 +4624,7 @@ function renderTeam() {
         <div class="row" style="gap:6px;margin-top:10px">
           <button class="btn btn-sm" style="flex:1;justify-content:center;font-size:10px" onclick="STATE.viewRep='${r.id}';navigate('targets')"><i class="ti ti-target"></i> Targets</button>
           <button class="btn btn-sm" style="flex:1;justify-content:center;font-size:10px" onclick="STATE.viewRep='${r.id}';navigate('teamgps')"><i class="ti ti-truck"></i> Travel</button>
+          <button class="btn btn-sm" style="flex:1;justify-content:center;font-size:10px" onclick="act(this,()=>resetRepPin('${r.id}'),'Resetting…')"><i class="ti ti-lock-open"></i> Reset PIN</button>
         </div>
       </div>`;
     }).join('')}
