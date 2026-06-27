@@ -358,7 +358,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.8</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.9</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -498,7 +498,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '5.2'; // bump this to force SW cache invalidation
+const APP_VERSION = '5.3'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -1272,10 +1272,13 @@ function renderCompanies() {
   if(!STATE.coSearch) STATE.coSearch='';
   if(!STATE.coIndustryFilter) STATE.coIndustryFilter='all';
 
+  // Rep can browse the full company DB ("All companies") to add to their own targets.
+  const repAllMode = !isM && STATE.coView==='all';
+
   // Filter targets based on coView
   let myT;
   if(!isM) {
-    myT = STATE.targets.filter(t=>t.repId===STATE.user.id);
+    myT = STATE.targets.filter(t=>t.repId===STATE.user.id);   // rep's own targets (for value display)
   } else if(STATE.coView==='mine') {
     myT = STATE.targets.filter(t=>t.repId===STATE.user.id);
   } else if(STATE.coView==='all') {
@@ -1284,12 +1287,17 @@ function renderCompanies() {
     myT = STATE.targets.filter(t=>t.repId===STATE.coView);
   }
 
-  // All companies assigned to this user
-  const allCIds = [...new Set(myT.map(t=>t.companyId))];
-  let allCos = allCIds.map(id=>STATE.companies.find(c=>c.id===id)).filter(Boolean);
+  // Company source: rep "All companies" = whole DB; otherwise = companies that have a target in scope.
+  let allCos;
+  if(repAllMode) {
+    allCos = STATE.companies.slice();
+  } else {
+    const allCIds = [...new Set(myT.map(t=>t.companyId))];
+    allCos = allCIds.map(id=>STATE.companies.find(c=>c.id===id)).filter(Boolean);
+  }
 
-  // Filter by period using hierarchy
-  let cos = STATE.period==='annual'||STATE.period==='all'
+  // Filter by period using hierarchy (skip in rep all-companies browse — show everything).
+  let cos = (repAllMode || STATE.period==='annual' || STATE.period==='all')
     ? allCos
     : allCos.filter(c=>coIsInPeriod(c.id, myT, STATE.period));
 
@@ -1346,7 +1354,10 @@ function renderCompanies() {
     <div class="row-between" style="margin-bottom:12px">
       <div style="font-size:16px;font-weight:600">Target Companies</div>
       <div class="row" style="gap:6px">
-        ${isM?viewSwitcherHtml('coView', STATE.coView||'all', 'renderCompanies()'):''}
+        ${isM?viewSwitcherHtml('coView', STATE.coView||'all', 'renderCompanies()'):`<div style="display:inline-flex;background:var(--bg3);border-radius:8px;padding:2px">
+          <button class="seg-tab${(STATE.coView||'mine')!=='all'?' active':''}" style="flex:none;padding:5px 10px;font-size:11px" onclick="STATE.coView='mine';STATE.exp=null;renderCompanies()">My</button>
+          <button class="seg-tab${STATE.coView==='all'?' active':''}" style="flex:none;padding:5px 10px;font-size:11px" onclick="STATE.coView='all';STATE.exp=null;renderCompanies()">All</button>
+        </div>`}
         <button class="btn btn-primary btn-sm" onclick="openAddCompanyPanel()"><i class="ti ti-plus"></i> Add</button>
       </div>
     </div>
@@ -1452,9 +1463,9 @@ function renderCompanies() {
               ${bestT?.items?`<div class="text-sm" style="margin-bottom:3px">${bestT.items.substring(0,55)}${bestT.items.length>55?'…':''}</div>`:''}
               ${bestT?.goals?`<div style="font-size:9px;color:var(--indigo2);background:rgba(99,102,241,.08);border-radius:4px;padding:2px 6px;display:inline-block;margin-bottom:6px">🎯 ${bestT.goals.substring(0,45)}${bestT.goals.length>45?'…':''}</div>`:''}
               <div class="row" style="gap:5px;margin-top:4px;flex-wrap:wrap">
-                ${!hasMonthly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(245,158,11,.3);color:var(--amber)" onclick="event.stopPropagation();act(this,()=>addFocusPeriod('${c.id}','monthly'),'Adding…')"><i class="ti ti-plus" style="font-size:10px"></i> Add to Monthly</button>`:''}
-                ${!hasWeekly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(16,185,129,.3);color:var(--emerald)" onclick="event.stopPropagation();act(this,()=>addFocusPeriod('${c.id}','weekly'),'Adding…')"><i class="ti ti-plus" style="font-size:10px"></i> Add to Weekly</button>`:''}
-                ${isM&&!allT.some(t=>t.companyId===c.id&&t.repId===STATE.user.id)?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="event.stopPropagation();act(this,()=>addToMyCompanies('${c.id}'),'Adding…')"><i class="ti ti-user-plus" style="font-size:10px"></i> Add to mine</button>`:''}
+                ${allT.length&&!hasMonthly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(245,158,11,.3);color:var(--amber)" onclick="event.stopPropagation();act(this,()=>addFocusPeriod('${c.id}','monthly'),'Adding…')"><i class="ti ti-plus" style="font-size:10px"></i> Add to Monthly</button>`:''}
+                ${allT.length&&!hasWeekly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(16,185,129,.3);color:var(--emerald)" onclick="event.stopPropagation();act(this,()=>addFocusPeriod('${c.id}','weekly'),'Adding…')"><i class="ti ti-plus" style="font-size:10px"></i> Add to Weekly</button>`:''}
+                ${(isM||repAllMode)&&!allT.some(t=>t.companyId===c.id&&t.repId===STATE.user.id)?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="event.stopPropagation();act(this,()=>addToMyCompanies('${c.id}'),'Adding…')"><i class="ti ti-user-plus" style="font-size:10px"></i> Add to mine</button>`:''}
                 <button class="btn btn-sm" style="font-size:9px" onclick="openCoDetail('${c.id}');event.stopPropagation()"><i class="ti ti-arrow-right" style="font-size:10px"></i> Full details</button>
               </div>
             </div>
@@ -1545,7 +1556,7 @@ async function addFocusPeriod(coId, period) {
 }
 
 async function addToMyCompanies(coId) {
-  // Add annual target for manager themselves
+  // Add annual target for the current user (rep or manager) themselves.
   const existing = STATE.targets.find(t=>t.companyId===coId&&t.repId===STATE.user.id&&t.period==='annual');
   if(existing){ showToast('Already in your companies',''); return; }
   const t = {
@@ -1554,8 +1565,20 @@ async function addToMyCompanies(coId) {
     saleTarget:0, items:'', goals:'', achieved:0, approvedBy:STATE.user.id
   };
   const ok = await apiWrite('Targets',t);
-  if(ok){ STATE.targets.push(t); showToast('Added to your companies ✓','success'); renderCompanies(); }
+  if(ok){
+    STATE.targets.push(t);
+    // Keep Companies.assignedReps in sync so this company shows in the user's Add Visit / Add RFQ pickers.
+    const c = STATE.companies.find(x=>x.id===coId);
+    if(c){
+      const set = new Set(String(c.assignedReps||'').split(',').map(s=>s.trim()).filter(Boolean));
+      if(!set.has(STATE.user.id)){ const ar=[...set, STATE.user.id].join(','); c.assignedReps=ar; apiUpdate('Companies',{id:coId, assignedReps:ar}); }
+    }
+    showToast('Added to your companies ✓','success');
+    renderCompanies();
+  }
 }
+
+async function addToMyCompaniesAndClose(coId){ await addToMyCompanies(coId); closePanel('addco'); }
 
 function checkDuplicateCompany(val) {
   const list = document.getElementById('aco-dup-list');
@@ -1567,12 +1590,16 @@ function checkDuplicateCompany(val) {
   list.style.display='block';
   list.innerHTML = matches.map(c=>{
     const assignedReps = [...new Set(STATE.targets.filter(t=>t.companyId===c.id).map(t=>t.repId).filter(Boolean))].map(rid=>{const r=rep(rid);return r&&r.name?r.name.split(' ')[0]:null;}).filter(Boolean).join(', ');
+    const alreadyMine = STATE.targets.some(t=>t.companyId===c.id&&t.repId===STATE.user.id);
+    const actionBtn = STATE.user.role==='manager'
+      ? `<button class="btn btn-sm btn-primary" style="font-size:10px" onclick="assignExistingCompany('${c.id}')"><i class="ti ti-user-plus"></i> Assign this company to a rep instead</button>`
+      : (alreadyMine
+          ? `<span class="badge badge-green" style="font-size:9px"><i class="ti ti-check" style="font-size:10px"></i> Already in your companies</span>`
+          : `<button class="btn btn-sm btn-primary" style="font-size:10px" onclick="act(this,()=>addToMyCompaniesAndClose('${c.id}'),'Adding…')"><i class="ti ti-plus"></i> Add to my target companies</button>`);
     return `<div style="padding:10px 12px;border-bottom:1px solid var(--border)">
       <div style="font-size:11px;font-weight:600;color:var(--amber);margin-bottom:2px">⚠ Already exists: ${c.name}</div>
       <div style="font-size:10px;color:var(--text3);margin-bottom:6px">${c.address||''} ${assignedReps?'· Assigned to: '+assignedReps:''}</div>
-      <button class="btn btn-sm btn-primary" style="font-size:10px" onclick="assignExistingCompany('${c.id}')">
-        <i class="ti ti-user-plus"></i> Assign this company to a rep instead
-      </button>
+      ${actionBtn}
     </div>`;
   }).join('');
 }
@@ -1860,7 +1887,9 @@ function openAddCompanyPanel() {
         <i class="ti ti-info-circle" style="color:var(--blue);font-size:16px;flex-shrink:0"></i>
         <div class="text-xs" style="color:#93C5FD">This company will be added to your target list immediately. To remove it later, you'll need manager approval.</div>
       </div>
-      <div class="inp-group"><div class="inp-label">Company name *</div><input class="inp" id="aco-name" placeholder="e.g. ABC Industries Pvt Ltd"></div>
+      <div class="inp-group"><div class="inp-label">Company name *</div><input class="inp" id="aco-name" placeholder="e.g. ABC Industries Pvt Ltd" oninput="checkDuplicateCompany(this.value)" autocomplete="off">
+        <div id="aco-dup-list" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:160px;overflow-y:auto"></div>
+      </div>
       <div class="inp-group"><div class="inp-label">Address *</div><input class="inp" id="aco-addr" placeholder="e.g. Sector 62, Noida, UP"></div>
       <div class="grid2" style="gap:8px;margin-bottom:12px">
         <div><div class="inp-label">City / Region</div><input class="inp" id="aco-region" placeholder="e.g. Noida"></div>
