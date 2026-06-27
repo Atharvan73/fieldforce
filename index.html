@@ -358,7 +358,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.9</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.10</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -457,6 +457,18 @@ select.inp { cursor: pointer; }
   <button onclick="document.getElementById('install-banner').style.display='none'" style="background:none;border:none;color:#64748B;cursor:pointer;padding:4px"><i class="ti ti-x" style="font-size:16px"></i></button>
 </div>
 
+<!-- iOS install hint (Safari can't fire beforeinstallprompt — guide the user manually) -->
+<div id="ios-install-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#1E293B;border-top:1px solid #334155;padding:12px 16px;z-index:300;align-items:center;gap:12px">
+  <div style="width:36px;height:36px;background:#4F46E5;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+    <i class="ti ti-trending-up" style="font-size:18px;color:#fff"></i>
+  </div>
+  <div style="flex:1">
+    <div style="font-size:12px;font-weight:600;color:#F1F5F9">Install FieldForce Pro</div>
+    <div style="font-size:10px;color:#94A3B8">Tap <i class="ti ti-square-arrow-up" style="font-size:13px;vertical-align:-2px"></i> Share, then <b>"Add to Home Screen"</b></div>
+  </div>
+  <button onclick="dismissIosInstall()" style="background:none;border:none;color:#64748B;cursor:pointer;padding:4px"><i class="ti ti-x" style="font-size:16px"></i></button>
+</div>
+
 <script>
 // PWA Install prompt
 let deferredPrompt = null;
@@ -479,6 +491,24 @@ window.addEventListener('appinstalled', () => {
   showToast('App installed successfully ✓', 'success');
 });
 
+// iOS install hint — Apple's Safari doesn't support beforeinstallprompt, so PWAs
+// are installed via Share → "Add to Home Screen". Show a guidance banner instead.
+function dismissIosInstall(){
+  const b=document.getElementById('ios-install-banner'); if(b) b.style.display='none';
+  try{ localStorage.setItem('ffp_ios_install_dismissed','1'); }catch(e){}
+}
+(function(){
+  const ua = navigator.userAgent || '';
+  const isIOS = /iphone|ipad|ipod/i.test(ua) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  const isSafari = /safari/i.test(ua) && !/crios|fxios|edgios|android/i.test(ua);  // Add-to-Home-Screen is Safari-only on iOS
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true;
+  let dismissed=false; try{ dismissed = localStorage.getItem('ffp_ios_install_dismissed')==='1'; }catch(e){}
+  if(isIOS && isSafari && !standalone && !dismissed){
+    const b=document.getElementById('ios-install-banner');
+    if(b) b.style.display='flex';
+  }
+})();
+
 // Register service worker
 if('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -498,7 +528,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '5.3'; // bump this to force SW cache invalidation
+const APP_VERSION = '5.4'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
