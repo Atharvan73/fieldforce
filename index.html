@@ -360,7 +360,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.11</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.12</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -428,6 +428,7 @@ select.inp { cursor: pointer; }
       <div class="panel" id="panel-addvisit"></div>
       <div class="panel" id="panel-addco"></div>
       <div class="panel" id="panel-upl"></div>
+      <div class="panel" id="panel-deact"></div>
       <div class="panel" id="panel-card"></div>
       <div class="panel" id="panel-addcal"></div>
       <div class="panel" id="panel-vehicle"></div>
@@ -530,7 +531,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '5.5'; // bump this to force SW cache invalidation
+const APP_VERSION = '5.6'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -639,7 +640,9 @@ function haversineKm(lat1,lon1,lat2,lon2) { const R=6371,dLat=(lat2-lat1)*Math.P
 function vehicleTag(vh) { if(vh==='four-wheeler') return `<span class="v-4w"><i class="ti ti-car" style="font-size:10px"></i>₹8/km</span>`; if(vh==='public-transport') return `<span class="v-pt"><i class="ti ti-bus" style="font-size:10px"></i>₹3.5/km</span>`; return `<span class="v-2w"><i class="ti ti-motorbike" style="font-size:10px"></i>₹3.5/km</span>`; }
 function co(id) { return STATE.companies.find(c=>c.id===id)||{}; }
 function rep(id) { return STATE.users.find(u=>u.id===id)||{}; }
-function myReps() { return STATE.users.filter(u=>u.role==='rep'); }
+function isActive(u){ return !!u && String(u.active==null?'':u.active).toUpperCase()!=='FALSE'; }
+function myReps() { return STATE.users.filter(u=>u.role==='rep' && isActive(u)); }   // active reps (for assignment pickers)
+function allReps() { return STATE.users.filter(u=>u.role==='rep'); }                 // includes former reps (for history)
 
 // ── TOAST ────────────────────────────────────────────────────────────────────
 function showToast(msg, type='') {
@@ -957,7 +960,7 @@ function needsPinSetup(u){ return effectivePin(u) === '1234'; }
 function renderLoginCards() {
   const el = document.getElementById('user-list-login');
   if(!el) return;
-  el.innerHTML = STATE.users.map(u => `
+  el.innerHTML = STATE.users.filter(isActive).map(u => `
     <div class="user-card" id="uc-${u.id}" onclick="selectLoginUser('${u.id}',this)">
       <div class="user-card-av" style="background:${u.role==='manager'?'#6366F1':'#10B981'}">${u.avatar||u.name.slice(0,2).toUpperCase()}</div>
       <div class="user-card-info">
@@ -988,9 +991,12 @@ async function initLogin() {
 
   // Remembered session — re-enter via saved id, but still force PIN setup if never set.
   const savedId = localStorage.getItem('ffp_user_id');
-  if(savedId && users.find(u=>u.id===savedId)) {
+  const savedUser = savedId && users.find(u=>u.id===savedId);
+  if(savedUser && isActive(savedUser)) {
     selectedLoginId = savedId;
     await doLogin(true);
+  } else if(savedUser && !isActive(savedUser)) {
+    localStorage.removeItem('ffp_user_id');   // account deactivated — drop the remembered session
   }
 }
 
@@ -1008,6 +1014,7 @@ async function doLogin(silent=false) {
   if(!selectedLoginId) { showToast('Please select a profile','error'); return; }
   const u = STATE.users.find(x=>x.id===selectedLoginId);
   if(!u) { showToast('User not found','error'); return; }
+  if(!isActive(u)) { showToast('This account is no longer active','error'); return; }
   if(silent && !needsPinSetup(u)) { return completeLogin(u); }  // remembered + PIN already set
   showPinStep(u);
 }
@@ -1143,6 +1150,72 @@ async function resetRepPin(repId) {
   if(ok){ const u=STATE.users.find(x=>x.id===repId); if(u) u.pin='1234'; showToast('PIN reset to 1234 \u2713','success'); }
   else showToast('Could not reset PIN','error');
 }
+
+// ── OFFBOARDING — mark a rep as "left the company" ─────────────────────────────
+function openDeactivatePanel(repId) {
+  const r = rep(repId); if(!r) return;
+  const panel = document.getElementById('panel-deact');
+  const others = myReps().filter(x=>x.id!==repId);
+  const theirCos = [...new Set(STATE.targets.filter(t=>String(t.repId).trim()===repId).map(t=>t.companyId))].length;
+  const openRFQs = STATE.rfqs.filter(q=>String(q.repId).trim()===repId && !['Order Received','Order Lost','Closed'].includes(q.status)).length;
+  panel.innerHTML = `
+    <div class="panel-head"><button class="panel-back" onclick="closePanel('deact')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">Mark as left — ${r.name}</span></div>
+    <div class="warn-box" style="margin-bottom:14px"><i class="ti ti-info-circle" style="color:var(--amber);font-size:16px;flex-shrink:0"></i><div class="text-sm">${r.name} will no longer be able to log in and won't appear in assignment lists. Their <b>past visits, orders and travel records stay intact</b> under their name for your reports.</div></div>
+
+    <div class="text-label" style="margin-bottom:6px">Move their active work to</div>
+    <div class="text-xs" style="margin-bottom:8px">Their ${theirCos} target ${theirCos===1?'company':'companies'}${openRFQs?` and ${openRFQs} open RFQ${openRFQs>1?'s':''}`:''} will be reassigned. Completed history is never moved.</div>
+    <select class="inp" id="deact-target" style="margin-bottom:16px">
+      ${others.map(x=>`<option value="${x.id}">${x.name}</option>`).join('')}
+      <option value="">Unassigned (manager view only)</option>
+    </select>
+
+    <button class="btn btn-danger btn-full" onclick="act(this,()=>confirmDeactivate('${repId}'),'Processing…')"><i class="ti ti-user-off"></i> Mark as left &amp; reassign</button>
+    <button class="btn btn-full" style="margin-top:8px" onclick="closePanel('deact')">Cancel</button>`;
+  openPanel('deact');
+}
+
+async function confirmDeactivate(repId) {
+  const exRep = rep(repId);
+  const sel = document.getElementById('deact-target');
+  const target = sel ? sel.value : '';   // '' = Unassigned
+
+  // 1. Mark the account inactive (blocks login, hides from pickers).
+  await apiUpdate('Users', {id:repId, active:'FALSE'});
+  const u = STATE.users.find(x=>x.id===repId); if(u) u.active='FALSE';
+
+  // 2. Move their target rows (= their companies) to the chosen rep / Unassigned.
+  const theirTargets = STATE.targets.filter(t=>String(t.repId).trim()===repId);
+  const coIds = [...new Set(theirTargets.map(t=>t.companyId))];
+  await Promise.all(theirTargets.map(t=>apiUpdate('Targets',{id:t.id, repId:target}).then(()=>{ t.repId=target; })));
+
+  // 3. Keep Companies.assignedReps in sync — drop the ex-rep, add the new owner.
+  await Promise.all(coIds.map(cid=>{
+    const c = STATE.companies.find(x=>x.id===cid); if(!c) return Promise.resolve();
+    const set = new Set(String(c.assignedReps||'').split(',').map(s=>s.trim()).filter(Boolean));
+    set.delete(repId); if(target) set.add(target);
+    const ar = [...set].join(','); c.assignedReps = ar;
+    return apiUpdate('Companies',{id:cid, assignedReps:ar});
+  }));
+
+  // 4. Move their still-open RFQs. Won/lost/closed RFQs stay under their name as history.
+  const openRFQs = STATE.rfqs.filter(q=>String(q.repId).trim()===repId && !['Order Received','Order Lost','Closed'].includes(q.status));
+  await Promise.all(openRFQs.map(q=>apiUpdate('RFQs',{id:q.id, repId:target}).then(()=>{ q.repId=target; })));
+
+  // (Visits, POs, GPS/TA logs and closed RFQs are intentionally left under the ex-rep as history.)
+  showToast(`${exRep?.name||'Rep'} marked as left \u2713`,'success');
+  closePanel('deact');
+  renderTeam();
+}
+
+async function reactivateRep(repId) {
+  const r = rep(repId);
+  if(!confirm(`Reactivate ${(r&&r.name)||'this rep'}? They'll be able to log in again.`)) return;
+  const ok = await apiUpdate('Users',{id:repId, active:'TRUE'});
+  if(ok){ const u=STATE.users.find(x=>x.id===repId); if(u) u.active='TRUE'; showToast(`${(r&&r.name)||'Rep'} reactivated \u2713`,'success'); renderTeam(); }
+  else showToast('Could not reactivate','error');
+}
+
+function viewRepHistory(repId){ STATE.anRep=repId; navigate('analysis'); }
 
 // ── NAV ───────────────────────────────────────────────────────────────────────
 function renderNav() {
@@ -4626,8 +4699,31 @@ function renderTeam() {
           <button class="btn btn-sm" style="flex:1;justify-content:center;font-size:10px" onclick="STATE.viewRep='${r.id}';navigate('teamgps')"><i class="ti ti-truck"></i> Travel</button>
           <button class="btn btn-sm" style="flex:1;justify-content:center;font-size:10px" onclick="act(this,()=>resetRepPin('${r.id}'),'Resetting…')"><i class="ti ti-lock-open"></i> Reset PIN</button>
         </div>
+        <button class="btn btn-sm btn-full" style="margin-top:6px;border-color:rgba(239,68,68,.25);color:var(--rose)" onclick="openDeactivatePanel('${r.id}')"><i class="ti ti-user-off"></i> Mark as left the company</button>
       </div>`;
     }).join('')}
+    ${allReps().filter(r=>!isActive(r)).length?`
+    <div class="text-label" style="margin:18px 0 8px">Former team members</div>
+    ${allReps().filter(r=>!isActive(r)).map(r=>{
+      const visits=STATE.visits.filter(v=>v.repId===r.id).length;
+      const pos=STATE.pos.filter(p=>p.repId===r.id);
+      const sales=pos.reduce((s,p)=>s+Number(p.amount||0),0);
+      return `<div class="card" style="opacity:.9">
+        <div class="row-between" style="margin-bottom:8px">
+          <div class="row"><div style="width:32px;height:32px;border-radius:50%;background:var(--text3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff">${r.avatar||r.name.slice(0,2)}</div><div><div style="font-size:12px;font-weight:500">${r.name}</div><div class="text-xs" style="color:var(--text3)">Left the company</div></div></div>
+          <span class="badge badge-gray">Inactive</span>
+        </div>
+        <div class="grid3" style="text-align:center;margin-bottom:10px">
+          <div class="card-sm"><div style="font-size:13px;font-weight:700">${visits}</div><div class="text-xs">Total visits</div></div>
+          <div class="card-sm"><div style="font-size:13px;font-weight:700">${pos.length}</div><div class="text-xs">Orders</div></div>
+          <div class="card-sm"><div style="font-size:13px;font-weight:700;color:var(--emerald)">${fmt(sales)}</div><div class="text-xs">Sales value</div></div>
+        </div>
+        <div class="row" style="gap:6px">
+          <button class="btn btn-sm" style="flex:1;justify-content:center;font-size:10px" onclick="viewRepHistory('${r.id}')"><i class="ti ti-history"></i> View history</button>
+          <button class="btn btn-sm" style="flex:1;justify-content:center;font-size:10px" onclick="act(this,()=>reactivateRep('${r.id}'),'…')"><i class="ti ti-user-check"></i> Reactivate</button>
+        </div>
+      </div>`;
+    }).join('')}`:''}
     ${STATE.approvals.filter(a=>a.status==='pending').length?`<div class="card" style="border-color:rgba(245,158,11,.3)">
       <div style="font-size:13px;font-weight:600;margin-bottom:10px"><i class="ti ti-bell" style="color:var(--amber);vertical-align:-2px"></i> Approval queue</div>
       ${STATE.approvals.filter(a=>a.status==='pending').map(ar=>{
@@ -5037,7 +5133,7 @@ function renderAnalysis() {
 
     ${isM?`<div class="chip-row">
       <span class="chip${STATE.anRep==='all'?' active':''}" onclick="STATE.anRep='all';renderAnalysis()">All team</span>
-      ${myReps().map(r=>`<span class="chip${STATE.anRep===r.id?' active':''}" onclick="STATE.anRep='${r.id}';renderAnalysis()">${r.name.split(' ')[0]}</span>`).join('')}
+      ${allReps().map(r=>`<span class="chip${STATE.anRep===r.id?' active':''}" style="${isActive(r)?'':'opacity:.6'}" onclick="STATE.anRep='${r.id}';renderAnalysis()">${r.name.split(' ')[0]}${isActive(r)?'':' (left)'}</span>`).join('')}
     </div>`:''}
 
     <div class="grid2 desk-grid2" style="margin-bottom:12px">
