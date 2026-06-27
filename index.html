@@ -360,7 +360,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.12</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.13</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -531,7 +531,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '5.6'; // bump this to force SW cache invalidation
+const APP_VERSION = '5.7'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -632,7 +632,17 @@ function pb(p, h=5) { return `<div class="pbar-wrap" style="height:${h}px"><div 
 function pri(p) { return `<span class="p${p}">${p}</span>`; }
 function dot(s) { const c={completed:'dot-green','in-progress':'dot-amber',planned:'dot-blue'}; return `<div class="dot ${c[s]||'dot-gray'}"></div>`; }
 function sbg(s) { const m={completed:['badge-green','Done'],'in-progress':['badge-amber','Active'],planned:['badge-blue','Planned'],cancelled:['badge-red','Cancelled']}; const[c,l]=m[s]||['badge-gray',s]; return `<span class="badge ${c}">${l}</span>`; }
-function calcInc(a) { a=Number(a)||0; if(a<=1e6) return 0; if(a<=3e6) return (a-1e6)*0.01; return 20000+(a-3e6)*0.015; }
+const MONTHLY_TARGET = 3000000;   // ₹30L assigned monthly sales target (incentive baseline)
+// Incentive on the month's sales: below ₹30L none, ₹30L–₹50L → 1% of total, above ₹50L → 1.5% of total.
+function calcInc(a) {
+  a = Number(a)||0;
+  if(a >= 5000000) return Math.round(a * 0.015);
+  if(a >= 3000000) return Math.round(a * 0.01);
+  return 0;
+}
+function monthBoundsNow(){ const d=new Date(), y=d.getFullYear(), m=d.getMonth(), mm=String(m+1).padStart(2,'0'); return {start:`${y}-${mm}-01`, end:`${y}-${mm}-${String(new Date(y,m+1,0).getDate()).padStart(2,'0')}`}; }
+// This calendar month's confirmed (verified) sales for a rep — drives monthly target & incentive.
+function monthSales(repId){ const {start,end}=monthBoundsNow(); return STATE.pos.filter(p=>p.repId===repId&&p.status==='verified'&&String(p.date||'')>=start&&String(p.date||'')<=end).reduce((s,p)=>s+Number(p.amount||0),0); }
 function kmRate(vh) { return KM_RATES[vh]||3.5; }
 function taAmt(km,vh) { return Math.round((Number(km)||0)*kmRate(vh)); }
 function weekRange(d) { const dt=new Date(d); const day=dt.getDay(); const diff=day===0?-6:1-day; const mon=new Date(dt); mon.setDate(dt.getDate()+diff); const sat=new Date(mon); sat.setDate(mon.getDate()+5); return { start:mon.toISOString().slice(0,10), end:sat.toISOString().slice(0,10) }; }
@@ -1341,10 +1351,9 @@ function renderRepHome(el) {
   if(!el) return;
   const u = STATE.user;
   if(!u) return;
-  const mt = STATE.targets.filter(t=>t.repId===u.id&&t.period==='monthly');
-  const monthTarget = mt.reduce((s,t)=>s+Number(t.saleTarget||0),0);
+  const monthTarget = MONTHLY_TARGET;
   const myPOs = STATE.pos.filter(p=>p.repId===u.id&&p.status==='verified');
-  const achieved = myPOs.reduce((s,p)=>s+Number(p.amount||0),0);
+  const achieved = monthSales(u.id);
   const pc = monthTarget ? Math.round(achieved/monthTarget*100) : 0;
   const inc = calcInc(achieved);
   const tmrStr = new Date(Date.now()+86400000).toISOString().slice(0,10);
@@ -1369,7 +1378,7 @@ function renderRepHome(el) {
         <div style="text-align:right"><div style="font-size:22px;font-weight:700;color:${pbc(pc)}">${pc}%</div><div style="font-size:10px;color:#34D399">Incentive: ${fmt(inc)}</div></div>
       </div>
       ${pb(pc,6)}
-      <div class="text-xs" style="margin-top:6px">${monthTarget>0?fmt(monthTarget-achieved)+' remaining':'Set monthly targets to track progress'}</div>
+      <div class="text-xs" style="margin-top:6px">${achieved<3e6?fmt(3e6-achieved)+' to unlock 1% incentive':achieved<5e6?fmt(5e6-achieved)+' to reach 1.5% incentive':'Top incentive tier reached 🎉'}</div>
     </div>
     <div class="grid2 desk-grid2" style="margin-bottom:10px">
       <div class="card" style="padding:12px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--indigo2)">${STATE.targets.filter(t=>t.repId===u.id&&t.period==='annual').length}</div><div class="text-xs">Annual targets</div></div>
@@ -1439,8 +1448,8 @@ function renderMgrHome(el) {
       <div style="font-size:13px;font-weight:600;margin-bottom:12px">Team performance — ${new Date().toLocaleString('default',{month:'long'})}</div>
       ${reps.map(r=>{
         const myPOs=STATE.pos.filter(p=>p.repId===r.id&&p.status==='verified');
-        const ac=myPOs.reduce((s,p)=>s+Number(p.amount||0),0);
-        const mt=STATE.targets.filter(t=>t.repId===r.id&&t.period==='monthly').reduce((s,t)=>s+Number(t.saleTarget||0),0);
+        const ac=monthSales(r.id);
+        const mt=MONTHLY_TARGET;
         const pc=mt?Math.round(ac/mt*100):0;
         return `<div style="margin-bottom:12px"><div class="row-between" style="margin-bottom:4px"><div class="row"><div style="width:24px;height:24px;border-radius:50%;background:var(--emerald);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:#fff">${r.avatar||r.name.slice(0,2)}</div><span style="font-size:12px;font-weight:500">${r.name}</span></div><span class="text-sm">${fmt(ac)} / ${fmt(mt)}</span></div>${pb(pc,4)}<div class="text-xs" style="margin-top:2px">${pc}% · Incentive: ${fmt(calcInc(ac))}</div></div>`;
       }).join('')}
@@ -4039,8 +4048,8 @@ function renderTargets() {
   const r = rep(rId);
   const myPOs = STATE.pos.filter(p=>p.repId===rId);
   const verified = myPOs.filter(p=>p.status==='verified');
-  const ach = verified.reduce((s,p)=>s+Number(p.amount||0),0);
-  const mt = STATE.targets.filter(t=>t.repId===rId&&t.period==='monthly').reduce((s,t)=>s+Number(t.saleTarget||0),0);
+  const ach = monthSales(rId);
+  const mt = MONTHLY_TARGET;
   const pc = mt ? Math.round(ach/mt*100) : 0;
   const inc = calcInc(ach);
 
@@ -4065,7 +4074,7 @@ function renderTargets() {
     </div>
     <div class="card">
       <div style="font-size:13px;font-weight:600;margin-bottom:10px">Incentive slabs</div>
-      ${[{l:'Below ₹10L',d:'No incentive',mn:0,mx:1e6},{l:'₹10L – ₹30L',d:'1% on amount above ₹10L',mn:1e6,mx:3e6},{l:'Above ₹30L',d:'1.5% on amount above ₹30L',mn:3e6,mx:Infinity}].map((s,i)=>{
+      ${[{l:'Below ₹30L',d:'No incentive',mn:0,mx:3e6},{l:'₹30L – ₹50L',d:'1% of total sales',mn:3e6,mx:5e6},{l:'Above ₹50L',d:'1.5% of total sales',mn:5e6,mx:Infinity}].map((s,i)=>{
         const active=ach>=s.mn&&ach<s.mx,past=ach>=s.mx;
         return `<div class="slab${active?' active-slab':past?' done-slab':''}">
           <div class="slab-circle" style="${past?'background:var(--emerald);color:#fff':active?'background:var(--indigo);color:#fff':'background:var(--bg3);color:var(--text2)'}">${past?'<i class="ti ti-check" style="font-size:12px"></i>':`<span>${i+1}</span>`}</div>
@@ -4674,8 +4683,8 @@ function renderTeam() {
     <div style="font-size:16px;font-weight:600;margin-bottom:12px">Team Overview</div>
     ${reps.map(r=>{
       const myPOs=STATE.pos.filter(p=>p.repId===r.id&&p.status==='verified');
-      const ach=myPOs.reduce((s,p)=>s+Number(p.amount||0),0);
-      const mt=STATE.targets.filter(t=>t.repId===r.id&&t.period==='monthly').reduce((s,t)=>s+Number(t.saleTarget||0),0);
+      const ach=monthSales(r.id);
+      const mt=MONTHLY_TARGET;
       const pc=mt?Math.round(ach/mt*100):0;
       const tv=STATE.visits.filter(v=>v.repId===r.id&&v.date===todayStr());
       const done=tv.filter(v=>v.status==='completed').length;
