@@ -361,7 +361,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.14</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.15</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -532,7 +532,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '5.8'; // bump this to force SW cache invalidation
+const APP_VERSION = '5.9'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -1456,6 +1456,22 @@ function renderMgrHome(el) {
   const myMthAch = STATE.pos.filter(p=>p.repId===STATE.user.id&&p.status==='verified').reduce((s,p)=>s+Number(p.amount||0),0);
   el.innerHTML = `
     <div style="margin-bottom:14px"><div style="font-size:16px;font-weight:600;letter-spacing:-.3px">Manager Dashboard</div><div class="text-sm">Good morning, ${STATE.user.name.split(' ')[0]} 👋 · ${new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'short'})}</div></div>
+
+    <div class="card" style="margin-bottom:10px;border-color:${STATE.onField?'rgba(16,185,129,.45)':'var(--border)'};${STATE.onField?'background:linear-gradient(135deg,rgba(16,185,129,.08),var(--bg2))':''}">
+      <div class="row-between">
+        <div class="row" style="gap:10px;align-items:center">
+          <div style="width:12px;height:12px;border-radius:50%;background:${STATE.onField?'var(--emerald)':'var(--text3)'};${STATE.onField?'box-shadow:0 0 0 4px rgba(16,185,129,.18)':''};flex-shrink:0"></div>
+          <div>
+            <div style="font-size:13px;font-weight:600">${STATE.onField?'On field — tracking active':'Off field'}</div>
+            <div class="text-xs">${STATE.onField?(STATE.waypoints&&STATE.waypoints.length?`${STATE.waypoints.length} location${STATE.waypoints.length!==1?'s':''} captured · ${vehicleTag(STATE.fieldVehicle)}`:'No location captured yet — turn on GPS'):'Mark on field when you start your day'}</div>
+          </div>
+        </div>
+        <button class="btn btn-sm ${STATE.onField?'btn-danger':'btn-primary'}" onclick="${STATE.onField?'act(this,()=>stopField(),\'…\')':'showVehicleSelector()'}">${STATE.onField?'Mark off field':'Mark on field'}</button>
+      </div>
+      ${fieldEventsToday().length?`<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+        ${fieldEventsToday().slice().reverse().map(e=>`<div class="row-between" style="font-size:11px;padding:2px 0"><span><i class="ti ti-${e.action==='on'?'map-pin':'map-pin-off'}" style="font-size:12px;color:${e.action==='on'?'var(--emerald)':'var(--text3)'}"></i> Marked ${e.action==='on'?'ON':'OFF'} field</span><span class="text-xs">${e.time} · ${e.locOk?'<span style="color:var(--emerald)">location ✓</span>':'<span style="color:var(--amber)">no location</span>'}</span></div>`).join('')}
+      </div>`:''}
+    </div>
 
     <!-- Manager's own field activity -->
     ${myMthTgt>0||myPlan.length>0?`<div class="card" style="border-color:rgba(99,102,241,.3);margin-bottom:10px">
