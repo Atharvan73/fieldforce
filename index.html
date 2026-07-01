@@ -361,7 +361,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.18</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.19</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -534,7 +534,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '6.2'; // bump this to force SW cache invalidation
+const APP_VERSION = '6.3'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -883,17 +883,23 @@ async function loadAll(navigateAfter=false) {
     // rep; the sheet is only a same-day fallback (latest row, never the first/stale one).
     if(STATE.user) {
       let restored = false;
+      let localDecided = false;   // once THIS device has a session for today, it wins in BOTH directions
       try {
         const ls = JSON.parse(localStorage.getItem('ffp_field_session')||'null');
-        if(ls && ls.onField && ls.date===todayStr()) {
-          STATE.onField = true;
-          STATE.fieldVehicle = ls.vehicle || 'two-wheeler';
-          if(Array.isArray(ls.waypoints) && ls.waypoints.length) STATE.waypoints = ls.waypoints;
-          restored = true;
+        if(ls && ls.date===todayStr()) {
+          localDecided = true;
+          if(ls.onField) {
+            STATE.onField = true;
+            STATE.fieldVehicle = ls.vehicle || 'two-wheeler';
+            if(Array.isArray(ls.waypoints) && ls.waypoints.length) STATE.waypoints = ls.waypoints;
+            restored = true;
+          } else {
+            STATE.onField = false;   // explicitly marked OFF today — do NOT let the sheet resurrect it
+          }
         }
       } catch(e) {}
 
-      if(!restored && fieldStatus?.length) {
+      if(!localDecided && fieldStatus?.length) {
         const mine = fieldStatus
           .filter(f=>f.repId===STATE.user.id && f.date===todayStr())          // today only — no cross-day bleed
           .sort((a,b)=>String(a.time||'').localeCompare(String(b.time||''))); // oldest→newest
@@ -4873,6 +4879,7 @@ function saveFieldStatus(onField, lat, lng) {
 }
 async function stopField() {
   if(STATE.stoppingField) return;            // guard: ignore repeat taps while a save is in flight
+  if(!STATE.onField){ showToast('You are already off field',''); return; } // guard: no duplicate OFF entry
   if(!confirm('Mark yourself off field? This will save today\'s KM log.')) return;
   STATE.stoppingField=true;
   stopGPS();
