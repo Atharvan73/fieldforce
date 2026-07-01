@@ -361,7 +361,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.20</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.23</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -534,7 +534,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '6.4'; // bump this to force SW cache invalidation
+const APP_VERSION = '6.7'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -3782,7 +3782,24 @@ function openVisitDetail(id) {
       ${sbg(v.status)}
       <span class="badge badge-gray">${fmtDate(v.date)}</span>
       ${v.gpsVerified==='TRUE'?'<span class="badge badge-green">GPS verified</span>':''}
-      ${v.lat&&v.lng?`<a href="https://www.google.com/maps?q=${v.lat},${v.lng}" target="_blank" rel="noopener" class="badge badge-blue" style="text-decoration:none"><i class="ti ti-map-pin" style="font-size:10px"></i> View on map</a>`:''}
+      ${(()=>{
+        let la=v.lat, ln=v.lng||v.lan;
+        if(!la||!ln){
+          const nd=normDate(v.date), cname=(co(v.companyId)||{}).name;
+          const pool=(STATE.gpsLive||[]).filter(x=>x.repId===v.repId&&normDate(x.date)===nd&&x.lat);
+          let g=pool.find(x=>x.companyId&&x.companyId===v.companyId)
+              ||pool.find(x=>cname&&x.companyName===cname)
+              ||pool.find(x=>/check/i.test(x.label||''));
+          if(g){ la=g.lat; ln=g.lng; }
+          if(!la){
+            (STATE.fieldStatus||[]).filter(f=>f.repId===v.repId&&normDate(f.date)===nd&&f.waypoints).forEach(f=>{
+              if(la) return;
+              try{ const wps=JSON.parse(f.waypoints)||[]; const w=wps.find(p=>p.companyId===v.companyId&&p.lat)||wps.find(p=>cname&&p.companyName===cname&&p.lat); if(w){ la=w.lat; ln=w.lng; } }catch(e){}
+            });
+          }
+        }
+        return (la&&ln)?`<a href="https://www.google.com/maps?q=${la},${ln}" target="_blank" rel="noopener" class="badge badge-blue" style="text-decoration:none"><i class="ti ti-map-pin" style="font-size:10px"></i> View on map</a>`:'';
+      })()}
       ${isM&&r?`<span style="font-size:10px;background:rgba(99,102,241,.1);color:var(--indigo2);padding:2px 8px;border-radius:10px">${r.name}</span>`:''}
     </div>
 
