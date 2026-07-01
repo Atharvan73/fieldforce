@@ -361,7 +361,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.23</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.25</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -534,7 +534,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '6.7'; // bump this to force SW cache invalidation
+const APP_VERSION = '6.9'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -1426,7 +1426,7 @@ function renderRepHome(el) {
         return `<div class="row-between" style="padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="navigate('plan')">
           <div class="row">${dot(status)}<div>
             <div style="font-size:12px;font-weight:500">${co(p.companyId).name||'Unknown'}</div>
-            <div class="text-xs">${p.time} · ${p.meetingWith||'TBD'}</div>
+            <div class="text-xs">${[p.time, mwName(p.meetingWith)].filter(Boolean).join(' · ')||'—'}</div>
           </div></div>
           ${sbg(status)}
         </div>`;
@@ -1485,7 +1485,7 @@ function renderMgrHome(el) {
     <!-- Manager's own field activity -->
     ${myMthTgt>0||myPlan.length>0?`<div class="card" style="border-color:rgba(99,102,241,.3);margin-bottom:10px">
       <div class="row-between" style="margin-bottom:8px"><span class="text-label" style="color:var(--indigo2)">My field activity today</span><button class="btn btn-primary btn-sm" onclick="navigate('plan')">Open my plan →</button></div>
-      ${myPlan.length?myPlan.map(p=>{const c=co(p.companyId);return`<div class="row-between" style="padding:6px 0;border-bottom:1px solid var(--border)"><div class="row">${dot(p.status||'planned')}<div><div style="font-size:11px;font-weight:500">${c.name||'Unknown'}</div><div class="text-xs">${p.time} · ${p.meetingWith||'TBD'}</div></div></div>${sbg(p.status||'planned')}</div>`}).join(''):`<div class="text-sm" style="color:var(--text3);text-align:center;padding:8px 0">No visits planned for today — <span style="color:var(--indigo2);cursor:pointer" onclick="navigate('plan')">plan your visits</span></div>`}
+      ${myPlan.length?myPlan.map(p=>{const c=co(p.companyId);return`<div class="row-between" style="padding:6px 0;border-bottom:1px solid var(--border)"><div class="row">${dot(p.status||'planned')}<div><div style="font-size:11px;font-weight:500">${c.name||'Unknown'}</div><div class="text-xs">${[p.time, mwName(p.meetingWith)].filter(Boolean).join(' · ')||'—'}</div></div></div>${sbg(p.status||'planned')}</div>`}).join(''):`<div class="text-sm" style="color:var(--text3);text-align:center;padding:8px 0">No visits planned for today — <span style="color:var(--indigo2);cursor:pointer" onclick="navigate('plan')">plan your visits</span></div>`}
     </div>`:''}
 
     <div class="grid2 desk-grid2" style="margin-bottom:10px">
@@ -2712,7 +2712,7 @@ function renderPlan() {
         <div class="row-between" style="margin-bottom:6px">
           <div class="row">${dot(notVisited?'cancelled':effectiveSt)}<div>
             <div style="font-size:13px;font-weight:600">${c.name||'Unknown'}</div>
-            <div class="text-xs">${p.time} · ${p.meetingWith||'TBD'}</div>
+            <div class="text-xs">${[p.time, mwName(p.meetingWith)].filter(Boolean).join(' · ')||'—'}</div>
           </div></div>
           ${notVisited?'<span class="badge badge-red">Not visited</span>':sbg(effectiveSt)}
         </div>
@@ -2735,11 +2735,11 @@ function renderPlan() {
       <div class="row-between" style="margin-bottom:8px">
         <div class="row">${dot(notVisited?'cancelled':effectiveSt)}<div>
           <div style="font-size:13px;font-weight:600">${c.name||'Unknown'}</div>
-          <div class="text-xs">${p.time} · ${p.meetingWith||'TBD'}</div>
+          <div class="text-xs">${[p.time, mwName(p.meetingWith)].filter(Boolean).join(' · ')||'—'}</div>
         </div></div>
         ${notVisited?'<span class="badge badge-red">Not visited</span>':sbg(effectiveSt)}
       </div>
-      ${p.checkinTime?`<div class="text-xs" style="margin-bottom:8px;color:var(--emerald)"><i class="ti ti-map-pin" style="font-size:10px"></i> Checked in ${p.checkinTime}${p.checkoutTime?' · out '+p.checkoutTime:''}${p.gpsVerified==='TRUE'?' · GPS ✓':''}</div>`:''}
+      ${(()=>{const t=vckTimes(visitLog||p);const gv=(visitLog&&visitLog.gpsVerified==='TRUE')||p.gpsVerified==='TRUE';return t.ci?`<div class="text-xs" style="margin-bottom:8px;color:var(--emerald)"><i class="ti ti-map-pin" style="font-size:10px"></i> Checked in ${t.ci}${t.cout?' · out '+t.cout:''}${gv?' · GPS ✓':''}</div>`:'';})()}
 
       ${(()=>{
         const collabIds = (p.collaborators||'').split(',').filter(Boolean);
@@ -2786,6 +2786,7 @@ function renderPlan() {
       ${effectiveSt==='completed'&&hasRemarks?`
         <div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:9px 12px;margin-top:2px">
           <div style="font-size:10px;font-weight:600;color:var(--emerald);margin-bottom:4px">✓ Visit updated</div>
+          ${p.itemsToPitch?`<div class="text-xs" style="margin-bottom:4px;color:var(--text3)">${p.itemsToPitch}</div>`:''}
           <div class="rmk-box" style="background:transparent;padding:0;margin-bottom:6px">${visitLog.remarks.substring(0,80)}${visitLog.remarks.length>80?'…':''}</div>
           <button class="btn btn-sm" onclick="openPostVisitForm('${p.id}','${visitLog?.id||''}')"><i class="ti ti-edit"></i> Edit update</button>
         </div>`:''}
@@ -2842,7 +2843,7 @@ function renderPlan() {
           <div class="plan-time">${p.time}</div>
           <div class="plan-body" style="flex:1">
             <div class="plan-co">${c.name||'Unknown'}</div>
-            <div class="plan-meta">${p.meetingWith||'TBD'} · ${(p.itemsToPitch||'').substring(0,32)}${(p.itemsToPitch||'').length>32?'…':''}</div>
+            <div class="plan-meta">${[mwName(p.meetingWith),(p.itemsToPitch||'').substring(0,32)].filter(Boolean).join(' · ')||'—'}${(p.itemsToPitch||'').length>32?'…':''}</div>
             ${collabIds.length>0?`<div style="font-size:9px;color:var(--indigo2);margin-top:3px"><i class="ti ti-users" style="font-size:9px"></i> ${isOwner||iAmCollab?'With: '+collabIds.map(id=>STATE.users.find(u=>u.id===id)?.name?.split(' ')[0]).filter(Boolean).join(', '):'Joined · Owner: '+ownerName}</div>`:''}
             ${p.notes?`<div style="font-size:9px;color:var(--indigo2);background:rgba(99,102,241,.08);border-radius:4px;padding:2px 6px;display:inline-block;margin-top:3px">📌 ${p.notes}</div>`:''}
           </div>
@@ -3655,6 +3656,23 @@ document.addEventListener('click', e=>{
 });
 
 // ── VISIT LOG ─────────────────────────────────────────────────────────────────
+// Treat the literal placeholder 'TBD' as empty so it never shows on tiles/details.
+function mwName(s){ s=(s||'').trim(); return (!s||/^tbd$/i.test(s))?'':s; }
+
+// Recover check-in / check-out times even when the Visits row didn't persist them,
+// by falling back to the matching VisitPlan row, then the GPS-log check-in point.
+function vckTimes(v){
+  if(!v) return {ci:'',cout:''};
+  let ci=v.checkinTime||'', cout=v.checkoutTime||'';
+  const pl = STATE.planItems.find(p=>p.companyId===v.companyId&&normDate(p.date)===normDate(v.date)&&String(p.repId||'').trim()===String(v.repId||'').trim());
+  if(pl){ ci=ci||pl.checkinTime||''; cout=cout||pl.checkoutTime||''; }
+  if(!ci){
+    const g=(STATE.gpsLive||[]).find(x=>x.repId===v.repId&&x.companyId===v.companyId&&normDate(x.date)===normDate(v.date)&&/check/i.test(x.label||'')&&x.time);
+    if(g) ci=g.time;
+  }
+  return {ci:ci||'', cout:cout||''};
+}
+
 function renderLog() {
   const el = document.getElementById('page-log');
   const dates=[];
@@ -3723,7 +3741,7 @@ function renderLog() {
       <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:var(--card-radius);padding:12px;margin-bottom:12px">
         <div style="font-size:11px;font-weight:600;color:var(--amber);margin-bottom:4px">⚠️ ${todayPlanned.length} visit${todayPlanned.length>1?'s':''} need post-visit update</div>
         <div class="text-xs" style="margin-bottom:8px">Fill in what happened after each meeting</div>
-        ${todayPlanned.map(p=>{const c=co(p.companyId);return`<div class="row-between" style="padding:6px 0;border-bottom:1px solid rgba(245,158,11,.1)"><div><div style="font-size:11px;font-weight:500">${c.name||'Unknown'}</div><div class="text-xs">${p.time} · ${p.meetingWith||'TBD'}</div></div><button class="btn btn-primary btn-sm" onclick="openPostVisitForm('${p.id}','')"><i class="ti ti-notes"></i> Update</button></div>`;}).join('')}
+        ${todayPlanned.map(p=>{const c=co(p.companyId);return`<div class="row-between" style="padding:6px 0;border-bottom:1px solid rgba(245,158,11,.1)"><div><div style="font-size:11px;font-weight:500">${c.name||'Unknown'}</div><div class="text-xs">${[p.time, mwName(p.meetingWith)].filter(Boolean).join(' · ')||'—'}</div></div><button class="btn btn-primary btn-sm" onclick="openPostVisitForm('${p.id}','')"><i class="ti ti-notes"></i> Update</button></div>`;}).join('')}
       </div>`:''}
 
     ${myV.length?myV.map(v=>{
@@ -3736,8 +3754,8 @@ function renderLog() {
           <div class="row">${dot(v.status)}<div><div style="font-size:12px;font-weight:600">${c.name||'Unknown'}</div>${rp?`<div class="text-xs" style="color:var(--indigo2)">${rp.name}</div>`:''}</div></div>
           ${sbg(v.status)}
         </div>
-        <div class="text-xs" style="margin-bottom:4px"><i class="ti ti-clock" style="font-size:10px"></i> ${v.time} · ${v.meetingWith}${v.designation?', '+v.designation:''}</div>
-        ${v.checkinTime?`<div class="text-xs" style="margin-bottom:4px;color:var(--emerald)"><i class="ti ti-map-pin" style="font-size:10px"></i> In ${v.checkinTime}${v.checkoutTime?' · Out '+v.checkoutTime:''}</div>`:''}
+        <div class="text-xs" style="margin-bottom:4px"><i class="ti ti-clock" style="font-size:10px"></i> ${[v.time, mwName(v.meetingWith)].filter(Boolean).join(' · ')||'—'}${v.designation?', '+v.designation:''}</div>
+        ${(()=>{const t=vckTimes(v);return t.ci?`<div class="text-xs" style="margin-bottom:4px;color:var(--emerald)"><i class="ti ti-map-pin" style="font-size:10px"></i> In ${t.ci}${t.cout?' · Out '+t.cout:''}</div>`:'';})()}
         ${v.itemsPitched?`<div class="text-xs" style="margin-bottom:6px;color:var(--text3)">${v.itemsPitched}</div>`:''}
         ${v.remarks?`<div class="rmk-box" style="margin-bottom:8px">${v.remarks.substring(0,100)}${v.remarks.length>100?'…':''}</div>`:''}
         <div class="row" style="gap:4px;flex-wrap:wrap;margin-bottom:8px">
@@ -3765,7 +3783,7 @@ function openVisitDetail(id) {
   const panel = document.getElementById('panel-visit');
 
   // Parse multiple people met (comma-separated names)
-  const peopleNames = (v.meetingWith||'').split(',').map(n=>n.trim()).filter(Boolean);
+  const peopleNames = (v.meetingWith||'').split(',').map(n=>n.trim()).filter(n=>n&&!/^tbd$/i.test(n));
   const knownContacts = peopleNames.map(name=>{
     const ct = STATE.contacts.find(c=>c.companyId===v.companyId&&c.name.toLowerCase()===name.toLowerCase());
     return {name, contact: ct};
@@ -4782,23 +4800,27 @@ function renderTeamGPS() {
       ${reps.map(r2=>{
         // On/off is authoritative from FieldStatus (latest same-day row), NOT GPSLive —
         // a rep can be on-field without having checked in anywhere yet.
-        const fsRows=(STATE.fieldStatus||[]).filter(f=>f.repId===r2.id&&f.date===todayStr()).sort((a,b)=>String(a.time||'').localeCompare(String(b.time||'')));
+        const nd=normDate(todayStr());
+        const fsRows=(STATE.fieldStatus||[]).filter(f=>f.repId===r2.id&&normDate(f.date)===nd).sort((a,b)=>String(a.time||'').localeCompare(String(b.time||'')));
         const fsLatest=fsRows[fsRows.length-1];
         const isOnField=fsLatest&&String(fsLatest.onField).toUpperCase()==='TRUE';
-        const startedAt=isOnField?(fsLatest.time||''):'';
-        // last check-in today (from visits)
-        const cks=(STATE.visits||[]).filter(v=>v.repId===r2.id&&v.date===todayStr()&&v.checkinTime).sort((a,b)=>String(a.checkinTime).localeCompare(String(b.checkinTime)));
+        // A visit today == a check-in. Robust to date format and to visits with no separate checkinTime.
+        const cks=(STATE.visits||[]).filter(v=>v.repId===r2.id&&normDate(v.date)===nd).sort((a,b)=>String(a.checkinTime||a.time||'').localeCompare(String(b.checkinTime||b.time||'')));
         const lastCk=cks[cks.length-1];
+        const nCk=cks.length;
+        const liveToday=(STATE.gpsLive||[]).filter(g=>g.repId===r2.id&&normDate(g.date)===nd&&g.time).sort((a,b)=>String(a.time).localeCompare(String(b.time)));
+        const startTime=(fsLatest&&fsLatest.time)||(liveToday[0]&&liveToday[0].time)||'';
         // latest live location today (for the map pin)
-        const liveEntries=(STATE.gpsLive||[]).filter(g=>g.repId===r2.id&&g.date===todayStr()&&g.lat).sort((a,b)=>String(b.time||'').localeCompare(String(a.time||'')));
+        const liveEntries=(STATE.gpsLive||[]).filter(g=>g.repId===r2.id&&normDate(g.date)===nd&&g.lat).sort((a,b)=>String(b.time||'').localeCompare(String(a.time||'')));
         const latestLive=liveEntries[0];
-        const pinLat=latestLive?.lat||(isOnField?fsLatest.lat:'')||'', pinLng=latestLive?.lng||(isOnField?fsLatest.lng:'')||'';
+        const pinLat=latestLive?.lat||(isOnField&&fsLatest?fsLatest.lat:'')||'', pinLng=latestLive?.lng||(isOnField&&fsLatest?fsLatest.lng:'')||'';
         const sel = STATE.viewRep===r2.id;
         let sub;
         if(isOnField){
-          if(lastCk){ const cc=co(lastCk.companyId); sub=`On field &middot; last check-in ${lastCk.checkinTime}${cc?' at '+cc.name:''}`; }
-          else sub=`On field since ${startedAt||'—'} &middot; no check-in yet`;
-        } else sub='Off field today';
+          if(nCk){ const cc=co(lastCk.companyId); const lt=lastCk.checkinTime||lastCk.time||''; sub=`On field &middot; ${nCk} check-in${nCk>1?'s':''}${lt?' &middot; last '+lt:''}${cc?' at '+cc.name:''}`; }
+          else sub=`On field${startTime?' since '+startTime:''} &middot; no check-in yet`;
+        } else if(nCk){ const cc=co(lastCk.companyId); const lt=lastCk.checkinTime||lastCk.time||''; sub=`Off field &middot; ${nCk} check-in${nCk>1?'s':''} today${lt?' &middot; last '+lt:''}`; }
+        else sub='Off field today';
         return`<div onclick="STATE.viewRep='${r2.id}';renderTeamGPS()" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:10px 12px;background:${sel?'var(--bg3)':'var(--bg2)'};border:1px solid ${sel?'var(--indigo2)':(isOnField?'rgba(16,185,129,.35)':'var(--border)')};border-radius:10px;margin-bottom:6px">
           <div style="width:8px;height:8px;border-radius:50%;background:${isOnField?'var(--emerald)':'var(--text3)'};flex-shrink:0${isOnField?';animation:pulse 1.5s infinite':''}"></div>
           <div style="flex:1;min-width:0">
