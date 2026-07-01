@@ -352,6 +352,7 @@ select.inp { cursor: pointer; }
 <!-- MAIN APP -->
 <div id="pin-overlay" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:110;flex-direction:column;align-items:center;justify-content:flex-start;padding:32px 24px;overflow-y:auto"></div>
 <div id="checkin-overlay" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:115;flex-direction:column;align-items:center;justify-content:flex-start;padding:32px 24px;overflow-y:auto"></div>
+<div id="route-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:120;align-items:center;justify-content:center;padding:16px"></div>
 
 <div id="app" style="display:none">
   <!-- TOP BAR -->
@@ -361,7 +362,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.25</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.28</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -534,7 +535,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '6.9'; // bump this to force SW cache invalidation
+const APP_VERSION = '7.2'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -4626,7 +4627,56 @@ function gpsWeekData(rId) {
     weekTA: logs.reduce((s,g)=>s+Number(g.taAmount||0),0)};
 }
 
-function gpsDailyLogsHtml(logs, repName) {
+// ── DAILY ROUTE MAP (plots a rep's day of GPS waypoints) ──────────────────────
+let _routeDays = {};
+function _routeReg(date,obj){ _routeDays[date]=obj; }
+function gmapsDir(wps){ return 'https://www.google.com/maps/dir/'+wps.map(w=>`${w.lat},${w.lng}`).join('/'); }
+function ensureLeaflet(cb){
+  if(window.L) return cb();
+  if(!document.getElementById('leaflet-css')){
+    const css=document.createElement('link'); css.id='leaflet-css'; css.rel='stylesheet'; css.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'; document.head.appendChild(css);
+  }
+  let js=document.getElementById('leaflet-js');
+  if(js){ js.addEventListener('load',cb); return; }
+  js=document.createElement('script'); js.id='leaflet-js'; js.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+  js.onload=cb; js.onerror=()=>showToast('Could not load the map — check your connection','error'); document.body.appendChild(js);
+}
+function closeRouteMap(){ const ov=document.getElementById('route-overlay'); if(ov){ ov.style.display='none'; ov.innerHTML=''; } }
+function openRouteMap(date){
+  const d=_routeDays[date]; if(!d||!d.wps||!d.wps.length){ showToast('No mapped GPS points for this day','error'); return; }
+  const ov=document.getElementById('route-overlay'); if(!ov) return;
+  ov.style.display='flex';
+  ov.innerHTML=`<div style="background:var(--bg1);width:100%;max-width:640px;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;max-height:92vh;border:1px solid var(--border)">
+    <div class="row-between" style="padding:12px 14px;border-bottom:1px solid var(--border)">
+      <div><div style="font-size:13px;font-weight:600">${d.repName||''} &middot; ${fmtDate(d.date)}</div>
+      <div class="text-xs">${Number(d.totalKm||0).toFixed(1)} km &middot; ${d.wps.length} stops &middot; TA ${fmtINR(d.taAmount)}</div></div>
+      <button class="btn btn-sm" onclick="closeRouteMap()"><i class="ti ti-x"></i></button>
+    </div>
+    <div id="route-map" style="height:56vh;width:100%;background:var(--bg2)"></div>
+    <div style="padding:10px 14px;border-top:1px solid var(--border)">
+      <a class="btn btn-primary btn-full" href="${gmapsDir(d.wps)}" target="_blank" rel="noopener"><i class="ti ti-brand-google-maps"></i> Open full route in Google Maps</a>
+      <div class="text-xs" style="text-align:center;margin-top:6px;color:var(--text3)">Google Maps shows the exact road distance for TA cross-check</div>
+    </div>
+  </div>`;
+  ensureLeaflet(()=>{
+    const pts=d.wps.map(w=>[Number(w.lat),Number(w.lng)]).filter(p=>!isNaN(p[0])&&!isNaN(p[1]));
+    if(!pts.length){ document.getElementById('route-map').innerHTML='<div style="padding:20px;text-align:center" class="text-sm">No valid coordinates</div>'; return; }
+    const map=L.map('route-map',{scrollWheelZoom:true}).setView(pts[0],13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
+    d.wps.forEach((w,i)=>{
+      const lat=Number(w.lat),lng=Number(w.lng); if(isNaN(lat)||isNaN(lng))return;
+      const color=i===0?'#10b981':i===d.wps.length-1?'#ef4444':'#6366f1';
+      const icon=L.divIcon({html:`<div style="background:${color};width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700">${i+1}</div>`,className:'',iconSize:[22,22],iconAnchor:[11,11]});
+      L.marker([lat,lng],{icon}).addTo(map).bindPopup(`<b>${i+1}. ${w.companyName||''}</b><br>${w.time||''}`);
+    });
+    L.polyline(pts,{color:'#6366f1',weight:4,opacity:.75}).addTo(map);
+    map.fitBounds(pts,{padding:[30,30]});
+    setTimeout(()=>map.invalidateSize(),200);
+  });
+}
+
+function gpsDailyLogsHtml(logs, repName, repId) {
+  const dayClosed=(dt)=>{ if(normDate(dt)!==normDate(todayStr())) return true; const fs=(STATE.fieldStatus||[]).filter(f=>f.repId===repId&&normDate(f.date)===normDate(todayStr())).sort((a,b)=>String(a.time||'').localeCompare(String(b.time||''))); const latest=fs[fs.length-1]; return !(latest&&String(latest.onField).toUpperCase()==='TRUE'); };
   return `
     <div class="card">
       <div class="row-between" style="margin-bottom:10px">
@@ -4663,6 +4713,7 @@ function gpsDailyLogsHtml(logs, repName) {
                 </div>
               </div>`;
             }).join(''):`<div class="text-xs" style="color:var(--text3)">No waypoint details available</div>`}
+            ${(()=>{const hc=wps.filter(w=>w.lat&&w.lng);if(hc.length>=2&&dayClosed(g.date)){_routeReg(g.date,{wps:hc,repName,date:g.date,totalKm:g.totalKm,taAmount:g.taAmount});return`<div style="margin-top:10px;display:flex;gap:6px"><button class="btn btn-sm" style="flex:1;justify-content:center;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="event.stopPropagation();openRouteMap('${g.date}')"><i class="ti ti-map-2"></i> Route map</button><a class="btn btn-sm" style="flex:1;justify-content:center;text-decoration:none" href="${gmapsDir(hc)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-brand-google-maps"></i> Google Maps</a></div>`;}return'';})()}
           </div>
         </div>`;
       }).join(''):`<div class="text-sm" style="text-align:center;padding:12px;color:var(--text3)">No logs this week</div>`}
@@ -4736,7 +4787,7 @@ function renderGPS() {
         }).join('')}
       </div>
       ${rId?gpsWeekNavHtml('gps'):''}
-      ${rId?gpsDailyLogsHtml(logs,r?.name):'<div class="text-sm" style="text-align:center;padding:12px;color:var(--text3)">No reps assigned</div>'}
+      ${rId?gpsDailyLogsHtml(logs,r?.name,rId):'<div class="text-sm" style="text-align:center;padding:12px;color:var(--text3)">No reps assigned</div>'}
       ${rId?gpsWeeklyHtml(rId,{isManagerView:true}):''}
       ${GPS_INFO_BOX}`;
     return;
@@ -4777,7 +4828,7 @@ function renderGPS() {
     </div>`:''}
 
     ${gpsWeekNavHtml('gps')}
-    ${gpsDailyLogsHtml(logs, me.name)}
+    ${gpsDailyLogsHtml(logs, me.name, me.id)}
     ${gpsWeeklyHtml(me.id, {canSubmit:true})}
     ${GPS_INFO_BOX}`;
 }
@@ -4815,12 +4866,7 @@ function renderTeamGPS() {
         const latestLive=liveEntries[0];
         const pinLat=latestLive?.lat||(isOnField&&fsLatest?fsLatest.lat:'')||'', pinLng=latestLive?.lng||(isOnField&&fsLatest?fsLatest.lng:'')||'';
         const sel = STATE.viewRep===r2.id;
-        let sub;
-        if(isOnField){
-          if(nCk){ const cc=co(lastCk.companyId); const lt=lastCk.checkinTime||lastCk.time||''; sub=`On field &middot; ${nCk} check-in${nCk>1?'s':''}${lt?' &middot; last '+lt:''}${cc?' at '+cc.name:''}`; }
-          else sub=`On field${startTime?' since '+startTime:''} &middot; no check-in yet`;
-        } else if(nCk){ const cc=co(lastCk.companyId); const lt=lastCk.checkinTime||lastCk.time||''; sub=`Off field &middot; ${nCk} check-in${nCk>1?'s':''} today${lt?' &middot; last '+lt:''}`; }
-        else sub='Off field today';
+        const sub = isOnField ? 'On field' : 'Off field today';
         return`<div onclick="STATE.viewRep='${r2.id}';renderTeamGPS()" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:10px 12px;background:${sel?'var(--bg3)':'var(--bg2)'};border:1px solid ${sel?'var(--indigo2)':(isOnField?'rgba(16,185,129,.35)':'var(--border)')};border-radius:10px;margin-bottom:6px">
           <div style="width:8px;height:8px;border-radius:50%;background:${isOnField?'var(--emerald)':'var(--text3)'};flex-shrink:0${isOnField?';animation:pulse 1.5s infinite':''}"></div>
           <div style="flex:1;min-width:0">
@@ -4835,7 +4881,7 @@ function renderTeamGPS() {
 
     ${rId?`<div class="text-label" style="margin-bottom:8px"><i class="ti ti-route" style="font-size:12px;vertical-align:-1px"></i> ${(r?.name||'').split(' ')[0]}'s route &amp; travel</div>`:''}
     ${rId?gpsWeekNavHtml('teamgps'):''}
-    ${rId?gpsDailyLogsHtml(logs, r?.name):'<div class="text-sm" style="text-align:center;padding:12px;color:var(--text3)">No reps assigned</div>'}
+    ${rId?gpsDailyLogsHtml(logs, r?.name, rId):'<div class="text-sm" style="text-align:center;padding:12px;color:var(--text3)">No reps assigned</div>'}
     ${rId?gpsWeeklyHtml(rId, {isManagerView:true}):''}
     ${GPS_INFO_BOX}`;
 }
