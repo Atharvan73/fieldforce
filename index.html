@@ -362,7 +362,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.28</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.29</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -433,6 +433,7 @@ select.inp { cursor: pointer; }
       <div class="panel" id="panel-deact"></div>
       <div class="panel" id="panel-editco"></div>
       <div class="panel" id="panel-mergeco"></div>
+      <div class="panel" id="panel-cohist"></div>
       <div class="panel" id="panel-card"></div>
       <div class="panel" id="panel-addcal"></div>
       <div class="panel" id="panel-vehicle"></div>
@@ -535,7 +536,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.2'; // bump this to force SW cache invalidation
+const APP_VERSION = '7.3'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -1985,7 +1986,7 @@ function openCoDetail(cId) {
     <div class="text-xs" style="margin-bottom:12px"><i class="ti ti-map-pin" style="font-size:11px"></i> ${c.address}</div>
     <div class="grid2" style="margin-bottom:14px">
       <div class="card-sm"><div class="text-xs">Total business</div><div style="font-size:14px;font-weight:700;color:var(--emerald)">${fmt(c.totalBusiness)}</div></div>
-      <div class="card-sm"><div class="text-xs">Last visited</div><div style="font-size:14px;font-weight:700">${d===null?'Never':d+'d ago'}</div></div>
+      <div class="card-sm" onclick="openCompanyHistory('${c.id}')" style="cursor:pointer"><div class="row-between"><div class="text-xs">Last visited</div><i class="ti ti-history" style="font-size:13px;color:var(--indigo2)"></i></div><div style="font-size:14px;font-weight:700">${d===null?'Never':d+'d ago'}</div><div style="font-size:9px;color:var(--indigo2);margin-top:2px">View visit history →</div></div>
     </div>
     <div class="text-label" style="margin-bottom:8px">Targets</div>
     ${tblk(ts.filter(t=>t.period==='annual'),'Annual 2025','var(--indigo2)')}
@@ -2447,6 +2448,51 @@ async function managerRemoveCompany(coId) {
   showToast('Company removed ✓','success');
   closePanel('co');
   renderCompanies();
+}
+
+// ── COMPANY VISIT HISTORY (who visited, when, what was discussed) ─────────────
+function openCompanyHistory(coId){
+  const c=STATE.companies.find(x=>x.id===coId); if(!c) return;
+  const visits=(STATE.visits||[]).filter(v=>v.companyId===coId)
+    .sort((a,b)=>{ const dc=String(normDate(b.date)).localeCompare(String(normDate(a.date))); return dc!==0?dc:String(b.checkinTime||b.time||'').localeCompare(String(a.checkinTime||a.time||'')); });
+  // group by YYYY-MM
+  const groups={};
+  visits.forEach(v=>{ const nd=normDate(v.date)||''; const ym=nd.slice(0,7)||'unknown'; (groups[ym]=groups[ym]||[]).push(v); });
+  const monthLabel=(ym)=>{ if(ym==='unknown')return 'Undated'; const [y,m]=ym.split('-'); const mn=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(m)]||''; return `${mn} ${y}`; };
+  const body = visits.length ? Object.keys(groups).sort((a,b)=>b.localeCompare(a)).map(ym=>{
+    const items=groups[ym];
+    const val=items.reduce((s,v)=>s+(Number(v.orderValue)||0),0);
+    return `<div style="margin-bottom:16px">
+      <div class="row-between" style="margin-bottom:8px">
+        <span class="text-label">${monthLabel(ym)}</span>
+        <span class="text-xs">${items.length} visit${items.length>1?'s':''}</span>
+      </div>
+      ${items.map(v=>{
+        const t=vckTimes(v);
+        const person=mwName(v.meetingWith);
+        const disc=(v.remarks||'').trim();
+        const next=(v.nextAction||'').trim();
+        return `<div class="card" style="margin-bottom:8px;cursor:pointer" onclick="openVisitDetail('${v.id}')">
+          <div class="row-between" style="margin-bottom:4px">
+            <div style="font-size:12px;font-weight:600">${fmtDate(v.date)}${t.ci?` &middot; <span style="color:var(--emerald)">in ${t.ci}${t.cout?' · out '+t.cout:''}</span>`:''}</div>
+            ${v.gpsVerified==='TRUE'?'<span class="badge badge-green">GPS ✓</span>':''}
+          </div>
+          <div class="text-xs" style="margin-bottom:6px"><i class="ti ti-user" style="font-size:10px"></i> ${rep(v.repId)?.name||'—'}${person?` &middot; met ${person}${v.designation?', '+v.designation:''}`:''}</div>
+          ${disc?`<div class="rmk-box" style="margin-bottom:6px">${disc}</div>`:'<div class="text-xs" style="color:var(--text3);margin-bottom:6px">No discussion noted</div>'}
+          ${next?`<div class="text-xs" style="color:var(--amber)"><i class="ti ti-arrow-right" style="font-size:10px"></i> Next: ${next}${v.nextActionDate?' ('+fmtDate(v.nextActionDate)+')':''}</div>`:''}
+          <div style="text-align:right;margin-top:4px"><span style="font-size:10px;color:var(--indigo2)">View details →</span></div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('') : '<div class="text-sm" style="text-align:center;padding:24px;color:var(--text3)">No visits logged for this company yet</div>';
+
+  const panel=document.getElementById('panel-cohist');
+  panel.innerHTML=`
+    <div class="panel-head"><button class="panel-back" onclick="openCoDetail('${coId}')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">Visit history</span></div>
+    <div style="font-size:15px;font-weight:700;margin-bottom:2px">${c.name}</div>
+    <div class="text-xs" style="margin-bottom:16px">${visits.length} total visit${visits.length===1?'':'s'}</div>
+    ${body}`;
+  openPanel('cohist');
 }
 
 // ── EDIT COMPANY DETAILS (manager: direct · rep: own=direct, others=approval) ──
