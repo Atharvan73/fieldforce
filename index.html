@@ -362,7 +362,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.30</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.31</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -536,7 +536,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.4'; // bump this to force SW cache invalidation
+const APP_VERSION = '7.5'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -5662,7 +5662,7 @@ function renderAnalysis() {
         <div style="width:76px;text-align:right">Value</div>
       </div>
       ${visitedRows.map(r=>`
-      <div class="co-row"><div style="display:flex;align-items:center;padding:10px 12px;gap:6px">
+      <div class="co-row" onclick="openCompanyHistory('${r.id}','${STATE.anMonth.y}-${String(STATE.anMonth.m+1).padStart(2,'0')}')" style="cursor:pointer"><div style="display:flex;align-items:center;padding:10px 12px;gap:6px">
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</div>
           ${isM&&STATE.anRep==='all'?`<div style="font-size:9px;color:var(--text3)">${[...new Set(STATE.visits.filter(v=>v.companyId===r.id&&v.date>=start&&v.date<=end&&v.status!=='cancelled').map(v=>rep(v.repId)?.name?.split(' ')[0]).filter(Boolean))].join(', ')}</div>`:''}
@@ -5670,6 +5670,7 @@ function renderAnalysis() {
         <div style="width:46px;text-align:center"><span class="badge badge-blue">${r.visits}</span></div>
         <div style="width:46px;text-align:center">${r.orders>0?`<span class="badge badge-green">${r.orders}</span>`:'<span class="text-xs" style="color:var(--text3)">—</span>'}</div>
         <div style="width:76px;text-align:right;font-size:11px;font-weight:600;color:${r.value>0?'var(--emerald)':'var(--text3)'}">${r.value>0?fmt(r.value):'—'}</div>
+        <i class="ti ti-chevron-right" style="font-size:14px;color:var(--text3);flex-shrink:0"></i>
       </div></div>`).join('')}
     </div>` : `<div class="empty"><i class="ti ti-clipboard-off"></i><p>No visits logged in ${monLabel}</p><small>Visits your ${isM?'team logs':'team logs'} this month will appear here</small></div>`}
 
