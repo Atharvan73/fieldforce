@@ -362,7 +362,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.29</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.30</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -536,7 +536,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.3'; // bump this to force SW cache invalidation
+const APP_VERSION = '7.4'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -2451,22 +2451,28 @@ async function managerRemoveCompany(coId) {
 }
 
 // ── COMPANY VISIT HISTORY (who visited, when, what was discussed) ─────────────
-function openCompanyHistory(coId){
+function openCompanyHistory(coId, sel){
   const c=STATE.companies.find(x=>x.id===coId); if(!c) return;
   const visits=(STATE.visits||[]).filter(v=>v.companyId===coId)
     .sort((a,b)=>{ const dc=String(normDate(b.date)).localeCompare(String(normDate(a.date))); return dc!==0?dc:String(b.checkinTime||b.time||'').localeCompare(String(a.checkinTime||a.time||'')); });
   // group by YYYY-MM
   const groups={};
   visits.forEach(v=>{ const nd=normDate(v.date)||''; const ym=nd.slice(0,7)||'unknown'; (groups[ym]=groups[ym]||[]).push(v); });
-  const monthLabel=(ym)=>{ if(ym==='unknown')return 'Undated'; const [y,m]=ym.split('-'); const mn=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(m)]||''; return `${mn} ${y}`; };
-  const body = visits.length ? Object.keys(groups).sort((a,b)=>b.localeCompare(a)).map(ym=>{
-    const items=groups[ym];
-    const val=items.reduce((s,v)=>s+(Number(v.orderValue)||0),0);
+  const months=Object.keys(groups).sort((a,b)=>b.localeCompare(a));
+  const selMonth = sel || (months[0]||'all');   // default to latest month
+  const monthLabel=(ym)=>{ if(ym==='unknown')return 'Undated'; if(ym==='all')return 'All'; const [y,m]=ym.split('-'); const mn=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(m)]||''; return `${mn} ${y}`; };
+
+  const chips = `<div class="chip-row" style="margin-bottom:14px">
+    ${months.map(ym=>`<span class="chip${selMonth===ym?' active':''}" onclick="openCompanyHistory('${coId}','${ym}')">${monthLabel(ym)} · ${groups[ym].length}</span>`).join('')}
+    ${months.length>1?`<span class="chip${selMonth==='all'?' active':''}" onclick="openCompanyHistory('${coId}','all')">All</span>`:''}
+  </div>`;
+
+  const monthsToShow = selMonth==='all' ? months : [selMonth];
+  const body = visits.length ? monthsToShow.map(ym=>{
+    const items=groups[ym]||[];
+    if(!items.length) return '';
     return `<div style="margin-bottom:16px">
-      <div class="row-between" style="margin-bottom:8px">
-        <span class="text-label">${monthLabel(ym)}</span>
-        <span class="text-xs">${items.length} visit${items.length>1?'s':''}</span>
-      </div>
+      ${selMonth==='all'?`<div class="row-between" style="margin-bottom:8px"><span class="text-label">${monthLabel(ym)}</span><span class="text-xs">${items.length} visit${items.length>1?'s':''}</span></div>`:''}
       ${items.map(v=>{
         const t=vckTimes(v);
         const person=mwName(v.meetingWith);
@@ -2491,6 +2497,7 @@ function openCompanyHistory(coId){
     <div class="panel-head"><button class="panel-back" onclick="openCoDetail('${coId}')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">Visit history</span></div>
     <div style="font-size:15px;font-weight:700;margin-bottom:2px">${c.name}</div>
     <div class="text-xs" style="margin-bottom:16px">${visits.length} total visit${visits.length===1?'':'s'}</div>
+    ${visits.length?chips:''}
     ${body}`;
   openPanel('cohist');
 }
