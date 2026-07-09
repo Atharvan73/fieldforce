@@ -362,7 +362,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.32</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.33</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -422,6 +422,7 @@ select.inp { cursor: pointer; }
         <div class="page" id="page-tasks"></div>
         <div class="page" id="page-contacts"></div>
         <div class="page" id="page-analysis"></div>
+        <div class="page" id="page-attendance"></div>
       </div>
 
       <!-- PANELS (sit inside content area) -->
@@ -536,7 +537,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.6'; // bump this to force SW cache invalidation
+const APP_VERSION = '7.7'; // bump this to force SW cache invalidation
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -616,6 +617,8 @@ let STATE = {
   calMonth: { y: new Date().getFullYear(), m: new Date().getMonth() },
   anMonth: { y: new Date().getFullYear(), m: new Date().getMonth() },  // Monthly Analysis page
   anRep: 'all',                                                        // Monthly Analysis rep filter
+  attMonth: { y: new Date().getFullYear(), m: new Date().getMonth() },  // Attendance register
+  attRep: '',                                                          // Attendance selected employee
   gpsWatcher: null, gpsTrail: [], currentDayKm: 0, waypoints: [], stoppingField: false,
   gpsMgrMode: 'mine',    // manager GPS toggle: 'mine' | 'team'
 };
@@ -1273,7 +1276,7 @@ function renderNav() {
         'Overview':    [['home','home','Home'],['team','users','Team Overview'],['teamgps','route','Team GPS']],
         'My field':    [['plan','calendar-plus','My Daily Plan'],['log','clipboard-list','My Visit Log'],['gps','map-pin','My GPS & TA']],
         'Sales':       [['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks']],
-        'Management':  [['companies','building','Companies'],['contacts','address-book','Contacts'],['targets','target','Targets'],['analysis','chart-bar','Monthly Analysis'],['cal','calendar','Calendar']]
+        'Management':  [['companies','building','Companies'],['contacts','address-book','Contacts'],['targets','target','Targets'],['analysis','chart-bar','Monthly Analysis'],['attendance','user-check','Attendance'],['cal','calendar','Calendar']]
       }
     : {
         'Dashboard':   [['home','home','Home']],
@@ -1350,7 +1353,8 @@ function renderPage(p) {
     home: renderHome, companies: renderCompanies, plan: renderPlan,
     log: renderLog, targets: renderTargets, gps: renderGPS,
     team: renderTeam, teamgps: renderTeamGPS, cal: renderCal, rfq: renderRFQ,
-    tasks: renderTasks, contacts: renderContacts, analysis: renderAnalysis
+    tasks: renderTasks, contacts: renderContacts, analysis: renderAnalysis,
+    attendance: renderAttendance
   };
   try { if(map[p]) map[p](); } catch(e) { console.error('renderPage error:', p, e.message); }
 }
@@ -5685,6 +5689,83 @@ function renderAnalysis() {
         <div style="width:76px;text-align:right;font-size:11px;font-weight:600;color:var(--emerald)">${fmt(r.value)}</div>
       </div></div>`).join('')}
     </div>`:''}`;
+}
+
+// ── ATTENDANCE REGISTER (manager) ────────────────────────────
+function changeAttMonth(delta){ let {y,m}=STATE.attMonth; m+=delta; if(m<0){m=11;y--;} if(m>11){m=0;y++;} STATE.attMonth={y,m}; renderAttendance(); }
+
+// Present if the rep marked on-field that day OR logged at least one visit that day.
+function repPresentOn(repId, dateStr){
+  const nd=normDate(dateStr);
+  const onField=(STATE.fieldStatus||[]).some(f=>f.repId===repId&&normDate(f.date)===nd&&String(f.onField).toUpperCase()==='TRUE');
+  if(onField) return true;
+  return (STATE.visits||[]).some(v=>v.repId===repId&&normDate(v.date)===nd);
+}
+
+function renderAttendance(){
+  const el=document.getElementById('page-attendance'); if(!el) return;
+  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const reps=allReps();
+  if(!STATE.attRep || !reps.some(r=>r.id===STATE.attRep)){ STATE.attRep = reps[0]?reps[0].id:''; }
+  const {y,m}=STATE.attMonth;
+  const monLabel=`${months[m]} ${y}`;
+  const isCurrentMonth = y===new Date().getFullYear() && m===new Date().getMonth();
+  const last=new Date(y,m+1,0).getDate();
+  const firstDow=new Date(y,m,1).getDay();
+  const todayNd=normDate(todayStr());
+
+  let present=0, absent=0, working=0;
+  const cells=[];
+  for(let i=0;i<firstDow;i++) cells.push(null);
+  for(let d=1; d<=last; d++){
+    const dateStr=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isSunday=new Date(y,m,d).getDay()===0;
+    const isFuture=normDate(dateStr)>todayNd;
+    let status;
+    if(isSunday){ status='off'; }
+    else if(isFuture){ status='future'; }
+    else { working++; if(repPresentOn(STATE.attRep,dateStr)){ status='present'; present++; } else { status='absent'; absent++; } }
+    cells.push({d,status});
+  }
+  const pct = working ? Math.round(present/working*100) : 0;
+
+  el.innerHTML=`
+    <div style="font-size:16px;font-weight:600;margin-bottom:4px">Attendance register</div>
+    <div class="text-xs" style="margin-bottom:12px">Present = marked on-field or logged at least one visit that day. Sundays are off.</div>
+
+    <select class="inp" style="margin-bottom:12px" onchange="STATE.attRep=this.value;renderAttendance()">
+      ${reps.map(r=>`<option value="${r.id}" ${STATE.attRep===r.id?'selected':''}>${r.name}${isActive(r)?'':' (left)'}</option>`).join('')}
+    </select>
+
+    <div class="card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;margin-bottom:14px">
+      <button class="btn btn-sm" onclick="changeAttMonth(-1)"><i class="ti ti-chevron-left"></i></button>
+      <div style="text-align:center"><div style="font-weight:600">${monLabel}</div>${isCurrentMonth?'<div class="text-xs">This month</div>':''}</div>
+      <button class="btn btn-sm" ${isCurrentMonth?'disabled style="opacity:.35"':'onclick="changeAttMonth(1)"'}><i class="ti ti-chevron-right"></i></button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
+      <div class="card" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--emerald)">${present}</div><div class="text-xs">Present</div></div>
+      <div class="card" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--rose)">${absent}</div><div class="text-xs">Absent</div></div>
+      <div class="card" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700">${working}</div><div class="text-xs">Working days</div></div>
+      <div class="card" style="padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--indigo2)">${pct}%</div><div class="text-xs">Present rate</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px">
+      ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="text-xs" style="text-align:center;color:var(--text3);font-weight:600">${d}</div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
+      ${cells.map(c=>{
+        if(!c) return '<div></div>';
+        const map={present:['rgba(16,185,129,.15)','rgba(16,185,129,.5)','var(--emerald)','P'],absent:['rgba(239,68,68,.12)','rgba(239,68,68,.4)','var(--rose)','A'],off:['var(--bg2)','var(--border)','var(--text3)','\u2014'],future:['transparent','var(--border)','var(--text3)','']};
+        const [bg,bd,t,mark]=map[c.status];
+        return `<div style="aspect-ratio:1;border:1px solid ${bd};background:${bg};border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <div style="font-size:10px;color:var(--text3)">${c.d}</div>
+          <div style="font-size:12px;font-weight:700;color:${t}">${mark}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="text-xs" style="margin-top:12px;color:var(--text3)"><b style="color:var(--emerald)">P</b> Present · <b style="color:var(--rose)">A</b> Absent · <b>—</b> Sunday off</div>
+  `;
 }
 
 function renderRFQ() {
