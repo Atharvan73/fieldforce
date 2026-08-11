@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.39</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.40</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -538,14 +538,11 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.13'; // bump this to force SW cache invalidation
-// v7.13: 1-day retroactive-completion deadline on post-visit logs. Visits
-//        now record remarksSavedAt when the log is saved; repPresentOn()
-//        only counts a log if it was saved within 1 day of the visit date —
-//        miss that window and the day is PERMANENTLY Absent, even if the
-//        log is filled in later. Reminder banner and off-field warning both
-//        updated to explain the deadline. Requires running
-//        setupRemarksSavedAtColumn() once in FieldForce API after deploy.
+const APP_VERSION = '7.14'; // bump this to force SW cache invalidation
+// v7.14: attendanceStatusBar() now also falls back to fieldEventsToday()
+//        (a local on/off log that predates onFieldTime/offFieldTime) so
+//        sessions started before that field existed still show a real
+//        Marked ON/OFF time instead of a dash where possible.
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -1396,8 +1393,14 @@ function renderHome() {
 function attendanceStatusBar(){
   const uid=STATE.user.id, nd=todayStr();
   const row=(STATE.fieldStatus||[]).find(f=>f.repId===uid&&normDate(f.date)===nd);
-  const onTime = (STATE.onField && STATE.fieldOnTime) ? STATE.fieldOnTime : (row?.onFieldTime || row?.time || '—');
-  const offTime = (!STATE.onField && row?.offFieldTime) ? row.offFieldTime : '—';
+  // fieldEventsToday() is a local on/off log that predates onFieldTime/offFieldTime —
+  // useful fallback for sessions started before those fields existed on this device/row.
+  const events = fieldEventsToday();
+  const onEvent = events.find(e=>e.action==='on');
+  const lastOffEvent = events.filter(e=>e.action==='off').slice(-1)[0];
+  const onTime = (STATE.onField && STATE.fieldOnTime) ? STATE.fieldOnTime
+    : (row?.onFieldTime || onEvent?.time || row?.time || '—');
+  const offTime = !STATE.onField ? (row?.offFieldTime || lastOffEvent?.time || '—') : '—';
   const present = repPresentOn(uid, nd);
   return `<div class="card" style="margin-bottom:10px">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;text-align:center">
