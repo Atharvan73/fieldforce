@@ -352,6 +352,7 @@ select.inp { cursor: pointer; }
 <!-- MAIN APP -->
 <div id="pin-overlay" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:110;flex-direction:column;align-items:center;justify-content:flex-start;padding:32px 24px;overflow-y:auto"></div>
 <div id="checkin-overlay" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:115;flex-direction:column;align-items:center;justify-content:flex-start;padding:32px 24px;overflow-y:auto"></div>
+<div id="offfield-overlay" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:115;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;overflow-y:auto"></div>
 <div id="route-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:120;align-items:center;justify-content:center;padding:16px"></div>
 
 <div id="app" style="display:none">
@@ -362,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.33</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.38</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -537,7 +538,17 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.7'; // bump this to force SW cache invalidation
+const APP_VERSION = '7.12'; // bump this to force SW cache invalidation
+// v7.12: Home page now shows a status bar with today's Marked ON / Marked
+//        OFF times and live Present/Absent. FieldStatus now tracks
+//        onFieldTime/offFieldTime distinctly (was a single overwritten
+//        `time` field before). Paired with a backend fix in FieldForce
+//        API's autoCloseStaleFieldSessions(): it now also recovers a
+//        PARTIAL KM/TA claim (via calcRouteDistance on the last synced
+//        waypoints) when auto-closing a forgotten session, instead of that
+//        day's travel claim silently vanishing. Marked source=
+//        'auto-close-partial' in GPSLogs since it's a lower bound, not the
+//        true total (no way to reach the phone for a live location at 2 AM).
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -612,7 +623,7 @@ let STATE = {
   ctSearch: '', ctCoFilter: '',
   coSearch: '', coIndustryFilter: 'all', coSort: 'alpha-asc',
   page: 'home', period: 'annual', cpf: 'all', pld: todayStr(), vd: todayStr(),
-  exp: null, showAI: false, onField: false, fieldVehicle: null, viewRep: null,
+  exp: null, showAI: false, onField: false, fieldOnTime: '', fieldVehicle: null, viewRep: null,
   logView: 'mine', planView: 'mine', coView: 'all',
   calMonth: { y: new Date().getFullYear(), m: new Date().getMonth() },
   anMonth: { y: new Date().getFullYear(), m: new Date().getMonth() },  // Monthly Analysis page
@@ -896,6 +907,7 @@ async function loadAll(navigateAfter=false) {
           if(ls.onField) {
             STATE.onField = true;
             STATE.fieldVehicle = ls.vehicle || 'two-wheeler';
+            STATE.fieldOnTime = ls.onTime || '';
             if(Array.isArray(ls.waypoints) && ls.waypoints.length) STATE.waypoints = ls.waypoints;
             restored = true;
           } else {
@@ -912,6 +924,7 @@ async function loadAll(navigateAfter=false) {
         if(latest && String(latest.onField).toUpperCase()==='TRUE') {
           STATE.onField = true;
           STATE.fieldVehicle = latest.vehicle||'two-wheeler';
+          STATE.fieldOnTime = latest.onFieldTime || latest.time || '';
           if(latest.waypoints){ try{ const s=JSON.parse(latest.waypoints); if(Array.isArray(s)&&s.length) STATE.waypoints=s; }catch(e){} }
           if(!STATE.waypoints?.length && latest.lat) {
             STATE.waypoints = [{ lat:Number(latest.lat), lng:Number(latest.lng), label:'Start', time:latest.time||'', companyId:null, companyName:'Start (Home/Office)' }];
@@ -1282,7 +1295,7 @@ function renderNav() {
         'Dashboard':   [['home','home','Home']],
         'Field work':  [['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['companies','building','Companies'],['contacts','address-book','Contacts']],
         'Sales':       [['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks']],
-        'Performance': [['targets','target','Targets'],['analysis','chart-bar','Monthly Analysis'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']]
+        'Performance': [['targets','target','Targets'],['analysis','chart-bar','Monthly Analysis'],['attendance','user-check','Attendance'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']]
       };
 
   const buildNavHtml = (activeClass) => {
@@ -1372,6 +1385,72 @@ function renderHome() {
   const isM = STATE.user.role==='manager';
   if(isM) { renderMgrHome(el); } else { renderRepHome(el); }
 }
+// In-app reminder for pending checkouts / post-visit logs / stale on-field
+// sessions, since real push notifications aren't wired up yet — this shows
+// on next app open instead of buzzing the phone in real time.
+// Homepage status bar: today's mark-on / mark-off times and live Present/Absent.
+function attendanceStatusBar(){
+  const uid=STATE.user.id, nd=todayStr();
+  const row=(STATE.fieldStatus||[]).find(f=>f.repId===uid&&normDate(f.date)===nd);
+  const onTime = (STATE.onField && STATE.fieldOnTime) ? STATE.fieldOnTime : (row?.onFieldTime || row?.time || '—');
+  const offTime = (!STATE.onField && row?.offFieldTime) ? row.offFieldTime : '—';
+  const present = repPresentOn(uid, nd);
+  return `<div class="card" style="margin-bottom:10px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;text-align:center">
+      <div><div class="text-xs">Marked ON</div><div style="font-size:14px;font-weight:700">${onTime||'—'}</div></div>
+      <div><div class="text-xs">Marked OFF</div><div style="font-size:14px;font-weight:700">${offTime||'—'}</div></div>
+      <div><div class="text-xs">Today</div><div style="font-size:14px;font-weight:700;color:${present?'var(--emerald)':'var(--rose)'}">${present?'Present':'Absent'}</div></div>
+    </div>
+  </div>`;
+}
+
+function attendanceReminderBanner(){
+  const uid = STATE.user.id;
+  const nd = todayStr();
+  const allMine = (STATE.visits||[]).filter(v=>v.repId===uid);
+
+  // Past-day visits still missing a completed log — these directly caused
+  // (or will cause) that day to be marked Absent.
+  const staleDates = {};
+  allMine.forEach(v=>{
+    if(normDate(v.date)<normDate(nd) && String(v.remarks||'').trim()===''){
+      staleDates[v.date] = (staleDates[v.date]||0)+1;
+    }
+  });
+  const staleDays = Object.keys(staleDates);
+  const staleCount = staleDays.reduce((s,d)=>s+staleDates[d],0);
+
+  // Today's check-ins still missing checkout / a post-visit log.
+  const todayIncomplete = allMine.filter(v=>normDate(v.date)===normDate(nd) && String(v.remarks||'').trim()==='');
+
+  // Nudge if it's getting late and they're still marked on-field.
+  const lateAndOnField = STATE.onField && new Date().getHours()>=20;
+
+  if(!staleDays.length && !todayIncomplete.length && !lateAndOnField) return '';
+
+  let msg='';
+  if(staleDays.length){
+    msg += `<div style="margin-bottom:6px"><b>${staleCount}</b> visit${staleCount!==1?'s':''} from ${staleDays.length===1?'a previous day':staleDays.length+' previous days'} ${staleDays.length===1?'is':'are'} missing a post-visit log — ${staleDays.length===1?'that day is':'those days are'} marked <b style="color:var(--rose)">Absent</b> until completed.</div>`;
+  }
+  if(todayIncomplete.length){
+    msg += `<div style="margin-bottom:6px">${todayIncomplete.length} of today's visit${todayIncomplete.length!==1?'s':''} still need${todayIncomplete.length===1?'s':''} checkout / a post-visit log.</div>`;
+  }
+  if(lateAndOnField){
+    msg += `<div>It's getting late — don't forget to complete your logs and mark yourself off field.</div>`;
+  }
+
+  return `<div class="card" style="margin-bottom:10px;border-color:rgba(245,158,11,.4);background:linear-gradient(135deg,rgba(245,158,11,.08),var(--bg2))">
+    <div class="row" style="gap:8px;align-items:flex-start">
+      <i class="ti ti-alert-triangle" style="color:var(--amber);font-size:18px;flex-shrink:0;margin-top:1px"></i>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">Pending visit logs</div>
+        <div class="text-xs">${msg}</div>
+        <button class="btn btn-sm" style="margin-top:8px" onclick="navigate('log')">Go to Visit Log</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderRepHome(el) {
   if(!el) return;
   const u = STATE.user;
@@ -1396,6 +1475,7 @@ function renderRepHome(el) {
       <div><div style="font-size:16px;font-weight:600;letter-spacing:-.3px">Good morning, ${u.name.split(' ')[0]} 👋</div><div class="text-sm">${new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'short',year:'numeric'})}</div></div>
       <div style="text-align:right"><div class="text-xs">Today's visits</div><div style="font-size:22px;font-weight:700">${todayCount}</div></div>
     </div>
+    ${attendanceStatusBar()}
     <div class="card" style="margin-bottom:10px;border-color:${STATE.onField?'rgba(16,185,129,.45)':'var(--border)'};${STATE.onField?'background:linear-gradient(135deg,rgba(16,185,129,.08),var(--bg2))':''}">
       <div class="row-between">
         <div class="row" style="gap:10px;align-items:center">
@@ -1411,6 +1491,7 @@ function renderRepHome(el) {
         ${fieldEventsToday().slice().reverse().map(e=>`<div class="row-between" style="font-size:11px;padding:2px 0"><span><i class="ti ti-${e.action==='on'?'map-pin':'map-pin-off'}" style="font-size:12px;color:${e.action==='on'?'var(--emerald)':'var(--text3)'}"></i> Marked ${e.action==='on'?'ON':'OFF'} field</span><span class="text-xs">${e.time} · ${e.locOk?'<span style="color:var(--emerald)">location ✓</span>':'<span style="color:var(--amber)">no location</span>'}</span></div>`).join('')}
       </div>`:''}
     </div>
+    ${attendanceReminderBanner()}
     <div class="card" style="border-color:rgba(99,102,241,.3);background:linear-gradient(135deg,rgba(99,102,241,.08),var(--bg2));margin-bottom:10px">
       <div class="text-label" style="color:var(--indigo2);margin-bottom:6px">Monthly target — ${new Date().toLocaleString('default',{month:'long'})}</div>
       <div class="row-between" style="margin-bottom:8px">
@@ -4951,7 +5032,7 @@ function renderTeamGPS() {
 function fieldSessionSave() {
   try { localStorage.setItem('ffp_field_session', JSON.stringify({
     onField: !!STATE.onField, date: todayStr(), vehicle: STATE.fieldVehicle||'',
-    waypoints: STATE.waypoints||[], ts: nowStr()
+    onTime: STATE.fieldOnTime||'', waypoints: STATE.waypoints||[], ts: nowStr()
   })); } catch(e) {}
 }
 function fieldEventLog(action, locOk) {   // action: 'on' | 'off'
@@ -4988,6 +5069,7 @@ function selectVehicle(v) {
 function startField() {
   if(!STATE.fieldVehicle){showToast('Please select vehicle type','error');return;}
   STATE.onField=true;
+  STATE.fieldOnTime=nowStr();
   STATE.waypoints=[];
   STATE.currentDayKm=0;
   closePanel('vehicle');
@@ -5030,6 +5112,8 @@ function saveFieldStatus(onField, lat, lng) {
     vehicle: STATE.fieldVehicle||'',
     lat: lat||'', lng: lng||'',
     time: nowStr(), date: todayStr(),
+    onFieldTime: STATE.fieldOnTime||'',
+    offFieldTime: onField ? '' : nowStr(),
     waypoints: onField ? JSON.stringify(STATE.waypoints||[]) : ''
   };
   // Try update first (overwrites existing row), fall back to write
@@ -5041,6 +5125,42 @@ function saveFieldStatus(onField, lat, lng) {
 async function stopField() {
   if(STATE.stoppingField) return;            // guard: ignore repeat taps while a save is in flight
   if(!STATE.onField){ showToast('You are already off field',''); return; } // guard: no duplicate OFF entry
+
+  // Check today's check-ins / post-visit logs BEFORE letting them go off field —
+  // this is what attendance ends up keying off (see repPresentOn), so warn
+  // clearly here rather than let it silently become an Absent day later.
+  const nd = todayStr();
+  const todaysVisits = (STATE.visits||[]).filter(v=>v.repId===STATE.user.id && normDate(v.date)===nd);
+  const noCheckins = todaysVisits.length===0;
+  const incompleteLogs = todaysVisits.filter(v=>String(v.remarks||'').trim()==='');
+
+  if(noCheckins || incompleteLogs.length>0){
+    openOffFieldWarning(noCheckins, incompleteLogs);
+    return; // wait for the rep's explicit choice in the warning overlay
+  }
+  confirmStopField();
+}
+
+function openOffFieldWarning(noCheckins, incompleteLogs){
+  const ov=document.getElementById('offfield-overlay');
+  const companyNames = incompleteLogs.map(v=>co(v.companyId)?.name||'Unknown company').join(', ');
+  ov.innerHTML = `
+    <div style="width:100%;max-width:380px;margin:auto;text-align:center">
+      <i class="ti ti-alert-triangle" style="font-size:40px;color:var(--amber)"></i>
+      <div style="font-size:16px;font-weight:700;margin:14px 0 8px">Wait — before you go off field</div>
+      ${noCheckins?`<div class="text-sm" style="margin-bottom:10px">You haven't checked in to any company today.</div>`:''}
+      ${incompleteLogs.length>0?`<div class="text-sm" style="margin-bottom:10px">Post-visit log not completed for: <b>${companyNames}</b></div>`:''}
+      <div class="text-xs" style="color:var(--rose);font-weight:600;margin-bottom:22px">If you mark off field now, today will be marked ABSENT.</div>
+      <button class="btn btn-primary btn-full" style="margin-bottom:8px;padding:12px" onclick="closeOffFieldWarning()">Go back &amp; complete logs</button>
+      <button class="btn btn-full" style="background:none;border:none;color:var(--text3)" onclick="closeOffFieldWarning();confirmStopField()">Mark off field anyway — I understand I'll be marked absent</button>
+    </div>`;
+  ov.style.display='flex';
+}
+function closeOffFieldWarning(){
+  const ov=document.getElementById('offfield-overlay'); if(ov) ov.style.display='none';
+}
+
+async function confirmStopField() {
   if(!confirm('Mark yourself off field? This will save today\'s KM log.')) return;
   STATE.stoppingField=true;
   stopGPS();
@@ -5057,7 +5177,7 @@ async function stopField() {
     const wps = [...(STATE.waypoints||[])];
     const gpsKm = STATE.currentDayKm;
     const veh0 = STATE.fieldVehicle;
-    STATE.waypoints=[]; STATE.gpsTrail=[]; STATE.currentDayKm=0; STATE.fieldVehicle=null;
+    STATE.waypoints=[]; STATE.gpsTrail=[]; STATE.currentDayKm=0; STATE.fieldVehicle=null; STATE.fieldOnTime='';
 
     if(finalLat) {
       wps.push({
@@ -5694,19 +5814,29 @@ function renderAnalysis() {
 // ── ATTENDANCE REGISTER (manager) ────────────────────────────
 function changeAttMonth(delta){ let {y,m}=STATE.attMonth; m+=delta; if(m<0){m=11;y--;} if(m>11){m=0;y++;} STATE.attMonth={y,m}; renderAttendance(); }
 
-// Present if the rep marked on-field that day OR logged at least one visit that day.
+// Present if the rep is currently marked on-field today (optimistic, real-time),
+// OR — once the day is closed out — if EVERY visit they checked into that day
+// has a completed post-visit log (non-blank remarks). One finished log is no
+// longer enough if other check-ins that day are still incomplete.
 function repPresentOn(repId, dateStr){
   const nd=normDate(dateStr);
   const onField=(STATE.fieldStatus||[]).some(f=>f.repId===repId&&normDate(f.date)===nd&&String(f.onField).toUpperCase()==='TRUE');
   if(onField) return true;
-  return (STATE.visits||[]).some(v=>v.repId===repId&&normDate(v.date)===nd);
+  const dayVisits=(STATE.visits||[]).filter(v=>v.repId===repId&&normDate(v.date)===nd);
+  if(!dayVisits.length) return false;
+  return dayVisits.every(v=>String(v.remarks||'').trim()!=='');
 }
 
 function renderAttendance(){
   const el=document.getElementById('page-attendance'); if(!el) return;
   const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const isM=STATE.user.role==='manager';
   const reps=allReps();
-  if(!STATE.attRep || !reps.some(r=>r.id===STATE.attRep)){ STATE.attRep = reps[0]?reps[0].id:''; }
+  if(isM){
+    if(!STATE.attRep || !reps.some(r=>r.id===STATE.attRep)){ STATE.attRep = reps[0]?reps[0].id:''; }
+  } else {
+    STATE.attRep = STATE.user.id;   // reps only ever see their own record
+  }
   const {y,m}=STATE.attMonth;
   const monLabel=`${months[m]} ${y}`;
   const isCurrentMonth = y===new Date().getFullYear() && m===new Date().getMonth();
@@ -5731,11 +5861,11 @@ function renderAttendance(){
 
   el.innerHTML=`
     <div style="font-size:16px;font-weight:600;margin-bottom:4px">Attendance register</div>
-    <div class="text-xs" style="margin-bottom:12px">Present = marked on-field or logged at least one visit that day. Sundays are off.</div>
+    <div class="text-xs" style="margin-bottom:12px">Present = marked on-field, or a completed post-visit log for every visit that day. Sundays are off.</div>
 
-    <select class="inp" style="margin-bottom:12px" onchange="STATE.attRep=this.value;renderAttendance()">
+    ${isM?`<select class="inp" style="margin-bottom:12px" onchange="STATE.attRep=this.value;renderAttendance()">
       ${reps.map(r=>`<option value="${r.id}" ${STATE.attRep===r.id?'selected':''}>${r.name}${isActive(r)?'':' (left)'}</option>`).join('')}
-    </select>
+    </select>`:''}
 
     <div class="card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;margin-bottom:14px">
       <button class="btn btn-sm" onclick="changeAttMonth(-1)"><i class="ti ti-chevron-left"></i></button>
