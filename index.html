@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.38</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.39</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -538,17 +538,14 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.12'; // bump this to force SW cache invalidation
-// v7.12: Home page now shows a status bar with today's Marked ON / Marked
-//        OFF times and live Present/Absent. FieldStatus now tracks
-//        onFieldTime/offFieldTime distinctly (was a single overwritten
-//        `time` field before). Paired with a backend fix in FieldForce
-//        API's autoCloseStaleFieldSessions(): it now also recovers a
-//        PARTIAL KM/TA claim (via calcRouteDistance on the last synced
-//        waypoints) when auto-closing a forgotten session, instead of that
-//        day's travel claim silently vanishing. Marked source=
-//        'auto-close-partial' in GPSLogs since it's a lower bound, not the
-//        true total (no way to reach the phone for a live location at 2 AM).
+const APP_VERSION = '7.13'; // bump this to force SW cache invalidation
+// v7.13: 1-day retroactive-completion deadline on post-visit logs. Visits
+//        now record remarksSavedAt when the log is saved; repPresentOn()
+//        only counts a log if it was saved within 1 day of the visit date —
+//        miss that window and the day is PERMANENTLY Absent, even if the
+//        log is filled in later. Reminder banner and off-field warning both
+//        updated to explain the deadline. Requires running
+//        setupRemarksSavedAtColumn() once in FieldForce API after deploy.
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -825,6 +822,13 @@ function normDate(d) {
   const s = String(d).trim();
   if(s.match(/^\d{2}\/\d{2}\/\d{4}$/)) { const [dd,mm,yyyy]=s.split('/'); return `${yyyy}-${mm}-${dd}`; }
   return s.slice(0,10);
+}
+// Adds n days to a 'YYYY-MM-DD' string, returns 'YYYY-MM-DD'. Used for the
+// 1-day retroactive-completion deadline on post-visit logs.
+function addDaysStr(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0,10);
 }
 function applyNorms(data) {
   data.visits?.forEach(v=>{ v.date=normDate(v.date); v.repId=String(v.repId||'').trim(); v.companyId=String(v.companyId||'').trim(); });
@@ -1407,18 +1411,27 @@ function attendanceStatusBar(){
 function attendanceReminderBanner(){
   const uid = STATE.user.id;
   const nd = todayStr();
+  const yesterday = addDaysStr(nd, -1);
   const allMine = (STATE.visits||[]).filter(v=>v.repId===uid);
 
-  // Past-day visits still missing a completed log — these directly caused
-  // (or will cause) that day to be marked Absent.
-  const staleDates = {};
+  // Yesterday's incomplete visits — TODAY is the last day these can still be
+  // saved (deadline = yesterday + 1 day = today).
+  const fixableToday = allMine.filter(v=>normDate(v.date)===yesterday && String(v.remarks||'').trim()==='');
+
+  // Visits from 2+ days ago that missed their 1-day deadline — permanently
+  // Absent now, no CTA, just an explanation so it isn't a mystery.
+  const permanentDates = {};
   allMine.forEach(v=>{
-    if(normDate(v.date)<normDate(nd) && String(v.remarks||'').trim()===''){
-      staleDates[v.date] = (staleDates[v.date]||0)+1;
+    const vd = normDate(v.date);
+    if(vd < yesterday){
+      const deadline = addDaysStr(vd, 1);
+      const missed = String(v.remarks||'').trim()==='' ||
+        (v.remarksSavedAt && normDate(v.remarksSavedAt) > deadline);
+      if(missed) permanentDates[vd] = (permanentDates[vd]||0) + 1;
     }
   });
-  const staleDays = Object.keys(staleDates);
-  const staleCount = staleDays.reduce((s,d)=>s+staleDates[d],0);
+  const permanentDays = Object.keys(permanentDates);
+  const permanentCount = permanentDays.reduce((s,d)=>s+permanentDates[d],0);
 
   // Today's check-ins still missing checkout / a post-visit log.
   const todayIncomplete = allMine.filter(v=>normDate(v.date)===normDate(nd) && String(v.remarks||'').trim()==='');
@@ -1426,11 +1439,14 @@ function attendanceReminderBanner(){
   // Nudge if it's getting late and they're still marked on-field.
   const lateAndOnField = STATE.onField && new Date().getHours()>=20;
 
-  if(!staleDays.length && !todayIncomplete.length && !lateAndOnField) return '';
+  if(!fixableToday.length && !permanentDays.length && !todayIncomplete.length && !lateAndOnField) return '';
 
   let msg='';
-  if(staleDays.length){
-    msg += `<div style="margin-bottom:6px"><b>${staleCount}</b> visit${staleCount!==1?'s':''} from ${staleDays.length===1?'a previous day':staleDays.length+' previous days'} ${staleDays.length===1?'is':'are'} missing a post-visit log — ${staleDays.length===1?'that day is':'those days are'} marked <b style="color:var(--rose)">Absent</b> until completed.</div>`;
+  if(fixableToday.length){
+    msg += `<div style="margin-bottom:6px"><b style="color:var(--amber)">Last chance today:</b> ${fixableToday.length} visit${fixableToday.length!==1?'s':''} from yesterday still need${fixableToday.length===1?'s':''} a post-visit log. Complete ${fixableToday.length===1?'it':'them'} today, or yesterday becomes <b style="color:var(--rose)">permanently Absent</b>.</div>`;
+  }
+  if(permanentDays.length){
+    msg += `<div style="margin-bottom:6px">${permanentCount} visit${permanentCount!==1?'s':''} from ${permanentDays.length} earlier day${permanentDays.length!==1?'s':''} missed the 1-day window — ${permanentDays.length===1?'that day is':'those days are'} permanently Absent and can't be fixed now.</div>`;
   }
   if(todayIncomplete.length){
     msg += `<div style="margin-bottom:6px">${todayIncomplete.length} of today's visit${todayIncomplete.length!==1?'s':''} still need${todayIncomplete.length===1?'s':''} checkout / a post-visit log.</div>`;
@@ -1445,8 +1461,7 @@ function attendanceReminderBanner(){
       <div style="flex:1">
         <div style="font-size:13px;font-weight:600;margin-bottom:4px">Pending visit logs</div>
         <div class="text-xs">${msg}</div>
-        <button class="btn btn-sm" style="margin-top:8px" onclick="navigate('log')">Go to Visit Log</button>
-      </div>
+        ${(fixableToday.length||todayIncomplete.length)?`<button class="btn btn-sm" style="margin-top:8px" onclick="navigate('log')">Go to Visit Log</button>`:''}      </div>
     </div>
   </div>`;
 }
@@ -3720,7 +3735,7 @@ async function saveUnplannedVisit() {
   await apiWrite('VisitPlan',planItem);
   STATE.planItems.push(planItem);
 
-  const visit={id:uid(),repId:STATE.user.id,companyId:coId,date:todayStr(),time:startTime,meetingWith:metWith,designation:desig,status:'completed',checkinTime:startTime,checkoutTime:endTime,itemsPitched:items,remarks,rfqShared:document.getElementById('uv-rfq').checked?'TRUE':'FALSE',sampleRequired:document.getElementById('uv-smp').checked?'TRUE':'FALSE',gpsVerified,nextAction:na,nextActionDate:nd,photoUrl:'',source:'unplanned'};
+  const visit={id:uid(),repId:STATE.user.id,companyId:coId,date:todayStr(),time:startTime,meetingWith:metWith,designation:desig,status:'completed',checkinTime:startTime,checkoutTime:endTime,itemsPitched:items,remarks,rfqShared:document.getElementById('uv-rfq').checked?'TRUE':'FALSE',sampleRequired:document.getElementById('uv-smp').checked?'TRUE':'FALSE',gpsVerified,nextAction:na,nextActionDate:nd,photoUrl:'',source:'unplanned',remarksSavedAt:todayStr()};
   await apiWrite('Visits',visit);
   STATE.visits.push(visit);
 
@@ -4467,11 +4482,11 @@ async function savePostVisit(planId, visitId) {
   showToast('Saving...','');
 
   if(visitId && STATE.visits.find(v=>v.id===visitId)) {
-    const update = {id:visitId,meetingWith,designation,itemsPitched:items,remarks,rfqShared:rfq,sampleRequired:smp,nextAction:na,nextActionDate:nd,status:'completed'};
+    const update = {id:visitId,meetingWith,designation,itemsPitched:items,remarks,rfqShared:rfq,sampleRequired:smp,nextAction:na,nextActionDate:nd,status:'completed',remarksSavedAt:todayStr()};
     await apiUpdate('Visits',update);
     const v=STATE.visits.find(x=>x.id===visitId);if(v)Object.assign(v,update);
   } else {
-    const visit = {id:uid(),repId:STATE.user.id,companyId:plan.companyId,date:plan.date,time:plan.time,meetingWith,designation,status:'completed',checkinTime:plan.checkinTime||'',checkoutTime:nowStr(),itemsPitched:items,remarks,rfqShared:rfq,sampleRequired:smp,gpsVerified:plan.gpsVerified||'FALSE',nextAction:na,nextActionDate:nd,photoUrl:''};
+    const visit = {id:uid(),repId:STATE.user.id,companyId:plan.companyId,date:plan.date,time:plan.time,meetingWith,designation,status:'completed',checkinTime:plan.checkinTime||'',checkoutTime:nowStr(),itemsPitched:items,remarks,rfqShared:rfq,sampleRequired:smp,gpsVerified:plan.gpsVerified||'FALSE',nextAction:na,nextActionDate:nd,photoUrl:'',remarksSavedAt:todayStr()};
     await apiWrite('Visits',visit);
     STATE.visits.push(visit);
   }
@@ -5150,7 +5165,7 @@ function openOffFieldWarning(noCheckins, incompleteLogs){
       <div style="font-size:16px;font-weight:700;margin:14px 0 8px">Wait — before you go off field</div>
       ${noCheckins?`<div class="text-sm" style="margin-bottom:10px">You haven't checked in to any company today.</div>`:''}
       ${incompleteLogs.length>0?`<div class="text-sm" style="margin-bottom:10px">Post-visit log not completed for: <b>${companyNames}</b></div>`:''}
-      <div class="text-xs" style="color:var(--rose);font-weight:600;margin-bottom:22px">If you mark off field now, today will be marked ABSENT.</div>
+      <div class="text-xs" style="color:var(--rose);font-weight:600;margin-bottom:22px">If you mark off field now, today will be marked ABSENT. You'll have until tomorrow to add the missing log(s) — after that it's permanent.</div>
       <button class="btn btn-primary btn-full" style="margin-bottom:8px;padding:12px" onclick="closeOffFieldWarning()">Go back &amp; complete logs</button>
       <button class="btn btn-full" style="background:none;border:none;color:var(--text3)" onclick="closeOffFieldWarning();confirmStopField()">Mark off field anyway — I understand I'll be marked absent</button>
     </div>`;
@@ -5816,15 +5831,23 @@ function changeAttMonth(delta){ let {y,m}=STATE.attMonth; m+=delta; if(m<0){m=11
 
 // Present if the rep is currently marked on-field today (optimistic, real-time),
 // OR — once the day is closed out — if EVERY visit they checked into that day
-// has a completed post-visit log (non-blank remarks). One finished log is no
-// longer enough if other check-ins that day are still incomplete.
+// has a completed post-visit log (non-blank remarks) saved within 1 day of
+// the visit date. A log saved later than that (remarksSavedAt beyond the
+// deadline) does NOT count — the day is permanently Absent regardless of any
+// later edit. Visits saved before this field existed (remarksSavedAt blank)
+// are grandfathered in as valid, so historical Present days aren't disturbed.
 function repPresentOn(repId, dateStr){
   const nd=normDate(dateStr);
   const onField=(STATE.fieldStatus||[]).some(f=>f.repId===repId&&normDate(f.date)===nd&&String(f.onField).toUpperCase()==='TRUE');
   if(onField) return true;
   const dayVisits=(STATE.visits||[]).filter(v=>v.repId===repId&&normDate(v.date)===nd);
   if(!dayVisits.length) return false;
-  return dayVisits.every(v=>String(v.remarks||'').trim()!=='');
+  const deadline = addDaysStr(nd, 1); // last day a log for this date may still be saved
+  return dayVisits.every(v=>{
+    if(String(v.remarks||'').trim()==='') return false;
+    if(!v.remarksSavedAt) return true; // legacy row, predates this field
+    return normDate(v.remarksSavedAt) <= deadline;
+  });
 }
 
 function renderAttendance(){
@@ -5861,7 +5884,7 @@ function renderAttendance(){
 
   el.innerHTML=`
     <div style="font-size:16px;font-weight:600;margin-bottom:4px">Attendance register</div>
-    <div class="text-xs" style="margin-bottom:12px">Present = marked on-field, or a completed post-visit log for every visit that day. Sundays are off.</div>
+    <div class="text-xs" style="margin-bottom:12px">Present = marked on-field, or a completed post-visit log for every visit that day, saved within 1 day of the visit. Sundays are off.</div>
 
     ${isM?`<select class="inp" style="margin-bottom:12px" onchange="STATE.attRep=this.value;renderAttendance()">
       ${reps.map(r=>`<option value="${r.id}" ${STATE.attRep===r.id?'selected':''}>${r.name}${isActive(r)?'':' (left)'}</option>`).join('')}
