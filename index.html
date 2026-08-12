@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.40</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.41</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -538,11 +538,24 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.14'; // bump this to force SW cache invalidation
-// v7.14: attendanceStatusBar() now also falls back to fieldEventsToday()
-//        (a local on/off log that predates onFieldTime/offFieldTime) so
-//        sessions started before that field existed still show a real
-//        Marked ON/OFF time instead of a dash where possible.
+const APP_VERSION = '7.15'; // bump this to force SW cache invalidation
+// v7.15: New 'coordinator' role — a rep who also gets manager-level VIEW
+//        access to team data. Set role='coordinator' directly in the Users
+//        sheet (no in-app role picker exists — Users are only ever managed
+//        via PIN reset/activate, so this is the only change needed there).
+//        Coordinators get: their own rep-style nav (Daily Plan, Visit Log,
+//        Companies, Contacts, RFQ, Tasks) PLUS Team Overview, Team GPS,
+//        Monthly Analysis, and Attendance scoped to reps (not other
+//        coordinators). Full power on managing visit collaborators. Can
+//        set targets for reps (not other coordinators — managers set
+//        coordinator targets). View-only on TA claim approval, PO
+//        verification, contact/company removal, PO crediting, and company
+//        editing — those stay strictly manager-only, fixed two spots
+//        (GPS team view's TA approve/reject, Team Overview's approval
+//        queue) that would have otherwise leaked to coordinators.
+//        myTrackable()/allTrackable() added (reps+coordinators) alongside
+//        the existing rep-only myReps()/allReps() — manager dashboards use
+//        the former so coordinators like Rohit now actually show up.
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -664,8 +677,16 @@ function vehicleTag(vh) { if(vh==='four-wheeler') return `<span class="v-4w"><i 
 function co(id) { return STATE.companies.find(c=>c.id===id)||{}; }
 function rep(id) { return STATE.users.find(u=>u.id===id)||{}; }
 function isActive(u){ return !!u && String(u.active==null?'':u.active).toUpperCase()!=='FALSE'; }
-function myReps() { return STATE.users.filter(u=>u.role==='rep' && isActive(u)); }   // active reps (for assignment pickers)
+function myReps() { return STATE.users.filter(u=>u.role==='rep' && isActive(u)); }   // active reps only (for assignment pickers) — coordinators aren't assignable targets for other reps' work
 function allReps() { return STATE.users.filter(u=>u.role==='rep'); }                 // includes former reps (for history)
+// Team-tracking views (Team Overview, Team GPS, Attendance roster, Monthly
+// Analysis, GPS & Travel) need to show coordinators too — managers must see
+// Rohit-type coordinators alongside reps. myReps()/allReps() stay rep-only
+// since those feed rep-specific assignment pickers.
+function myTrackable() { return STATE.users.filter(u=>(u.role==='rep'||u.role==='coordinator') && isActive(u)); }
+function allTrackable() { return STATE.users.filter(u=>u.role==='rep'||u.role==='coordinator'); }
+function roleLabel(r){ return r==='manager'?'Manager':r==='coordinator'?'Coordinator':'Sales Rep'; }
+function roleColor(r){ return r==='manager'?'#6366F1':r==='coordinator'?'#8B5CF6':'#10B981'; }
 
 // ── TOAST ────────────────────────────────────────────────────────────────────
 function showToast(msg, type='') {
@@ -1010,12 +1031,12 @@ function renderLoginCards() {
   if(!el) return;
   el.innerHTML = STATE.users.filter(isActive).map(u => `
     <div class="user-card" id="uc-${u.id}" onclick="selectLoginUser('${u.id}',this)">
-      <div class="user-card-av" style="background:${u.role==='manager'?'#6366F1':'#10B981'}">${u.avatar||u.name.slice(0,2).toUpperCase()}</div>
+      <div class="user-card-av" style="background:${roleColor(u.role)}">${u.avatar||u.name.slice(0,2).toUpperCase()}</div>
       <div class="user-card-info">
         <div class="user-card-name">${u.name}</div>
         <div class="user-card-role" style="display:flex;align-items:center;gap:5px">
-          <span style="width:7px;height:7px;border-radius:50%;background:${u.role==='manager'?'#6366F1':'#10B981'};display:inline-block;flex-shrink:0"></span>
-          ${u.role==='manager'?'Manager':'Sales Rep'}
+          <span style="width:7px;height:7px;border-radius:50%;background:${roleColor(u.role)};display:inline-block;flex-shrink:0"></span>
+          ${roleLabel(u.role)}
         </div>
       </div>
       <i class="ti ti-check" id="chk-${u.id}" style="color:var(--indigo2);font-size:18px;display:none"></i>
@@ -1076,9 +1097,9 @@ function showPinStep(u) {
   const first = needsPinSetup(u);
   ov.innerHTML = `
     <div style="width:100%;max-width:340px;margin:auto;text-align:center">
-      <div class="user-card-av" style="width:56px;height:56px;font-size:20px;margin:0 auto 12px;background:${u.role==='manager'?'#6366F1':'#10B981'}">${u.avatar||u.name.slice(0,2).toUpperCase()}</div>
+      <div class="user-card-av" style="width:56px;height:56px;font-size:20px;margin:0 auto 12px;background:${roleColor(u.role)}">${u.avatar||u.name.slice(0,2).toUpperCase()}</div>
       <div style="font-size:18px;font-weight:700">${u.name}</div>
-      <div class="text-sm" style="margin-bottom:20px">${u.role==='manager'?'Manager':'Sales Rep'}</div>
+      <div class="text-sm" style="margin-bottom:20px">${roleLabel(u.role)}</div>
       <div class="inp-label" style="text-align:left;margin-bottom:6px">Enter your 4-digit PIN</div>
       <input id="pin-input" type="password" inputmode="numeric" autocomplete="off" maxlength="4" class="inp"
         style="text-align:center;letter-spacing:10px;font-size:22px;padding:12px"
@@ -1165,7 +1186,7 @@ async function completeLogin(u) {
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   document.getElementById('top-av').textContent = u.avatar||u.name.slice(0,2).toUpperCase();
-  document.getElementById('top-av').style.background = u.role==='manager'?'#6366F1':'#10B981';
+  document.getElementById('top-av').style.background = roleColor(u.role);
   renderNav();
   updateNotifDot();
   await new Promise(r=>setTimeout(r,50));
@@ -1268,15 +1289,20 @@ function viewRepHistory(repId){ STATE.anRep=repId; navigate('analysis'); }
 // ── NAV ───────────────────────────────────────────────────────────────────────
 function renderNav() {
   const isM = STATE.user.role==='manager';
+  const isCoord = STATE.user.role==='coordinator';
 
   // All pages
   const allPages = isM
     ? [['home','home','Home'],['team','users','Team'],['teamgps','route','Team GPS'],['companies','building','Companies'],['plan','calendar-plus','My Plan'],['log','clipboard-list','My Visits'],['targets','target','Targets'],['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks'],['gps','truck','My GPS'],['cal','calendar','Calendar']]
+    : isCoord
+    ? [['home','home','Home'],['team','users','Team'],['teamgps','route','Team GPS'],['companies','building','Companies'],['contacts','address-book','Contacts'],['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['targets','target','Targets'],['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar'],['analysis','chart-bar','Monthly Analysis'],['attendance','user-check','Attendance']]
     : [['home','home','Home'],['companies','building','Companies'],['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['targets','target','Targets'],['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']];
 
   // Mobile bottom nav — most important 5
   const mobilePages = isM
     ? [['home','home','Home'],['team','users','Team'],['companies','building','Companies'],['plan','calendar-plus','Daily'],['log','clipboard-list','Visit']]
+    : isCoord
+    ? [['home','home','Home'],['team','users','Team'],['plan','calendar-plus','Daily'],['log','clipboard-list','Visit'],['targets','target','Targets']]
     : [['home','home','Home'],['companies','building','Companies'],['plan','calendar-plus','Daily'],['log','clipboard-list','Visit'],['targets','target','Targets']];
 
   document.getElementById('bottomnav').innerHTML = mobilePages.map(([id,ic,lb])=>
@@ -1291,6 +1317,13 @@ function renderNav() {
         'My field':    [['plan','calendar-plus','My Daily Plan'],['log','clipboard-list','My Visit Log'],['gps','map-pin','My GPS & TA']],
         'Sales':       [['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks']],
         'Management':  [['companies','building','Companies'],['contacts','address-book','Contacts'],['targets','target','Targets'],['analysis','chart-bar','Monthly Analysis'],['attendance','user-check','Attendance'],['cal','calendar','Calendar']]
+      }
+    : isCoord
+    ? {
+        'Team':        [['home','home','Home'],['team','users','Team Overview'],['teamgps','route','Team GPS']],
+        'My field':    [['plan','calendar-plus','My Daily Plan'],['log','clipboard-list','My Visit Log'],['companies','building','Companies'],['contacts','address-book','Contacts']],
+        'Sales':       [['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks']],
+        'Performance': [['targets','target','Targets'],['analysis','chart-bar','Monthly Analysis'],['attendance','user-check','Attendance'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']]
       }
     : {
         'Dashboard':   [['home','home','Home']],
@@ -1322,10 +1355,10 @@ function renderNav() {
   if(drawerFooter) {
     drawerFooter.innerHTML = `
       <div class="side-user" onclick="logout()">
-        <div class="user-av" style="width:32px;height:32px;font-size:12px;background:${isM?'#6366F1':'#10B981'}">${STATE.user.avatar||STATE.user.name.slice(0,2).toUpperCase()}</div>
+        <div class="user-av" style="width:32px;height:32px;font-size:12px;background:${roleColor(STATE.user.role)}">${STATE.user.avatar||STATE.user.name.slice(0,2).toUpperCase()}</div>
         <div class="side-user-info">
           <div class="side-user-name">${STATE.user.name}</div>
-          <div class="side-user-role">${isM?'Manager':'Sales Rep'}</div>
+          <div class="side-user-role">${roleLabel(STATE.user.role)}</div>
         </div>
         <i class="ti ti-logout" style="font-size:16px;color:var(--text3)"></i>
       </div>`;
@@ -1334,9 +1367,9 @@ function renderNav() {
   // User info in sidebar footer
   const av = STATE.user.avatar||STATE.user.name.slice(0,2).toUpperCase();
   document.getElementById('side-av').textContent = av;
-  document.getElementById('side-av').style.background = isM?'#6366F1':'#10B981';
+  document.getElementById('side-av').style.background = roleColor(STATE.user.role);
   document.getElementById('side-name').textContent = STATE.user.name;
-  document.getElementById('side-role').textContent = isM?'Manager':'Sales Rep';
+  document.getElementById('side-role').textContent = roleLabel(STATE.user.role);
   document.getElementById('topbar-org').style.display = 'inline';
 }
 
@@ -1384,7 +1417,7 @@ function renderHome() {
   const el = document.getElementById('page-home');
   if(!el) return;
   const isM = STATE.user.role==='manager';
-  if(isM) { renderMgrHome(el); } else { renderRepHome(el); }
+  if(isM) { renderMgrHome(el); } else { renderRepHome(el); }   // coordinators get the rep-style home — Team Overview covers team data separately
 }
 // In-app reminder for pending checkouts / post-visit logs / stale on-field
 // sessions, since real push notifications aren't wired up yet — this shows
@@ -1561,7 +1594,7 @@ function renderRepHome(el) {
 }
 function renderMgrHome(el) {
   if(!el || !STATE.user) return;
-  const reps = myReps();
+  const reps = myTrackable();
   const pend = STATE.approvals.filter(a=>a.status==='pending').length + STATE.pos.filter(p=>p.status==='pending').length;
   const myTodayV = STATE.visits.filter(v=>v.repId===STATE.user.id&&v.date===todayStr());
   const myPlan = STATE.planItems.filter(p=>p.repId===STATE.user.id&&p.date===todayStr());
@@ -1594,7 +1627,7 @@ function renderMgrHome(el) {
     </div>`:''}
 
     <div class="grid2 desk-grid2" style="margin-bottom:10px">
-      <div class="card" style="padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--indigo2)">${reps.length}</div><div class="text-xs">Sales reps</div></div>
+      <div class="card" style="padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--indigo2)">${reps.length}</div><div class="text-xs">Team members</div></div>
       <div class="card" style="padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--indigo2)">${STATE.companies.length}</div><div class="text-xs">Companies</div></div>
       <div class="card" style="padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--amber)">${pend}</div><div class="text-xs">Pending actions</div></div>
       <div class="card" style="padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--emerald)">${STATE.visits.filter(v=>v.date===todayStr()).length}</div><div class="text-xs">Visits today</div></div>
@@ -1606,7 +1639,7 @@ function renderMgrHome(el) {
         const ac=monthSales(r.id);
         const mt=MONTHLY_TARGET;
         const pc=mt?Math.round(ac/mt*100):0;
-        return `<div style="margin-bottom:12px"><div class="row-between" style="margin-bottom:4px"><div class="row"><div style="width:24px;height:24px;border-radius:50%;background:var(--emerald);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:#fff">${r.avatar||r.name.slice(0,2)}</div><span style="font-size:12px;font-weight:500">${r.name}</span></div><span class="text-sm">${fmt(ac)} / ${fmt(mt)}</span></div>${pb(pc,4)}<div class="text-xs" style="margin-top:2px">${pc}% · Incentive: ${fmt(calcInc(ac))}</div></div>`;
+        return `<div style="margin-bottom:12px"><div class="row-between" style="margin-bottom:4px"><div class="row"><div style="width:24px;height:24px;border-radius:50%;background:${roleColor(r.role)};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:#fff">${r.avatar||r.name.slice(0,2)}</div><span style="font-size:12px;font-weight:500">${r.name}</span></div><span class="text-sm">${fmt(ac)} / ${fmt(mt)}</span></div>${pb(pc,4)}<div class="text-xs" style="margin-top:2px">${pc}% · Incentive: ${fmt(calcInc(ac))}</div></div>`;
       }).join('')}
     </div>
     <div class="card">
@@ -1617,7 +1650,7 @@ function renderMgrHome(el) {
         const km=logs.reduce((s,g)=>s+Number(g.totalKm||0),0);
         const ta=logs.reduce((s,g)=>s+Number(g.taAmount||0),0);
         const claim=STATE.taClaims.find(c=>c.repId===r.id&&c.weekStart===wk.start);
-        return `<div class="row-between" style="padding:7px 0;border-bottom:1px solid var(--border)"><div class="row"><div style="width:20px;height:20px;border-radius:50%;background:var(--emerald);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;color:#fff">${r.avatar||r.name.slice(0,2)}</div><span style="font-size:11px;font-weight:500">${r.name.split(' ')[0]}</span></div><div class="row"><span style="font-size:10px;color:var(--indigo2)">${km.toFixed(1)} km</span><span style="font-size:10px;color:var(--emerald);font-weight:600">${fmtINR(ta)}</span><span class="badge ${claim?.status==='approved'?'badge-green':'badge-amber'}" style="font-size:8px">${claim?.status==='approved'?'Paid':'Pending'}</span></div></div>`;
+        return `<div class="row-between" style="padding:7px 0;border-bottom:1px solid var(--border)"><div class="row"><div style="width:20px;height:20px;border-radius:50%;background:${roleColor(r.role)};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;color:#fff">${r.avatar||r.name.slice(0,2)}</div><span style="font-size:11px;font-weight:500">${r.name.split(' ')[0]}</span></div><div class="row"><span style="font-size:10px;color:var(--indigo2)">${km.toFixed(1)} km</span><span style="font-size:10px;color:var(--emerald);font-weight:600">${fmtINR(ta)}</span><span class="badge ${claim?.status==='approved'?'badge-green':'badge-amber'}" style="font-size:8px">${claim?.status==='approved'?'Paid':'Pending'}</span></div></div>`;
       }).join('')}
     </div>
     ${pend>0?`<div class="card" style="border-color:rgba(245,158,11,.3)">
@@ -1657,15 +1690,17 @@ function coIsInPeriod(cId, myT, period) {
 function renderCompanies() {
   const el = document.getElementById('page-companies');
   const isM = STATE.user.role==='manager';
+  const isCoord = STATE.user.role==='coordinator';
+  const isMgrOrCoord = isM || isCoord;
   if(!STATE.coSearch) STATE.coSearch='';
   if(!STATE.coIndustryFilter) STATE.coIndustryFilter='all';
 
   // Rep can browse the full company DB ("All companies") to add to their own targets.
-  const repAllMode = !isM && STATE.coView==='all';
+  const repAllMode = !isMgrOrCoord && STATE.coView==='all';
 
   // Filter targets based on coView
   let myT;
-  if(!isM) {
+  if(!isMgrOrCoord) {
     myT = STATE.targets.filter(t=>t.repId===STATE.user.id);   // rep's own targets (for value display)
   } else if(STATE.coView==='mine') {
     myT = STATE.targets.filter(t=>t.repId===STATE.user.id);
@@ -1742,7 +1777,7 @@ function renderCompanies() {
     <div class="row-between" style="margin-bottom:12px">
       <div style="font-size:16px;font-weight:600">Target Companies</div>
       <div class="row" style="gap:6px">
-        ${isM?viewSwitcherHtml('coView', STATE.coView||'all', 'renderCompanies()'):`<div style="display:inline-flex;background:var(--bg3);border-radius:8px;padding:2px">
+        ${isMgrOrCoord?viewSwitcherHtml('coView', STATE.coView||'all', 'renderCompanies()'):`<div style="display:inline-flex;background:var(--bg3);border-radius:8px;padding:2px">
           <button class="seg-tab${(STATE.coView||'mine')!=='all'?' active':''}" style="flex:none;padding:5px 10px;font-size:11px" onclick="STATE.coView='mine';STATE.exp=null;renderCompanies()">My</button>
           <button class="seg-tab${STATE.coView==='all'?' active':''}" style="flex:none;padding:5px 10px;font-size:11px" onclick="STATE.coView='all';STATE.exp=null;renderCompanies()">All</button>
         </div>`}
@@ -1830,7 +1865,7 @@ function renderCompanies() {
               <div class="co-info">
                 <div class="co-name">${pri(c.priority)} ${c.name}${ov?' <span class="badge badge-red" style="font-size:8px">OD</span>':''}</div>
                 <div class="co-sub">${c.address?.split(',').slice(0,2).join(',')} · ${c.industry}</div>
-                ${isM?`<div class="row" style="gap:3px;margin-top:3px;flex-wrap:wrap">${[...new Set(allT.filter(t=>t.companyId===c.id).map(t=>t.repId).filter(Boolean))].map(rid=>{const r=rep(rid);return (r&&r.name)?`<span style="font-size:9px;background:rgba(99,102,241,.1);color:var(--indigo2);border-radius:10px;padding:1px 7px">${r.name.split(' ')[0]}</span>`:''}).join('')}</div>`:''}
+                ${isMgrOrCoord?`<div class="row" style="gap:3px;margin-top:3px;flex-wrap:wrap">${[...new Set(allT.filter(t=>t.companyId===c.id).map(t=>t.repId).filter(Boolean))].map(rid=>{const r=rep(rid);return (r&&r.name)?`<span style="font-size:9px;background:rgba(99,102,241,.1);color:var(--indigo2);border-radius:10px;padding:1px 7px">${r.name.split(' ')[0]}</span>`:''}).join('')}</div>`:''}
               </div>
               <div class="co-meta">
                 <div class="co-ach">
@@ -1853,7 +1888,7 @@ function renderCompanies() {
               <div class="row" style="gap:5px;margin-top:4px;flex-wrap:wrap">
                 ${allT.length&&!hasMonthly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(245,158,11,.3);color:var(--amber)" onclick="event.stopPropagation();act(this,()=>addFocusPeriod('${c.id}','monthly'),'Adding…')"><i class="ti ti-plus" style="font-size:10px"></i> Add to Monthly</button>`:''}
                 ${allT.length&&!hasWeekly?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(16,185,129,.3);color:var(--emerald)" onclick="event.stopPropagation();act(this,()=>addFocusPeriod('${c.id}','weekly'),'Adding…')"><i class="ti ti-plus" style="font-size:10px"></i> Add to Weekly</button>`:''}
-                ${(isM||repAllMode)&&!allT.some(t=>t.companyId===c.id&&t.repId===STATE.user.id)?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="event.stopPropagation();act(this,()=>addToMyCompanies('${c.id}'),'Adding…')"><i class="ti ti-user-plus" style="font-size:10px"></i> Add to mine</button>`:''}
+                ${(isMgrOrCoord||repAllMode)&&!allT.some(t=>t.companyId===c.id&&t.repId===STATE.user.id)?`<button class="btn btn-sm" style="font-size:9px;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="event.stopPropagation();act(this,()=>addToMyCompanies('${c.id}'),'Adding…')"><i class="ti ti-user-plus" style="font-size:10px"></i> Add to mine</button>`:''}
                 <button class="btn btn-sm" style="font-size:9px" onclick="openCoDetail('${c.id}');event.stopPropagation()"><i class="ti ti-arrow-right" style="font-size:10px"></i> Full details</button>
               </div>
             </div>
@@ -1868,7 +1903,7 @@ function renderCompanies() {
 }
 
 function openCoFilterPanel() {
-  const isM = STATE.user.role==='manager';
+  const isM = STATE.user.role==='manager' || STATE.user.role==='coordinator';
   // Get industries from current view's companies
   const myT = STATE.targets.filter(t=>isM?true:t.repId===STATE.user.id);
   const allCIds = [...new Set(myT.map(t=>t.companyId))];
@@ -1913,7 +1948,7 @@ function openCoFilterPanel() {
 }
 
 async function addFocusPeriod(coId, period) {
-  const isM = STATE.user.role==='manager';
+  const isM = STATE.user.role==='manager' || STATE.user.role==='coordinator';
   const repId = isM ? STATE.viewRep||STATE.user.id : STATE.user.id;
   // Copy target details from annual target
   const annualT = STATE.targets.find(t=>t.companyId===coId&&t.repId===repId&&t.period==='annual');
@@ -2059,13 +2094,14 @@ async function saveAssignExisting(coId, repElId, tgtElId) {
 
 function openCoDetail(cId) {
   const c = STATE.companies.find(x=>x.id===cId)||{};
-  const ts = STATE.targets.filter(t=>t.companyId===cId&&(STATE.user.role==='manager'||t.repId===STATE.user.id));
+  const isMgrOrCoord0 = STATE.user.role==='manager'||STATE.user.role==='coordinator';
+  const ts = STATE.targets.filter(t=>t.companyId===cId&&(isMgrOrCoord0||t.repId===STATE.user.id));
   const d = dsi(c.lastVisited);
   const isM = STATE.user.role==='manager';
   const tblk = (list,lbl,col) => list.map(t=>{
     const p=Math.round(Number(t.achieved||0)/Number(t.saleTarget||1)*100);
     return `<div style="padding:9px;background:var(--bg3);border-radius:8px;border-left:3px solid ${col};margin-bottom:7px">
-      <div class="row-between" style="margin-bottom:3px"><span style="font-size:11px;font-weight:500">${lbl}${isM?' · '+(rep(t.repId).name||'Unassigned'):''}</span><span class="text-xs">${p}% · ${fmt(t.achieved)}/${fmt(t.saleTarget)}</span></div>
+      <div class="row-between" style="margin-bottom:3px"><span style="font-size:11px;font-weight:500">${lbl}${isMgrOrCoord0?' · '+(rep(t.repId).name||'Unassigned'):''}</span><span class="text-xs">${p}% · ${fmt(t.achieved)}/${fmt(t.saleTarget)}</span></div>
       ${pb(p,4)}<div class="text-xs" style="margin-top:3px">${t.items}</div>
       ${t.goals?`<div style="font-size:9px;color:${col};margin-top:2px">🎯 ${t.goals}</div>`:''}
     </div>`;}).join('');
@@ -2155,6 +2191,12 @@ function openCoDetail(cId) {
         <button class="btn" style="flex:1;justify-content:center;border-color:rgba(245,158,11,.3);color:var(--amber)" onclick="openMergeCompany('${c.id}')"><i class="ti ti-git-merge"></i> Merge</button>
       </div>
       <button class="btn btn-danger btn-full" style="margin-top:8px" onclick="act(this,()=>managerRemoveCompany('${c.id}'),'Removing…')"><i class="ti ti-trash"></i> Remove company</button>`:
+    STATE.user.role==='coordinator' ?
+    `<div style="margin-top:14px">
+      <button class="btn btn-primary btn-full" onclick="openEditCompany('${c.id}')"><i class="ti ti-building"></i> Edit company details</button>
+      <div class="text-xs" style="text-align:center;margin-top:6px;color:var(--text3)">${c.addedBy===STATE.user.id?'You added this company — edits save directly':'Edits to companies you didn\'t add need manager approval'}</div>
+      <button class="btn" style="margin-top:12px" onclick="openEditTargets('${c.id}')"><i class="ti ti-edit"></i> Edit targets (reps only)</button>
+    </div>` :
     `<div style="margin-top:14px">
       <button class="btn btn-primary btn-full" onclick="openEditCompany('${c.id}')"><i class="ti ti-building"></i> Edit company details</button>
       <div class="text-xs" style="text-align:center;margin-top:6px;color:var(--text3)">${c.addedBy===STATE.user.id?'You added this company — edits save directly':'Edits to companies you didn\'t add need manager approval'}</div>
@@ -2164,9 +2206,9 @@ function openCoDetail(cId) {
 }
 
 function openAddCompanyPanel() {
-  const isM = STATE.user.role==='manager';
+  const isM = STATE.user.role==='manager' || STATE.user.role==='coordinator';   // both get the target-assignment flow
   const panel = document.getElementById('panel-addco');
-  const reps = myReps();
+  const reps = STATE.user.role==='manager' ? myTrackable() : myReps();   // managers can assign to reps+coordinators; coordinators to reps only
 
   if(isM) {
     // MANAGER FLOW — simplified, two sections: company info + rep assignment
@@ -2741,8 +2783,8 @@ function openReassignCompany(coId) {
       ${options.map(u=>`
       <label style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer">
         <input type="radio" name="reassign-rep" value="${u.id}" style="accent-color:var(--indigo);width:16px;height:16px" ${currentRepIds.length===1&&currentRepIds[0]===u.id?'checked':''}>
-        <div style="width:30px;height:30px;border-radius:50%;background:${u.role==='manager'?'var(--indigo)':'var(--emerald)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0">${u.avatar||u.name.slice(0,2).toUpperCase()}</div>
-        <div style="flex:1"><div style="font-size:12px;font-weight:500">${u.name}${u.id===STATE.user.id?' <span style="font-size:10px;color:var(--indigo2)">(myself)</span>':''}</div><div class="text-xs">${u.role==='manager'?'Manager':'Sales Rep'}</div></div>
+        <div style="width:30px;height:30px;border-radius:50%;background:${roleColor(u.role)};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0">${u.avatar||u.name.slice(0,2).toUpperCase()}</div>
+        <div style="flex:1"><div style="font-size:12px;font-weight:500">${u.name}${u.id===STATE.user.id?' <span style="font-size:10px;color:var(--indigo2)">(myself)</span>':''}</div><div class="text-xs">${roleLabel(u.role)}</div></div>
       </label>`).join('')}
       <label style="display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer">
         <input type="radio" name="reassign-rep" value="__unassigned__" style="accent-color:var(--indigo);width:16px;height:16px" ${!currentRepIds.length?'checked':''}>
@@ -2793,7 +2835,8 @@ async function saveReassignCompany(coId, btn) {
 
 function openEditTargets(coId) {
   const c=STATE.companies.find(x=>x.id===coId)||{};
-  const ts=STATE.targets.filter(t=>t.companyId===coId);
+  const repIds = new Set(myReps().map(r=>r.id).concat(allReps().map(r=>r.id)));
+  const ts=STATE.targets.filter(t=>t.companyId===coId && (STATE.user.role==='manager' || repIds.has(t.repId)));
   const panel=document.getElementById('panel-co');
   panel.innerHTML=`
     <div class="panel-head"><button class="panel-back" onclick="openCoDetail('${coId}')"><i class="ti ti-arrow-left" style="font-size:20px"></i></button><span class="panel-title">Edit targets — ${c.name}</span></div>
@@ -2809,7 +2852,7 @@ function openEditTargets(coId) {
     <div style="margin-top:14px"><div class="text-label" style="margin-bottom:10px">Add new target</div>
     <div class="grid2" style="gap:8px;margin-bottom:8px">
       <div><div class="inp-label">Period</div><select class="inp" id="nt-period"><option value="annual">Annual</option><option value="monthly">Monthly</option><option value="weekly">Weekly</option></select></div>
-      <div><div class="inp-label">Assign to rep</div><select class="inp" id="nt-rep"><option value="">Select rep</option>${myReps().map(r=>`<option value="${r.id}">${r.name}</option>`).join('')}</select></div>
+      <div><div class="inp-label">Assign to ${STATE.user.role==='manager'?'rep or coordinator':'rep'}</div><select class="inp" id="nt-rep"><option value="">Select</option>${(STATE.user.role==='manager'?myTrackable():myReps()).map(r=>`<option value="${r.id}">${r.name}${r.role==='coordinator'?' (Coordinator)':''}</option>`).join('')}</select></div>
     </div>
     <div class="inp-group"><div class="inp-label">Sale target (₹)</div><input class="inp" type="number" id="nt-tgt" placeholder="e.g. 500000"></div>
     <div class="inp-group"><div class="inp-label">Items</div><input class="inp" id="nt-items" placeholder="e.g. Industrial Pumps"></div>
@@ -2837,12 +2880,14 @@ async function addTarget(coId) {
 function renderPlan() {
   const el = document.getElementById('page-plan');
   const isM = STATE.user.role==='manager';
+  const isCoord = STATE.user.role==='coordinator';
+  const isMgrOrCoord = isM || isCoord;
   const dates=[];
   for(let i=0;i<7;i++){const d=new Date();d.setDate(d.getDate()+i);dates.push(d.toISOString().slice(0,10));}
 
   // Determine whose plan to show
-  const planRepId = (!isM || STATE.planView==='mine') ? STATE.user.id : STATE.planView;
-  const viewingMyOwn = !isM || STATE.planView==='mine';
+  const planRepId = (!isMgrOrCoord || STATE.planView==='mine') ? STATE.user.id : STATE.planView;
+  const viewingMyOwn = !isMgrOrCoord || STATE.planView==='mine';
 
   const ce = STATE.calEvents.filter(e=>String(e.repId||'').trim()===planRepId&&e.date===STATE.pld);
   const mp = STATE.planItems.filter(p=>String(p.repId||'').trim()===planRepId&&p.date===STATE.pld&&p.source==='manual');
@@ -2919,7 +2964,7 @@ function renderPlan() {
         </div>
         <div class="row" style="gap:6px;margin-bottom:6px">
           <button class="btn btn-sm" style="flex:1;justify-content:center;border-color:rgba(245,158,11,.3);color:var(--amber)" onclick="openRescheduleForm('${p.id}')"><i class="ti ti-calendar-plus" style="font-size:11px"></i> Reschedule</button>
-          ${(isM||!p.collabMasterId)?`<button class="btn btn-sm" style="flex:1;justify-content:center;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="openManageCollaborators('${p.id}')"><i class="ti ti-users" style="font-size:11px"></i> ${(p.collaborators||'').split(',').filter(Boolean).length>0?'Manage collaborators':'Add collaborator'}</button>`:''}
+          ${(isM||isCoord||!p.collabMasterId)?`<button class="btn btn-sm" style="flex:1;justify-content:center;border-color:rgba(99,102,241,.3);color:var(--indigo2)" onclick="openManageCollaborators('${p.id}')"><i class="ti ti-users" style="font-size:11px"></i> ${(p.collaborators||'').split(',').filter(Boolean).length>0?'Manage collaborators':'Add collaborator'}</button>`:''}
         </div>`:''}
 
       ${effectiveSt==='in-progress'?`
@@ -2994,7 +3039,7 @@ function renderPlan() {
         const collabIds=(p.collaborators||'').split(',').filter(Boolean);
         const iAmCollab=collabIds.includes(STATE.user.id);
         const isOwner=!p.collabMasterId&&p.repId===STATE.user.id;
-        const canManageCollab=STATE.user.role==='manager'||isOwner;
+        const canManageCollab=STATE.user.role==='manager'||STATE.user.role==='coordinator'||isOwner;
         const ownerName=p.collabOwner?STATE.users.find(u=>u.id===p.collabOwner)?.name?.split(' ')[0]:'';
         return`<div class="plan-item" style="padding:10px 14px;flex-wrap:wrap;gap:6px">
           <div class="plan-time">${p.time}</div>
@@ -3427,8 +3472,9 @@ function openManageCollaborators(planId) {
   const p = STATE.planItems.find(x=>x.id===planId);
   if(!p) return;
   const isM = STATE.user.role==='manager';
-  const canManage = isM || (!p.collabMasterId && p.repId===STATE.user.id);
-  if(!canManage){ showToast('Only the visit owner or manager can manage collaborators',''); return; }
+  const isCoord = STATE.user.role==='coordinator';
+  const canManage = isM || isCoord || (!p.collabMasterId && p.repId===STATE.user.id);
+  if(!canManage){ showToast('Only the visit owner, manager, or coordinator can manage collaborators',''); return; }
 
   const currentCollabs = (p.collaborators||'').split(',').filter(Boolean);
   const allOthers = STATE.users.filter(u=>u.id!==STATE.user.id);
@@ -3448,7 +3494,7 @@ function openManageCollaborators(planId) {
     ${allOthers.map(r=>`
     <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:6px;background:var(--bg2);border:1px solid ${currentCollabs.includes(r.id)?'rgba(99,102,241,.4)':'var(--border)'}">
       <input type="checkbox" name="mc-collab" value="${r.id}" style="accent-color:var(--indigo);width:15px;height:15px" ${currentCollabs.includes(r.id)?'checked':''}>
-      <div style="width:32px;height:32px;border-radius:50%;background:${r.role==='manager'?'var(--indigo)':'var(--emerald)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0">${r.name.slice(0,2).toUpperCase()}</div>
+      <div style="width:32px;height:32px;border-radius:50%;background:${roleColor(r.role)};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0">${r.name.slice(0,2).toUpperCase()}</div>
       <div style="flex:1">
         <div style="font-size:12px;font-weight:500">${r.name}</div>
         <div style="font-size:10px;color:var(--text3)">${r.role}</div>
@@ -3772,7 +3818,8 @@ async function saveUnplannedVisit() {
 // ── VIEW SWITCHER (manager dropdown) ─────────────────────────────────────────
 function viewSwitcherHtml(stateKey, currentVal, onChange) {
   const isM = STATE.user.role==='manager';
-  if(!isM) return '';
+  const isCoord = STATE.user.role==='coordinator';
+  if(!isM && !isCoord) return '';
   const reps = myReps();
   const labels = {
     logView: {mine:'My Visit Log', rep:"'s Log", all:'All team visits'},
@@ -3835,11 +3882,13 @@ function renderLog() {
   const dates=[];
   for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);dates.push(d.toISOString().slice(0,10));}
   const isM = STATE.user.role==='manager';
+  const isCoord = STATE.user.role==='coordinator';
+  const isMgrOrCoord = isM || isCoord;
 
   // Determine whose visits to show based on logView
   const myId = String(STATE.user.id||'').trim().toLowerCase();
   let allV;
-  if(!isM) {
+  if(!isMgrOrCoord) {
     allV = STATE.visits.filter(v=>String(v.repId||'').trim().toLowerCase()===myId);
   } else if(STATE.logView==='mine') {
     allV = STATE.visits.filter(v=>String(v.repId||'').trim().toLowerCase()===myId);
@@ -3851,7 +3900,7 @@ function renderLog() {
   }
 
   const viewingRepId = STATE.logView==='mine' ? STATE.user.id : STATE.logView==='all' ? null : STATE.logView;
-  const viewingMyOwn = STATE.logView==='mine' || !isM;
+  const viewingMyOwn = STATE.logView==='mine' || !isMgrOrCoord;
 
   const todayPlanned = viewingMyOwn && STATE.vd===todayStr()
     ? STATE.planItems.filter(p=>
@@ -3924,7 +3973,7 @@ function renderLog() {
         <div class="row" style="gap:6px">
           <button class="btn btn-sm" style="flex:1;justify-content:center" onclick="openVisitDetail('${v.id}')"><i class="ti ti-eye" style="font-size:11px"></i> View details</button>
           ${!isM&&needsUpdate?`<button class="btn btn-primary btn-sm" style="flex:1;justify-content:center" onclick="openPostVisitForm('${planItem?.id||''}','${v.id}')"><i class="ti ti-notes"></i> Add update</button>`:''}
-          ${!isM&&v.remarks?`<button class="btn btn-sm" style="flex:1;justify-content:center" onclick="openPostVisitForm('${planItem?.id||''}','${v.id}')"><i class="ti ti-edit"></i> Edit</button>`:''}
+          ${!isM&&v.remarks&&viewingMyOwn?`<button class="btn btn-sm" style="flex:1;justify-content:center" onclick="openPostVisitForm('${planItem?.id||''}','${v.id}')"><i class="ti ti-edit"></i> Edit</button>`:''}
         </div>
       </div>`;
     }).join(''):`<div class="empty"><i class="ti ti-clipboard-off"></i><p>No visits on this day</p><small>Visits you log will appear here</small></div>`}`;
@@ -3975,7 +4024,7 @@ function openVisitDetail(id) {
         }
         return (la&&ln)?`<a href="https://www.google.com/maps?q=${la},${ln}" target="_blank" rel="noopener" class="badge badge-blue" style="text-decoration:none"><i class="ti ti-map-pin" style="font-size:10px"></i> View on map</a>`:'';
       })()}
-      ${isM&&r?`<span style="font-size:10px;background:rgba(99,102,241,.1);color:var(--indigo2);padding:2px 8px;border-radius:10px">${r.name}</span>`:''}
+      ${(isM||STATE.user.role==='coordinator')&&r?`<span style="font-size:10px;background:rgba(99,102,241,.1);color:var(--indigo2);padding:2px 8px;border-radius:10px">${r.name}</span>`:''}
     </div>
 
     <!-- Check-in photo -->
@@ -4528,7 +4577,9 @@ async function savePostVisit(planId, visitId) {
 function renderTargets() {
   const el = document.getElementById('page-targets');
   const isM = STATE.user.role==='manager';
-  const rId = isM ? STATE.viewRep : STATE.user.id;
+  const isCoord = STATE.user.role==='coordinator';
+  const isMgrOrCoord = isM || isCoord;
+  const rId = isMgrOrCoord ? STATE.viewRep : STATE.user.id;
   const r = rep(rId);
   const myPOs = STATE.pos.filter(p=>p.repId===rId);
   const verified = myPOs.filter(p=>p.status==='verified');
@@ -4542,7 +4593,7 @@ function renderTargets() {
       <div style="font-size:16px;font-weight:600">Target Tracking</div>
       <button class="btn btn-primary btn-sm" onclick="openUplPanel()"><i class="ti ti-upload"></i> Upload PO</button>
     </div>
-    ${isM?`<div class="chip-row">${myReps().map(r2=>`<span class="chip${STATE.viewRep===r2.id?' active':''}" onclick="STATE.viewRep='${r2.id}';renderTargets()">${r2.name.split(' ')[0]}</span>`).join('')}</div>`:''}
+    ${isMgrOrCoord?`<div class="chip-row">${myReps().map(r2=>`<span class="chip${STATE.viewRep===r2.id?' active':''}" onclick="STATE.viewRep='${r2.id}';renderTargets()">${r2.name.split(' ')[0]}</span>`).join('')}</div>`:''}
     <div class="card" style="border-color:rgba(99,102,241,.3)">
       <div class="text-label" style="color:var(--indigo2);margin-bottom:6px">${new Date().toLocaleString('default',{month:'long',year:'numeric'})} — ${r.name}</div>
       <div class="row-between" style="margin-bottom:8px">
@@ -4908,9 +4959,11 @@ function renderGPS() {
   const el=document.getElementById('page-gps');
   const me=STATE.user;
   const isM = me.role==='manager';
+  const isCoord = me.role==='coordinator';
+  const isMgrOrCoord = isM || isCoord;
 
-  // Manager mode toggle ─ My GPS or a Rep's GPS, without leaving the page.
-  const mgrToggle = isM ? `
+  // Manager/coordinator mode toggle ─ My GPS or a Rep's GPS, without leaving the page.
+  const mgrToggle = isMgrOrCoord ? `
     <div class="row-between" style="margin-bottom:12px">
       <div style="font-size:16px;font-weight:600">${STATE.gpsMgrMode==='mine'?'My GPS &amp; Travel':'Rep\'s GPS &amp; Travel'}</div>
       <select class="inp" style="width:auto;font-size:11px;padding:4px 8px" onchange="STATE.gpsMgrMode=this.value;renderGPS()">
@@ -4919,9 +4972,9 @@ function renderGPS() {
       </select>
     </div>` : `<div style="font-size:16px;font-weight:600;margin-bottom:12px">My GPS &amp; Travel</div>`;
 
-  // ── Rep's GPS (team mode for manager) ───────────────────────────────────────
-  if(isM && STATE.gpsMgrMode==='team') {
-    const reps=myReps();
+  // ── Rep's GPS (team mode for manager/coordinator) ───────────────────────────
+  if(isMgrOrCoord && STATE.gpsMgrMode==='team') {
+    const reps = isM ? myTrackable() : myReps();
     if(!STATE.viewRep || !reps.some(r=>r.id===STATE.viewRep)) STATE.viewRep=reps[0]?.id||null;
     const rId=STATE.viewRep;
     const r=rep(rId);
@@ -4944,7 +4997,7 @@ function renderGPS() {
       </div>
       ${rId?gpsWeekNavHtml('gps'):''}
       ${rId?gpsDailyLogsHtml(logs,r?.name,rId):'<div class="text-sm" style="text-align:center;padding:12px;color:var(--text3)">No reps assigned</div>'}
-      ${rId?gpsWeeklyHtml(rId,{isManagerView:true}):''}
+      ${rId?gpsWeeklyHtml(rId,{isManagerView:isM}):''}
       ${GPS_INFO_BOX}`;
     return;
   }
@@ -4993,7 +5046,8 @@ function renderGPS() {
 function renderTeamGPS() {
   const el=document.getElementById('page-teamgps');
   if(!el) return;
-  const reps=myReps();
+  const isM = STATE.user.role==='manager';
+  const reps = isM ? myTrackable() : myReps();
   if(!STATE.viewRep || !reps.some(r=>r.id===STATE.viewRep)) STATE.viewRep=reps[0]?.id||null;
   const rId=STATE.viewRep;
   const r=rep(rId);
@@ -5038,7 +5092,7 @@ function renderTeamGPS() {
     ${rId?`<div class="text-label" style="margin-bottom:8px"><i class="ti ti-route" style="font-size:12px;vertical-align:-1px"></i> ${(r?.name||'').split(' ')[0]}'s route &amp; travel</div>`:''}
     ${rId?gpsWeekNavHtml('teamgps'):''}
     ${rId?gpsDailyLogsHtml(logs, r?.name, rId):'<div class="text-sm" style="text-align:center;padding:12px;color:var(--text3)">No reps assigned</div>'}
-    ${rId?gpsWeeklyHtml(rId, {isManagerView:true}):''}
+    ${rId?gpsWeeklyHtml(rId, {isManagerView:STATE.user.role==='manager'}):''}
     ${GPS_INFO_BOX}`;
 }
 
@@ -5306,7 +5360,8 @@ async function rejectTA(id) {
 // ── TEAM VIEW ─────────────────────────────────────────────────────────────────
 function renderTeam() {
   const el=document.getElementById('page-team');
-  const reps=myReps();
+  const isM = STATE.user.role==='manager';
+  const reps = isM ? myTrackable() : myReps();   // managers see reps + coordinators; coordinators see reps only
   const wk=weekRange(todayStr());
   el.innerHTML=`
     <div style="font-size:16px;font-weight:600;margin-bottom:12px">Team Overview</div>
@@ -5322,7 +5377,7 @@ function renderTeam() {
       const cos=STATE.targets.filter(t=>t.repId===r.id&&t.period==='annual').length;
       return `<div class="card">
         <div class="row-between" style="margin-bottom:10px">
-          <div class="row"><div style="width:32px;height:32px;border-radius:50%;background:var(--emerald);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff">${r.avatar||r.name.slice(0,2)}</div><div><div style="font-size:12px;font-weight:500">${r.name}</div></div></div>
+          <div class="row"><div style="width:32px;height:32px;border-radius:50%;background:${roleColor(r.role)};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#fff">${r.avatar||r.name.slice(0,2)}</div><div><div style="font-size:12px;font-weight:500">${r.name}</div>${r.role==='coordinator'?`<div class="text-xs" style="color:var(--purple)">Coordinator</div>`:''}</div></div>
           <div style="width:8px;height:8px;border-radius:50%;background:var(--emerald)"></div>
         </div>
         <div class="row-between" style="margin-bottom:3px"><span class="text-xs">Monthly achievement</span><span class="text-xs">${pc}% · ${fmt(ach)}</span></div>
@@ -5335,14 +5390,14 @@ function renderTeam() {
         <div class="row" style="gap:6px;margin-top:10px">
           <button class="btn btn-sm" style="flex:1;justify-content:center;font-size:10px" onclick="STATE.viewRep='${r.id}';navigate('targets')"><i class="ti ti-target"></i> Targets</button>
           <button class="btn btn-sm" style="flex:1;justify-content:center;font-size:10px" onclick="STATE.viewRep='${r.id}';navigate('teamgps')"><i class="ti ti-truck"></i> Travel</button>
-          <button class="btn btn-sm" style="flex:1;justify-content:center;font-size:10px" onclick="act(this,()=>resetRepPin('${r.id}'),'Resetting…')"><i class="ti ti-lock-open"></i> Reset PIN</button>
+          ${isM?`<button class="btn btn-sm" style="flex:1;justify-content:center;font-size:10px" onclick="act(this,()=>resetRepPin('${r.id}'),'Resetting…')"><i class="ti ti-lock-open"></i> Reset PIN</button>`:''}
         </div>
-        <button class="btn btn-sm btn-full" style="margin-top:6px;border-color:rgba(239,68,68,.25);color:var(--rose)" onclick="openDeactivatePanel('${r.id}')"><i class="ti ti-user-off"></i> Mark as left the company</button>
+        ${isM?`<button class="btn btn-sm btn-full" style="margin-top:6px;border-color:rgba(239,68,68,.25);color:var(--rose)" onclick="openDeactivatePanel('${r.id}')"><i class="ti ti-user-off"></i> Mark as left the company</button>`:''}
       </div>`;
     }).join('')}
-    ${allReps().filter(r=>!isActive(r)).length?`
+    ${(isM?allTrackable():allReps()).filter(r=>!isActive(r)).length?`
     <div class="text-label" style="margin:18px 0 8px">Former team members</div>
-    ${allReps().filter(r=>!isActive(r)).map(r=>{
+    ${(isM?allTrackable():allReps()).filter(r=>!isActive(r)).map(r=>{
       const visits=STATE.visits.filter(v=>v.repId===r.id).length;
       const pos=STATE.pos.filter(p=>p.repId===r.id);
       const sales=pos.reduce((s,p)=>s+Number(p.amount||0),0);
@@ -5362,7 +5417,7 @@ function renderTeam() {
         </div>
       </div>`;
     }).join('')}`:''}
-    ${STATE.approvals.filter(a=>a.status==='pending').length?`<div class="card" style="border-color:rgba(245,158,11,.3)">
+    ${isM&&STATE.approvals.filter(a=>a.status==='pending').length?`<div class="card" style="border-color:rgba(245,158,11,.3)">
       <div style="font-size:13px;font-weight:600;margin-bottom:10px"><i class="ti ti-bell" style="color:var(--amber);vertical-align:-2px"></i> Approval queue</div>
       ${STATE.approvals.filter(a=>a.status==='pending').map(ar=>{
         if(ar.type==='remove_contact'){
@@ -5741,13 +5796,15 @@ function renderAnalysis() {
   const el = document.getElementById('page-analysis');
   if(!el) return;
   const isM = STATE.user.role==='manager';
+  const isCoord = STATE.user.role==='coordinator';
+  const isMgrOrCoord = isM || isCoord;
   const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
   const monLabel = `${months[STATE.anMonth.m]} ${STATE.anMonth.y}`;
   const isCurrentMonth = STATE.anMonth.y===new Date().getFullYear() && STATE.anMonth.m===new Date().getMonth();
   const {start,end} = anMonthBounds();
 
-  // Scope — reps see only themselves; manager can pick All team or a rep.
-  if(!isM) STATE.anRep = STATE.user.id;
+  // Scope — reps see only themselves; manager/coordinator can pick All team or a rep.
+  if(!isMgrOrCoord) STATE.anRep = STATE.user.id;
   const inScope = (row)=> STATE.anRep==='all' ? true : String(row.repId||'').trim()===STATE.anRep;
 
   // Visits logged this month (Visits sheet holds real visits; cancelled/not-visited live in plans).
@@ -5782,9 +5839,9 @@ function renderAnalysis() {
       <button class="btn btn-sm" onclick="changeAnMonth(1)" ${isCurrentMonth?'disabled style="opacity:.35"':''} title="Next month"><i class="ti ti-chevron-right"></i></button>
     </div>
 
-    ${isM?`<div class="chip-row">
+    ${isMgrOrCoord?`<div class="chip-row">
       <span class="chip${STATE.anRep==='all'?' active':''}" onclick="STATE.anRep='all';renderAnalysis()">All team</span>
-      ${allReps().map(r=>`<span class="chip${STATE.anRep===r.id?' active':''}" style="${isActive(r)?'':'opacity:.6'}" onclick="STATE.anRep='${r.id}';renderAnalysis()">${r.name.split(' ')[0]}${isActive(r)?'':' (left)'}</span>`).join('')}
+      ${(isM?allTrackable():allReps()).map(r=>`<span class="chip${STATE.anRep===r.id?' active':''}" style="${isActive(r)?'':'opacity:.6'}" onclick="STATE.anRep='${r.id}';renderAnalysis()">${r.name.split(' ')[0]}${isActive(r)?'':' (left)'}</span>`).join('')}
     </div>`:''}
 
     <div class="grid2 desk-grid2" style="margin-bottom:12px">
@@ -5857,8 +5914,10 @@ function renderAttendance(){
   const el=document.getElementById('page-attendance'); if(!el) return;
   const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
   const isM=STATE.user.role==='manager';
-  const reps=allReps();
-  if(isM){
+  const isCoord=STATE.user.role==='coordinator';
+  const isMgrOrCoord=isM||isCoord;
+  const reps = isM ? allTrackable() : allReps();
+  if(isMgrOrCoord){
     if(!STATE.attRep || !reps.some(r=>r.id===STATE.attRep)){ STATE.attRep = reps[0]?reps[0].id:''; }
   } else {
     STATE.attRep = STATE.user.id;   // reps only ever see their own record
@@ -5889,8 +5948,8 @@ function renderAttendance(){
     <div style="font-size:16px;font-weight:600;margin-bottom:4px">Attendance register</div>
     <div class="text-xs" style="margin-bottom:12px">Present = marked on-field, or a completed post-visit log for every visit that day, saved within 1 day of the visit. Sundays are off.</div>
 
-    ${isM?`<select class="inp" style="margin-bottom:12px" onchange="STATE.attRep=this.value;renderAttendance()">
-      ${reps.map(r=>`<option value="${r.id}" ${STATE.attRep===r.id?'selected':''}>${r.name}${isActive(r)?'':' (left)'}</option>`).join('')}
+    ${isMgrOrCoord?`<select class="inp" style="margin-bottom:12px" onchange="STATE.attRep=this.value;renderAttendance()">
+      ${reps.map(r=>`<option value="${r.id}" ${STATE.attRep===r.id?'selected':''}>${r.name}${r.role==='coordinator'?' (Coordinator)':''}${isActive(r)?'':' (left)'}</option>`).join('')}
     </select>`:''}
 
     <div class="card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;margin-bottom:14px">
