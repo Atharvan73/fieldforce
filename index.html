@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.41</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.42</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -538,24 +538,13 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.15'; // bump this to force SW cache invalidation
-// v7.15: New 'coordinator' role — a rep who also gets manager-level VIEW
-//        access to team data. Set role='coordinator' directly in the Users
-//        sheet (no in-app role picker exists — Users are only ever managed
-//        via PIN reset/activate, so this is the only change needed there).
-//        Coordinators get: their own rep-style nav (Daily Plan, Visit Log,
-//        Companies, Contacts, RFQ, Tasks) PLUS Team Overview, Team GPS,
-//        Monthly Analysis, and Attendance scoped to reps (not other
-//        coordinators). Full power on managing visit collaborators. Can
-//        set targets for reps (not other coordinators — managers set
-//        coordinator targets). View-only on TA claim approval, PO
-//        verification, contact/company removal, PO crediting, and company
-//        editing — those stay strictly manager-only, fixed two spots
-//        (GPS team view's TA approve/reject, Team Overview's approval
-//        queue) that would have otherwise leaked to coordinators.
-//        myTrackable()/allTrackable() added (reps+coordinators) alongside
-//        the existing rep-only myReps()/allReps() — manager dashboards use
-//        the former so coordinators like Rohit now actually show up.
+const APP_VERSION = '7.16'; // bump this to force SW cache invalidation
+// v7.16: Fixed a gap in the coordinator role — Attendance and Targets pages
+//        only let coordinators pick from the reps list, with no way to
+//        select themselves. Both now include the coordinator's own record
+//        (labeled "(You)"/"Me"), defaulting to it on first load. Managers'
+//        Targets picker also broadened to include coordinators, not just
+//        reps.
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -4579,6 +4568,8 @@ function renderTargets() {
   const isM = STATE.user.role==='manager';
   const isCoord = STATE.user.role==='coordinator';
   const isMgrOrCoord = isM || isCoord;
+  const targetPickList = isM ? myTrackable() : isCoord ? [STATE.user, ...myReps()] : [];
+  if(isMgrOrCoord && (!STATE.viewRep || !targetPickList.some(r=>r.id===STATE.viewRep))) STATE.viewRep = targetPickList[0]?.id || STATE.user.id;
   const rId = isMgrOrCoord ? STATE.viewRep : STATE.user.id;
   const r = rep(rId);
   const myPOs = STATE.pos.filter(p=>p.repId===rId);
@@ -4593,7 +4584,7 @@ function renderTargets() {
       <div style="font-size:16px;font-weight:600">Target Tracking</div>
       <button class="btn btn-primary btn-sm" onclick="openUplPanel()"><i class="ti ti-upload"></i> Upload PO</button>
     </div>
-    ${isMgrOrCoord?`<div class="chip-row">${myReps().map(r2=>`<span class="chip${STATE.viewRep===r2.id?' active':''}" onclick="STATE.viewRep='${r2.id}';renderTargets()">${r2.name.split(' ')[0]}</span>`).join('')}</div>`:''}
+    ${isMgrOrCoord?`<div class="chip-row">${targetPickList.map(r2=>`<span class="chip${STATE.viewRep===r2.id?' active':''}" onclick="STATE.viewRep='${r2.id}';renderTargets()">${r2.id===STATE.user.id?'Me':r2.name.split(' ')[0]}</span>`).join('')}</div>`:''}
     <div class="card" style="border-color:rgba(99,102,241,.3)">
       <div class="text-label" style="color:var(--indigo2);margin-bottom:6px">${new Date().toLocaleString('default',{month:'long',year:'numeric'})} — ${r.name}</div>
       <div class="row-between" style="margin-bottom:8px">
@@ -5916,7 +5907,7 @@ function renderAttendance(){
   const isM=STATE.user.role==='manager';
   const isCoord=STATE.user.role==='coordinator';
   const isMgrOrCoord=isM||isCoord;
-  const reps = isM ? allTrackable() : allReps();
+  const reps = isM ? allTrackable() : isCoord ? [STATE.user, ...allReps()] : allReps();
   if(isMgrOrCoord){
     if(!STATE.attRep || !reps.some(r=>r.id===STATE.attRep)){ STATE.attRep = reps[0]?reps[0].id:''; }
   } else {
@@ -5949,7 +5940,7 @@ function renderAttendance(){
     <div class="text-xs" style="margin-bottom:12px">Present = marked on-field, or a completed post-visit log for every visit that day, saved within 1 day of the visit. Sundays are off.</div>
 
     ${isMgrOrCoord?`<select class="inp" style="margin-bottom:12px" onchange="STATE.attRep=this.value;renderAttendance()">
-      ${reps.map(r=>`<option value="${r.id}" ${STATE.attRep===r.id?'selected':''}>${r.name}${r.role==='coordinator'?' (Coordinator)':''}${isActive(r)?'':' (left)'}</option>`).join('')}
+      ${reps.map(r=>`<option value="${r.id}" ${STATE.attRep===r.id?'selected':''}>${r.name}${r.id===STATE.user.id?' (You)':r.role==='coordinator'?' (Coordinator)':''}${isActive(r)?'':' (left)'}</option>`).join('')}
     </select>`:''}
 
     <div class="card" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;margin-bottom:14px">
