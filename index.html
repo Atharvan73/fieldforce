@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.45</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.46</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -538,17 +538,12 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.19'; // bump this to force SW cache invalidation
-// v7.19: Fixed todayStr() to anchor to IST instead of UTC. This was a real,
-//        active bug interaction with the 2 AM auto-close job: the backend's
-//        autoCloseStaleFieldSessions() already correctly computes "today"
-//        in Asia/Kolkata, but the client tagged FieldStatus rows using
-//        UTC's day boundary (5:30 AM IST, not midnight) — so a session
-//        started between 12:00–5:29 AM IST looked one day "older" to the
-//        backend than it actually was, risking a brand-new session being
-//        treated as stale and auto-closed almost immediately. Same-signature
-//        fix (still returns 'YYYY-MM-DD'), so no other call site changes
-//        needed.
+const APP_VERSION = '7.20'; // bump this to force SW cache invalidation
+// v7.20: RFQ Tracker's "All" filter now sorts purely by date (newest
+//        first), regardless of quoted/unquoted status. Urgency-first
+//        sorting (Quoted-and-stale bumped to the top) is kept for the
+//        specific status filters — Not Quoted / Quoted / etc. — where
+//        "what needs attention" is the point of that view.
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -6091,15 +6086,17 @@ function renderRFQ() {
     });
   }
 
-  // Sort: high urgency first, then by date
+  // Sort: "All" is pure newest-first by date. Any specific status filter
+  // (Not Quoted / Quoted / etc.) keeps urgency-first, since that's exactly
+  // the view where "what needs attention" matters more than raw recency.
   displayRFQs = [...displayRFQs].sort((a,b)=>{
+    const da = new Date(a.rfqDate||a.rfqdate||0);
+    const db = new Date(b.rfqDate||b.rfqdate||0);
+    if(STATE.rfqFilter==='all') return db-da;
     const urgMap={'high':0,'medium':1,'low':2};
     const ua=urgMap[rfqUrgency(a)]||2, ub=urgMap[rfqUrgency(b)]||2;
     if(ua!==ub) return ua-ub;
-    // Newest first within same urgency
-    const da = new Date(a.rfqDate||a.rfqdate||0);
-    const db = new Date(b.rfqDate||b.rfqdate||0);
-    return db-da;
+    return db-da;   // newest first within same urgency
   });
 
   // Count active secondary filters for badge
