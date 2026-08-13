@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.42</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.43</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -538,13 +538,14 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.16'; // bump this to force SW cache invalidation
-// v7.16: Fixed a gap in the coordinator role — Attendance and Targets pages
-//        only let coordinators pick from the reps list, with no way to
-//        select themselves. Both now include the coordinator's own record
-//        (labeled "(You)"/"Me"), defaulting to it on first load. Managers'
-//        Targets picker also broadened to include coordinators, not just
-//        reps.
+const APP_VERSION = '7.17'; // bump this to force SW cache invalidation
+// v7.17: Fixed a bug where an unplanned visit's location wasn't added to
+//        the day's route/KM (STATE.waypoints) if STATE.onField happened to
+//        be false at that moment — the visit itself still saved fine
+//        (hence "View on map" working), just silently missing from the
+//        route/TA total. The waypoint push no longer requires onField;
+//        saveFieldStatus(true,...) still only fires when genuinely on
+//        field, so this doesn't resurrect a closed day's on-field status.
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -3777,13 +3778,15 @@ async function saveUnplannedVisit() {
   await apiWrite('Visits',visit);
   STATE.visits.push(visit);
 
-  // Feed the route/TA + live map when a location was obtained.
+  // Feed the route/TA + live map when a location was obtained. This no longer
+  // requires STATE.onField — an unplanned visit logged while the app thought
+  // the rep was off-field was previously silently dropped from the day's
+  // route/KM calculation even though the visit itself saved fine (the
+  // location just never made it past this gate).
   if(gps){
-    if(STATE.onField){
-      STATE.waypoints.push({lat:gps.lat,lng:gps.lng,label:'checkin',time:startTime,companyId:coId,companyName:company?.name||'',source:gps.source});
-      fieldSessionSave();
-      saveFieldStatus(true, gps.lat, gps.lng);
-    }
+    STATE.waypoints.push({lat:gps.lat,lng:gps.lng,label:'checkin',time:startTime,companyId:coId,companyName:company?.name||'',source:gps.source});
+    fieldSessionSave();
+    if(STATE.onField) saveFieldStatus(true, gps.lat, gps.lng);
     if(gps.verified){
       apiWrite('GPSLive',{id:'live_'+STATE.user.id+'_'+coId+'_'+Date.now(),repId:STATE.user.id,date:todayStr(),type:'waypoint',label:'Unplanned',lat:Number(gps.lat).toFixed(6),lng:Number(gps.lng).toFixed(6),accuracy:gps.acc!=null?Math.round(gps.acc):'',companyName:company?.name||'',companyId:coId,time:startTime,status:'on-field'}).catch(()=>{});
     }
