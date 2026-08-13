@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.43</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.45</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -538,14 +538,17 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.17'; // bump this to force SW cache invalidation
-// v7.17: Fixed a bug where an unplanned visit's location wasn't added to
-//        the day's route/KM (STATE.waypoints) if STATE.onField happened to
-//        be false at that moment — the visit itself still saved fine
-//        (hence "View on map" working), just silently missing from the
-//        route/TA total. The waypoint push no longer requires onField;
-//        saveFieldStatus(true,...) still only fires when genuinely on
-//        field, so this doesn't resurrect a closed day's on-field status.
+const APP_VERSION = '7.19'; // bump this to force SW cache invalidation
+// v7.19: Fixed todayStr() to anchor to IST instead of UTC. This was a real,
+//        active bug interaction with the 2 AM auto-close job: the backend's
+//        autoCloseStaleFieldSessions() already correctly computes "today"
+//        in Asia/Kolkata, but the client tagged FieldStatus rows using
+//        UTC's day boundary (5:30 AM IST, not midnight) — so a session
+//        started between 12:00–5:29 AM IST looked one day "older" to the
+//        backend than it actually was, risking a brand-new session being
+//        treated as stale and auto-closed almost immediately. Same-signature
+//        fix (still returns 'YYYY-MM-DD'), so no other call site changes
+//        needed.
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -632,7 +635,13 @@ let STATE = {
 };
 
 // ── UTILS ────────────────────────────────────────────────────────────────────
-function todayStr() { return new Date().toISOString().slice(0,10); }
+// IST-anchored (not UTC) — new Date().toISOString() always renders in UTC
+// regardless of device timezone, which used to flip the "day" boundary at
+// 5:30 AM IST instead of midnight. That mismatched the backend's
+// autoCloseStaleFieldSessions(), which already correctly computes "today"
+// in Asia/Kolkata — a session started between 12:00–5:29 AM IST could get
+// tagged with a date the backend already considered stale.
+function todayStr() { return new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Kolkata'}); }
 function nowStr()   { return new Date().toTimeString().slice(0,5); }
 function fmtDate(d) {
   if(!d) return '';
@@ -778,9 +787,10 @@ async function apiUpdate(sheet, payload) {
   try {
     const r = await fetch(`${API}?action=update&sheet=${sheet}`, { method:'POST', body:JSON.stringify(payload) });
     const d = await r.json();
-    if(d.success) cacheInvalidate(sheet);
+    if(!d.success) showToast('Save failed: '+(d.error||'please check your connection and try again'),'error');
+    else cacheInvalidate(sheet);
     return d.success;
-  } catch(e) { return false; }
+  } catch(e) { showToast('Network error — please check your connection and try again','error'); return false; }
 }
 
 // ── DEBOUNCE ──────────────────────────────────────────────────────────────────
@@ -3786,7 +3796,7 @@ async function saveUnplannedVisit() {
   if(gps){
     STATE.waypoints.push({lat:gps.lat,lng:gps.lng,label:'checkin',time:startTime,companyId:coId,companyName:company?.name||'',source:gps.source});
     fieldSessionSave();
-    if(STATE.onField) saveFieldStatus(true, gps.lat, gps.lng);
+    if(STATE.onField) saveFieldStatus(true, gps.lat, gps.lng).then(ok=>{ if(!ok) showToast('⚠️ Visit saved, but location sync to server failed — check your connection','error'); });
     if(gps.verified){
       apiWrite('GPSLive',{id:'live_'+STATE.user.id+'_'+coId+'_'+Date.now(),repId:STATE.user.id,date:todayStr(),type:'waypoint',label:'Unplanned',lat:Number(gps.lat).toFixed(6),lng:Number(gps.lng).toFixed(6),accuracy:gps.acc!=null?Math.round(gps.acc):'',companyName:company?.name||'',companyId:coId,time:startTime,status:'on-field'}).catch(()=>{});
     }
@@ -4232,6 +4242,19 @@ function cancelCheckin(){
   _pendingCheckin=null; _ckReason='';
 }
 
+// Retries a save fn (which must return true/false) with a short delay between
+// attempts — field connectivity is often just a momentary dead zone, so this
+// resolves most failures without ever bothering the rep. Only surfaces to the
+// caller if it truly fails every attempt.
+async function saveWithRetry(fn, attempts=3, delayMs=2000) {
+  for(let i=0;i<attempts;i++){
+    const ok = await fn();
+    if(ok) return true;
+    if(i<attempts-1) await new Promise(res=>setTimeout(res,delayMs));
+  }
+  return false;
+}
+
 async function finalizeCheckin(opt){
   const pc=_pendingCheckin; if(!pc) return;
   const ov=document.getElementById('checkin-overlay');
@@ -4263,7 +4286,7 @@ async function finalizeCheckin(opt){
   if(gps){
     STATE.waypoints.push({lat:gps.lat,lng:gps.lng,label:'checkin',time:ct,companyId:pc.companyId,companyName:pc.companyName,source:gps.source});
     fieldSessionSave();
-    saveFieldStatus(true, gps.lat, gps.lng);
+    saveFieldStatus(true, gps.lat, gps.lng).then(ok=>{ if(!ok) showToast('⚠️ Check-in saved, but location sync to server failed — check your connection','error'); });
     if(gps.verified){
       apiWrite('GPSLive',{id:'live_'+STATE.user.id+'_'+pc.companyId+'_'+Date.now(),repId:STATE.user.id,date:visit.date,type:'waypoint',label:'Check-in',lat:Number(gps.lat).toFixed(6),lng:Number(gps.lng).toFixed(6),accuracy:gps.acc!=null?Math.round(gps.acc):'',companyName:pc.companyName,companyId:pc.companyId,time:ct,status:'on-field'}).catch(()=>{});
     }
@@ -4271,11 +4294,17 @@ async function finalizeCheckin(opt){
     STATE.waypoints.push({lat:null,lng:null,label:'checkin',time:ct,companyId:pc.companyId,companyName:pc.companyName,address:pc.companyAddress,source:'none'});
   }
 
-  apiUpdate('VisitPlan', update);
-  apiWrite('Visits', visit);
+  const [okPlan, okVisit] = await Promise.all([
+    saveWithRetry(()=>apiUpdate('VisitPlan', update)),
+    saveWithRetry(()=>apiWrite('Visits', visit))
+  ]);
 
   cancelCheckin();
-  showToast('Checked in \u2713'+(gpsVerified==='TRUE'?' \u00b7 GPS verified':''),'success');
+  if(okPlan && okVisit){
+    showToast('Checked in \u2713'+(gpsVerified==='TRUE'?' \u00b7 GPS verified':''),'success');
+  } else {
+    showToast('\u26a0\ufe0f Checked in locally, but it didn\'t reach the server — check your connection, then reopen this visit to confirm it saved','error');
+  }
   renderPlan();
 }
 
@@ -4307,12 +4336,17 @@ async function checkOut(id) {
   Object.assign(v, update);
   const visit = STATE.visits.find(x=>x.companyId===v.companyId&&x.status==='in-progress');
   if(visit){ visit.status='completed'; visit.checkoutTime=nowStr(); }
-  showToast('Checked out ✓','success');
   renderPlan();
 
-  // Save to API in background
-  apiUpdate('VisitPlan', update);
-  if(visit) apiUpdate('Visits', {id:visit.id, status:'completed', checkoutTime:nowStr()});
+  const saves = [saveWithRetry(()=>apiUpdate('VisitPlan', update))];
+  if(visit) saves.push(saveWithRetry(()=>apiUpdate('Visits', {id:visit.id, status:'completed', checkoutTime:nowStr()})));
+  const results = await Promise.all(saves);
+
+  if(results.every(Boolean)){
+    showToast('Checked out ✓','success');
+  } else {
+    showToast('⚠️ Checked out locally, but it didn\'t reach the server — check your connection, then reopen this visit to confirm it saved','error');
+  }
 }
 
 function openPostVisitForm(planId, visitId) {
@@ -5133,7 +5167,10 @@ function selectVehicle(v) {
   STATE.fieldVehicle=v;
 }
 function startField() {
+  if(STATE.startingField) return;        // guard against double-tap, matching stopField's pattern
+  if(STATE.onField){ showToast('You are already on field',''); return; }
   if(!STATE.fieldVehicle){showToast('Please select vehicle type','error');return;}
+  STATE.startingField = true;
   STATE.onField=true;
   STATE.fieldOnTime=nowStr();
   STATE.waypoints=[];
@@ -5142,26 +5179,33 @@ function startField() {
   fieldSessionSave();                    // persist on-field locally right away (reliable)
   showToast('Getting your location...','');
   if(navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(pos=>{
+    navigator.geolocation.getCurrentPosition(async pos=>{
       const lat=pos.coords.latitude, lng=pos.coords.longitude;
       STATE.waypoints.push({lat, lng, label:'Start', time:nowStr(), companyId:null, companyName:'Start (Home/Office)'});
       fieldSessionSave();
-      saveFieldStatus(true, lat, lng);
+      const saved = await saveFieldStatus(true, lat, lng);
       const _liveStart={id:'live_'+STATE.user.id+'_start_'+Date.now(),repId:STATE.user.id,date:todayStr(),type:'waypoint',label:'Start',lat:Number(lat).toFixed(6),lng:Number(lng).toFixed(6),accuracy:Math.round(pos.coords.accuracy||0),companyName:'Start (Home/Office)',companyId:'',time:nowStr(),status:'on-field'};
       STATE.gpsLive=STATE.gpsLive||[]; STATE.gpsLive.push(_liveStart);
       apiWrite('GPSLive', _liveStart).catch(()=>{});
       fieldEventLog('on', true);
       console.log('[FieldForce GPS] On field:', {lat, lng, accuracy:Math.round(pos.coords.accuracy)});
-      showToast('✓ You are ON field — location captured','success');
+      STATE.startingField = false;
+      if(saved) showToast('✓ You are ON field — location captured','success');
+      else showToast('⚠️ Marked on field locally, but it didn\'t reach the server — check your connection; reopen the app to confirm it stuck','error');
       renderHome(); renderGPS();
-    }, ()=>{
-      saveFieldStatus(true, null, null);
+    }, async ()=>{
+      const saved = await saveFieldStatus(true, null, null);
       fieldEventLog('on', false);
-      showToast('On field, but location NOT captured — turn on GPS/Location and it will retry at your first check-in','error');
+      STATE.startingField = false;
+      if(saved) showToast('On field, but location NOT captured — turn on GPS/Location and it will retry at your first check-in','error');
+      else showToast('⚠️ Marked on field locally, but it didn\'t reach the server — check your connection; reopen the app to confirm it stuck','error');
       renderHome(); renderGPS();
     }, {enableHighAccuracy:true, timeout:15000, maximumAge:0});
   } else {
-    saveFieldStatus(true, null, null);
+    saveFieldStatus(true, null, null).then(saved=>{
+      STATE.startingField = false;
+      if(!saved) showToast('⚠️ Marked on field locally, but it didn\'t reach the server — check your connection; reopen the app to confirm it stuck','error');
+    });
     fieldEventLog('on', false);
     showToast('On field, but this device has no GPS','error');
     renderHome();
@@ -5169,7 +5213,7 @@ function startField() {
   navigate('home');
 }
 
-function saveFieldStatus(onField, lat, lng) {
+async function saveFieldStatus(onField, lat, lng) {
   const payload = {
     id: STATE.user.id,
     repId: STATE.user.id,
@@ -5182,11 +5226,16 @@ function saveFieldStatus(onField, lat, lng) {
     offFieldTime: onField ? '' : nowStr(),
     waypoints: onField ? JSON.stringify(STATE.waypoints||[]) : ''
   };
-  // Try update first (overwrites existing row), fall back to write
-  fetch(`${API}?action=update&sheet=FieldStatus`, {method:'POST', body:JSON.stringify(payload)})
-    .then(r=>r.json())
-    .then(d=>{ if(!d.success) apiWrite('FieldStatus', payload); })
-    .catch(()=>{ apiWrite('FieldStatus', payload); });
+  return saveWithRetry(async () => {
+    try {
+      const r = await fetch(`${API}?action=update&sheet=FieldStatus`, {method:'POST', body:JSON.stringify(payload)});
+      const d = await r.json();
+      if(d.success) return true;
+      return await apiWrite('FieldStatus', payload);
+    } catch(e) {
+      try { return await apiWrite('FieldStatus', payload); } catch(e2) { return false; }
+    }
+  });
 }
 async function stopField() {
   if(STATE.stoppingField) return;            // guard: ignore repeat taps while a save is in flight
@@ -5254,7 +5303,7 @@ async function confirmStopField() {
     }
 
     // Write off-field status with end location to sheet
-    saveFieldStatus(false, finalLat, finalLng);
+    const offFieldSaved = await saveFieldStatus(false, finalLat, finalLng);
     fieldEventLog('off', !!finalLat);
 
     let totalKm = gpsKm;
@@ -5305,7 +5354,11 @@ async function confirmStopField() {
       await apiWrite('GPSLogs', log);
       STATE.gpsLogs.push(log);
     }
-    showToast(`Off field ✓ · ${Number(totalKm).toFixed(1)} km · ${fmtINR(log.taAmount)} TA earned`,'success');
+    if(offFieldSaved){
+      showToast(`Off field ✓ · ${Number(totalKm).toFixed(1)} km · ${fmtINR(log.taAmount)} TA earned`,'success');
+    } else {
+      showToast(`⚠️ Off field saved locally (${Number(totalKm).toFixed(1)} km), but didn't reach the server — check your connection; reopen the app to confirm it stuck`,'error');
+    }
     renderGPS();
    } finally {
     STATE.stoppingField=false;               // always release the lock, even on error
