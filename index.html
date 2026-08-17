@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.48</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.49</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -538,19 +538,19 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.22'; // bump this to force SW cache invalidation
-// v7.22: Fixed a partial-write bug: check-in/checkout write to VisitPlan
-//        and Visits via two SEPARATE API calls — if one succeeds and the
-//        other fails (weak signal at a site), the plan item could get
-//        stuck showing "Planned" with a live Check-in button forever, even
-//        though the rep genuinely checked in (and maybe out) — because
-//        renderPlan() only trusted the linked Visit record for status once
-//        remarks were filled in, never just for having checked in at all.
-//        Now derives status from the Visit record whenever one exists
-//        (its own status if no remarks yet, 'completed' once remarks are
-//        filled), falling back to the plan's own status only when no
-//        Visit record exists at all. Self-healing — no data patch needed,
-//        this recomputes correctly on every render going forward.
+const APP_VERSION = '7.23'; // bump this to force SW cache invalidation
+// v7.23: The v7.22 fix didn't take for Durgesh — root cause: the Visit-to-
+//        plan-item match itself used strict === on date and companyId with
+//        no normalization (repId was already trimmed, an inconsistency
+//        that was likely the actual failure point — a subtle date/format
+//        mismatch between the two separately-written records silently
+//        broke the match, so visitLog came back undefined and status fell
+//        straight back to the stale 'planned'). Now normDate()'s both
+//        dates and trims/lowercases both companyId and repId. Also added a
+//        console.log that fires specifically when a plan item is still
+//        'planned' but a same-company visit exists for that date — if this
+//        recurs, the browser console will show exactly which field didn't
+//        match instead of requiring another guess-and-check round.
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -2901,7 +2901,9 @@ function renderPlan() {
     const st=p.status||'planned';
     const visitLog = STATE.visits.find(v=>
       (v.id===p.linkedVisitId) ||
-      (v.companyId===p.companyId && v.date===p.date && String(v.repId||'').trim()===planRepId)
+      (String(v.companyId||'').trim()===String(p.companyId||'').trim()
+        && normDate(v.date)===normDate(p.date)
+        && String(v.repId||'').trim().toLowerCase()===String(planRepId||'').trim().toLowerCase())
     );
     const hasRemarks = visitLog && visitLog.remarks && visitLog.remarks.trim()!=='';
     const notVisited = st==='not-visited';
@@ -2915,6 +2917,10 @@ function renderPlan() {
     const effectiveSt = visitLog
       ? (hasRemarks ? 'completed' : (visitLog.status || 'in-progress'))
       : st;
+    if(st==='planned' && !visitLog){
+      const sameCoToday = STATE.visits.filter(v=>String(v.companyId||'').trim()===String(p.companyId||'').trim() && normDate(v.date)===normDate(p.date));
+      if(sameCoToday.length) console.log('[FieldForce] Plan item still "planned" but visit(s) exist for this company/date — match failed on repId. plan:', {companyId:p.companyId, date:p.date, planRepId}, 'candidate visits:', sameCoToday.map(v=>({repId:v.repId, date:v.date, companyId:v.companyId})));
+    }
     const borderCol = effectiveSt==='completed'?'rgba(16,185,129,.3)':effectiveSt==='in-progress'?'rgba(245,158,11,.3)':notVisited?'rgba(239,68,68,.2)':'var(--border)';
 
     // If manager viewing rep's plan — show read-only card with collaborate option
