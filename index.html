@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.47</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.48</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -538,18 +538,19 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.21'; // bump this to force SW cache invalidation
-// v7.21: Off-field warning fixes. "Mark off field anyway" already existed
-//        but was styled as plain muted text with no border/background —
-//        looked like a disclaimer, not a button, so reps couldn't tell it
-//        was tappable. Now has a visible border. Also made the consequence
-//        message context-aware: "add the missing log(s)" didn't make sense
-//        for a zero-check-in day (nothing to add a log to) — now says
-//        "check in somewhere and log it" for that case specifically.
-//        Confirmed (no change needed): this warning was already correctly
-//        scoped to today only — todaysVisits filters strictly on today's
-//        date, previous days' incomplete logs live only in the separate
-//        Home-page reminder banner, never in this popup.
+const APP_VERSION = '7.22'; // bump this to force SW cache invalidation
+// v7.22: Fixed a partial-write bug: check-in/checkout write to VisitPlan
+//        and Visits via two SEPARATE API calls — if one succeeds and the
+//        other fails (weak signal at a site), the plan item could get
+//        stuck showing "Planned" with a live Check-in button forever, even
+//        though the rep genuinely checked in (and maybe out) — because
+//        renderPlan() only trusted the linked Visit record for status once
+//        remarks were filled in, never just for having checked in at all.
+//        Now derives status from the Visit record whenever one exists
+//        (its own status if no remarks yet, 'completed' once remarks are
+//        filled), falling back to the plan's own status only when no
+//        Visit record exists at all. Self-healing — no data patch needed,
+//        this recomputes correctly on every render going forward.
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -2904,7 +2905,16 @@ function renderPlan() {
     );
     const hasRemarks = visitLog && visitLog.remarks && visitLog.remarks.trim()!=='';
     const notVisited = st==='not-visited';
-    const effectiveSt = (visitLog && visitLog.remarks && visitLog.remarks.trim()!=='') ? 'completed' : st;
+    // Trust the Visit record over the plan item's own status when a Visit
+    // exists — VisitPlan and Visits are written by two separate API calls
+    // (check-in/checkout), and if one succeeds while the other fails (weak
+    // signal at a site, a dropped connection), the plan item can get stuck
+    // showing "Planned" / a live Check-in button forever even though the
+    // rep genuinely checked in (and maybe out). The Visit record itself is
+    // the more reliable source of truth for what actually happened.
+    const effectiveSt = visitLog
+      ? (hasRemarks ? 'completed' : (visitLog.status || 'in-progress'))
+      : st;
     const borderCol = effectiveSt==='completed'?'rgba(16,185,129,.3)':effectiveSt==='in-progress'?'rgba(245,158,11,.3)':notVisited?'rgba(239,68,68,.2)':'var(--border)';
 
     // If manager viewing rep's plan — show read-only card with collaborate option
