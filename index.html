@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.49</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.49-d</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -538,19 +538,14 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.23'; // bump this to force SW cache invalidation
-// v7.23: The v7.22 fix didn't take for Durgesh — root cause: the Visit-to-
-//        plan-item match itself used strict === on date and companyId with
-//        no normalization (repId was already trimmed, an inconsistency
-//        that was likely the actual failure point — a subtle date/format
-//        mismatch between the two separately-written records silently
-//        broke the match, so visitLog came back undefined and status fell
-//        straight back to the stale 'planned'). Now normDate()'s both
-//        dates and trims/lowercases both companyId and repId. Also added a
-//        console.log that fires specifically when a plan item is still
-//        'planned' but a same-company visit exists for that date — if this
-//        recurs, the browser console will show exactly which field didn't
-//        match instead of requiring another guess-and-check round.
+const APP_VERSION = '7.24-diag'; // bump this to force SW cache invalidation
+// v7.24-diag: DIAGNOSTIC ONLY, no functional change. Data confirms
+//        checkinTime/checkoutTime are genuinely populated in the sheet for
+//        visits that display blank in the app (e.g. M3M mansion, Aug 27)
+//        — code review found nothing wrong in either the write or read
+//        path, so this adds a console.log in the Visit Log card render to
+//        see the RAW value/type of v.checkinTime as it actually reaches
+//        the client. Remove once the real bug is found and fixed.
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -3980,7 +3975,7 @@ function renderLog() {
           ${sbg(v.status)}
         </div>
         <div class="text-xs" style="margin-bottom:4px"><i class="ti ti-clock" style="font-size:10px"></i> ${[v.time, mwName(v.meetingWith)].filter(Boolean).join(' · ')||'—'}${v.designation?', '+v.designation:''}</div>
-        ${(()=>{const t=vckTimes(v);return t.ci?`<div class="text-xs" style="margin-bottom:4px;color:var(--emerald)"><i class="ti ti-map-pin" style="font-size:10px"></i> In ${t.ci}${t.cout?' · Out '+t.cout:''}</div>`:'';})()}
+        ${(()=>{const t=vckTimes(v);console.log('[FieldForce] vckTimes debug —', c.name||v.companyId, v.date, {rawCheckinTime:v.checkinTime, rawCheckoutTime:v.checkoutTime, typeofCheckin:typeof v.checkinTime, resolvedCi:t.ci, resolvedCout:t.cout});return t.ci?`<div class="text-xs" style="margin-bottom:4px;color:var(--emerald)"><i class="ti ti-map-pin" style="font-size:10px"></i> In ${t.ci}${t.cout?' · Out '+t.cout:''}</div>`:'';})()}
         ${v.itemsPitched?`<div class="text-xs" style="margin-bottom:6px;color:var(--text3)">${v.itemsPitched}</div>`:''}
         ${v.remarks?`<div class="rmk-box" style="margin-bottom:8px">${v.remarks.substring(0,100)}${v.remarks.length>100?'…':''}</div>`:''}
         <div class="row" style="gap:4px;flex-wrap:wrap;margin-bottom:8px">
