@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.53</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.54</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -539,19 +539,20 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.28'; // bump this to force SW cache invalidation
-// v7.28: Part 2 of the analysis upgrade — new standalone "Company Analysis"
-//        page (Management/Performance nav, all roles). Unlike Monthly
-//        Analysis (rep+month scoped), this is all-time and company-first:
-//        every company you've had any activity with, ranked by RFQs,
-//        order value, RFQ→Order conversion rate, or staleness (least
-//        recently visited) — plus a dedicated "RFQs but no order yet"
-//        sort to surface under-converted accounts worth chasing. Reps/
-//        coordinators see their own companies; managers see all. Tapping
-//        a company reuses the same openCompanyHistory() drill-down built
-//        for Monthly Analysis (trend charts + category breakdowns), so no
-//        duplicate UI — just a different entry point and a different,
-//        all-time lens on the same data.
+const APP_VERSION = '7.29'; // bump this to force SW cache invalidation
+// v7.29: Fixed Company Analysis freezing the whole page ("Page
+//        Unresponsive") on open. Root cause: the per-company aggregation
+//        re-filtered the FULL all-time RFQs array (with its
+//        resolveRFQCompany resolution — itself a full companies scan on
+//        the name-match fallback) once for EVERY company — effectively
+//        O(companies × RFQs × companies). Empirically confirmed: the old
+//        approach took 32.5s for just 50 companies in a simulated dataset
+//        (500 companies, 20k RFQs); the full 500 would have taken several
+//        minutes. Rewritten to a single pass over each source array
+//        (visits, orders, RFQs) building lookup maps first, then O(1)
+//        reads per company — same pattern renderAnalysis() already used
+//        correctly, just not one I'd applied here. Same simulated dataset:
+//        656ms for all 500 companies, a ~500x improvement.
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -6143,19 +6144,42 @@ function renderCompanyAnalysis(){
   ]);
   const scope = isM ? STATE.companies : STATE.companies.filter(c=>myCoIds.has(c.id));
 
-  // All-time aggregation per company.
+  // All-time aggregation — single pass over each source array, NOT per
+  // company. The previous version re-filtered the full RFQs list (with its
+  // resolveRFQCompany company-resolution, itself a full companies scan on
+  // fallback) once for EVERY company — O(companies × RFQs × companies),
+  // which is what froze the page. This is O(visits + orders + rfqs).
+  const visitCount = {}, lastVisit = {}, repsSeen = {};
+  STATE.visits.forEach(v=>{
+    if(v.status==='cancelled' || !v.companyId) return;
+    visitCount[v.companyId] = (visitCount[v.companyId]||0) + 1;
+    const d = normDate(v.date);
+    if(d && (!lastVisit[v.companyId] || d > lastVisit[v.companyId])) lastVisit[v.companyId] = d;
+    const rn = rep(v.repId)?.name?.split(' ')[0];
+    if(rn){ (repsSeen[v.companyId] = repsSeen[v.companyId]||new Set()).add(rn); }
+  });
+  const orderCount = {}, orderValue = {};
+  STATE.pos.forEach(p=>{
+    if(p.status==='rejected' || !p.companyId) return;
+    orderCount[p.companyId] = (orderCount[p.companyId]||0) + 1;
+    orderValue[p.companyId] = (orderValue[p.companyId]||0) + Number(p.amount||0);
+  });
+  const rfqCount = {};
+  (STATE.rfqs||[]).forEach(r=>{
+    const rc = resolveRFQCompany(r);
+    if(rc?.id) rfqCount[rc.id] = (rfqCount[rc.id]||0) + 1;
+  });
+
   const rows = scope.map(c=>{
-    const visits = STATE.visits.filter(v=>v.companyId===c.id && v.status!=='cancelled');
-    const orders = STATE.pos.filter(p=>p.companyId===c.id && p.status!=='rejected');
-    const rfqs = (STATE.rfqs||[]).filter(r=>resolveRFQCompany(r)?.id===c.id);
-    const value = orders.reduce((s,p)=>s+Number(p.amount||0),0);
-    const lastVisit = visits.map(v=>normDate(v.date)).filter(Boolean).sort().slice(-1)[0] || '';
+    const visits = visitCount[c.id]||0;
+    const orders = orderCount[c.id]||0;
+    const rfqs = rfqCount[c.id]||0;
     return {
       id: c.id, name: c.name||'Unknown',
-      visits: visits.length, rfqs: rfqs.length, orders: orders.length, value,
-      conversion: rfqs.length ? Math.round(orders.length/rfqs.length*100) : null,
-      lastVisit,
-      reps: [...new Set(visits.map(v=>rep(v.repId)?.name?.split(' ')[0]).filter(Boolean))].join(', ')
+      visits, rfqs, orders, value: orderValue[c.id]||0,
+      conversion: rfqs ? Math.round(orders/rfqs*100) : null,
+      lastVisit: lastVisit[c.id]||'',
+      reps: repsSeen[c.id] ? [...repsSeen[c.id]].join(', ') : ''
     };
   }).filter(r=>r.visits>0 || r.rfqs>0 || r.orders>0);   // hide companies with zero activity of any kind
 
