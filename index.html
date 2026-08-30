@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.51</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.52</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -538,21 +538,18 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.26'; // bump this to force SW cache invalidation
-// v7.26: Two fixes to the v7.25 Monthly Analysis upgrade.
-//        (1) RFQs showed "—" for every company despite the team total
-//        being correct — root cause: most synced RFQs never get an
-//        explicit companyId (that's only set when someone manually
-//        matches one), so the per-company aggregation was silently
-//        excluding almost all of them. renderRFQ() already had a fallback
-//        for this exact problem (match customerEmail against Contacts) but
-//        it was a LOCAL function, invisible to Monthly Analysis. Promoted
-//        it to a global resolveRFQCompany() and wired it into both the
-//        stat aggregation and the company drill-down's RFQ list.
-//        (2) Charts failed to load ("could not load charts" toast) —
-//        Chart.js 4.4.4 isn't a real published version on cdnjs (404 on
-//        that exact path), which is what triggered the load-failure
-//        handler. Switched to the confirmed-valid 4.4.1.
+const APP_VERSION = '7.27'; // bump this to force SW cache invalidation
+// v7.27: Fixed Monthly Analysis showing "—" for RFQs on every single
+//        company despite the team total being correct. I'd added a
+//        name-based fallback match to the BACKEND (RFQWatcher.gs) but
+//        never added the equivalent to resolveRFQCompany() here on the
+//        client, which is what Monthly Analysis actually calls live —
+//        it was still only doing email->Contacts matching, same weak
+//        coverage as before, since most RFQ senders aren't saved Contacts
+//        yet (that's the whole reason this problem exists). Now also
+//        falls back to matching customerName against Companies, reusing
+//        findCompanyIdByName() — the same fuzzy matcher already used for
+//        PO-buyer matching, so no new logic, just reuse.
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -680,14 +677,20 @@ function vehicleTag(vh) { if(vh==='four-wheeler') return `<span class="v-4w"><i 
 function co(id) { return STATE.companies.find(c=>c.id===id)||{}; }
 function rep(id) { return STATE.users.find(u=>u.id===id)||{}; }
 // Resolves an RFQ's company: direct companyId first (only set for manually-
-// matched RFQs), falling back to matching customerEmail against Contacts —
-// most synced RFQs never get an explicit companyId, so without this
-// fallback almost all of them would look "unattributed" in any per-company
-// aggregation (Monthly Analysis, company drill-down, etc.).
+// matched RFQs or ones the backend backfill has already matched), then
+// customerEmail against Contacts, then customerName against Companies
+// (reuses findCompanyIdByName, the same fuzzy match used for PO-buyer
+// matching) — most synced RFQs never get an explicit companyId AND their
+// sender is often not yet a saved Contact, so without this last fallback
+// most RFQs would look "unattributed" in any per-company aggregation
+// (Monthly Analysis, company drill-down, etc.), same gap this had to be
+// fixed for on the backend (RFQWatcher.gs) too.
 function resolveRFQCompany(rfq) {
   if(rfq.companyId) return co(rfq.companyId);
   const contact = STATE.contacts.find(c=>c.email&&c.email.toLowerCase()===String(rfq.customerEmail||'').toLowerCase());
-  if(contact) return co(contact.companyId);
+  if(contact && contact.companyId) return co(contact.companyId);
+  const nameMatchId = findCompanyIdByName(rfq.customerName);
+  if(nameMatchId) return co(nameMatchId);
   return null;
 }
 function isActive(u){ return !!u && String(u.active==null?'':u.active).toUpperCase()!=='FALSE'; }
