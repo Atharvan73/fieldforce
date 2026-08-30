@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.54</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.55</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -539,20 +539,19 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.29'; // bump this to force SW cache invalidation
-// v7.29: Fixed Company Analysis freezing the whole page ("Page
-//        Unresponsive") on open. Root cause: the per-company aggregation
-//        re-filtered the FULL all-time RFQs array (with its
-//        resolveRFQCompany resolution — itself a full companies scan on
-//        the name-match fallback) once for EVERY company — effectively
-//        O(companies × RFQs × companies). Empirically confirmed: the old
-//        approach took 32.5s for just 50 companies in a simulated dataset
-//        (500 companies, 20k RFQs); the full 500 would have taken several
-//        minutes. Rewritten to a single pass over each source array
-//        (visits, orders, RFQs) building lookup maps first, then O(1)
-//        reads per company — same pattern renderAnalysis() already used
-//        correctly, just not one I'd applied here. Same simulated dataset:
-//        656ms for all 500 companies, a ~500x improvement.
+const APP_VERSION = '7.30'; // bump this to force SW cache invalidation
+// v7.30: Fixed Monthly Analysis showing 0 RFQs for a company when scoped
+//        to a specific rep, despite "All team" correctly showing RFQs for
+//        that same company. Root cause: RFQ.repId is a single owner
+//        assigned once at sync time (via Contact ownership), which
+//        doesn't reliably match which rep(s) are ACTUALLY visiting a
+//        company — a shared/multi-rep account (e.g. "Durgesh, Rohit" both
+//        visiting) could have all its RFQs synced under just one of
+//        them's name. RFQs are now scoped by "did this rep visit this
+//        RFQ's company this month" instead of RFQ.repId directly.
+//        Deliberately did NOT apply the same change to Orders — order
+//        credit should stay tied to whoever actually closed the deal
+//        (their own repId), not "anyone who's ever visited this company."
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -6033,14 +6032,35 @@ function renderAnalysis() {
 
   // Scope — reps see only themselves; manager/coordinator can pick All team or a rep.
   if(!isMgrOrCoord) STATE.anRep = STATE.user.id;
-  const inScope = (row)=> STATE.anRep==='all' ? true : String(row.repId||'').trim()===STATE.anRep;
+  const scopingRep = STATE.anRep!=='all' ? STATE.anRep : null;
+  const inScope = (row)=> !scopingRep || String(row.repId||'').trim()===scopingRep;
 
   // Visits logged this month (Visits sheet holds real visits; cancelled/not-visited live in plans).
+  // This is the one record type where repId is a direct, reliable signal —
+  // it's literally who did the check-in.
   const visits = STATE.visits.filter(v=> v.date>=start && v.date<=end && v.status!=='cancelled' && inScope(v));
+
+  // Companies this scope actually visited this month. RFQs get scoped to
+  // THESE companies below, not to the RFQ's own repId — an RFQ's repId
+  // reflects whoever "owns" that Contact per the sync (a single
+  // assignment), which doesn't reliably match which rep(s) are actually
+  // visiting a company. A shared/multi-rep account would otherwise show 0
+  // RFQs for a rep clearly engaged with it, just because the RFQ happened
+  // to sync under a colleague's name. Orders deliberately don't get this
+  // treatment — order credit should stay tied to who actually closed it,
+  // not "anyone who's ever visited this company."
+  const visitedCoIds = scopingRep ? new Set(visits.map(v=>v.companyId).filter(Boolean)) : null;
+
   // Orders received this month — any PO that isn't rejected (pending or verified both count as "received").
   const orders = STATE.pos.filter(p=> String(p.date||'')>=start && String(p.date||'')<=end && p.status!=='rejected' && inScope(p));
-  // RFQs received this month.
-  const rfqs = (STATE.rfqs||[]).filter(r=> normDate(r.rfqDate||r.rfqdate)>=start && normDate(r.rfqDate||r.rfqdate)<=end && inScope(r));
+  // RFQs received this month — scoped by company-visit relationship, not RFQ.repId (see above).
+  const rfqs = (STATE.rfqs||[]).filter(r=>{
+    const rd = normDate(r.rfqDate||r.rfqdate);
+    if(rd<start || rd>end) return false;
+    if(!scopingRep) return true;
+    const rc = resolveRFQCompany(r);
+    return !!(rc?.id && visitedCoIds.has(rc.id));
+  });
 
   // Aggregate per company.
   const byCo = {};
