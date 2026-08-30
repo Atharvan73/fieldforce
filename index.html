@@ -363,7 +363,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.52</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.53</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -423,6 +423,7 @@ select.inp { cursor: pointer; }
         <div class="page" id="page-tasks"></div>
         <div class="page" id="page-contacts"></div>
         <div class="page" id="page-analysis"></div>
+        <div class="page" id="page-coanalysis"></div>
         <div class="page" id="page-attendance"></div>
       </div>
 
@@ -538,18 +539,19 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.27'; // bump this to force SW cache invalidation
-// v7.27: Fixed Monthly Analysis showing "—" for RFQs on every single
-//        company despite the team total being correct. I'd added a
-//        name-based fallback match to the BACKEND (RFQWatcher.gs) but
-//        never added the equivalent to resolveRFQCompany() here on the
-//        client, which is what Monthly Analysis actually calls live —
-//        it was still only doing email->Contacts matching, same weak
-//        coverage as before, since most RFQ senders aren't saved Contacts
-//        yet (that's the whole reason this problem exists). Now also
-//        falls back to matching customerName against Companies, reusing
-//        findCompanyIdByName() — the same fuzzy matcher already used for
-//        PO-buyer matching, so no new logic, just reuse.
+const APP_VERSION = '7.28'; // bump this to force SW cache invalidation
+// v7.28: Part 2 of the analysis upgrade — new standalone "Company Analysis"
+//        page (Management/Performance nav, all roles). Unlike Monthly
+//        Analysis (rep+month scoped), this is all-time and company-first:
+//        every company you've had any activity with, ranked by RFQs,
+//        order value, RFQ→Order conversion rate, or staleness (least
+//        recently visited) — plus a dedicated "RFQs but no order yet"
+//        sort to surface under-converted accounts worth chasing. Reps/
+//        coordinators see their own companies; managers see all. Tapping
+//        a company reuses the same openCompanyHistory() drill-down built
+//        for Monthly Analysis (trend charts + category breakdowns), so no
+//        duplicate UI — just a different entry point and a different,
+//        all-time lens on the same data.
 const API = 'https://script.google.com/macros/s/AKfycbzag0WZE1koTtJHK33XqMOXxwa3yx7ToXcxQjWmmDEvWXl9xLL6pfV5CQc-qDWqL2HOTA/exec';
 function getClaudeKey() { return localStorage.getItem('ffp_claude_key') || ''; }
 
@@ -1313,7 +1315,7 @@ function renderNav() {
   const allPages = isM
     ? [['home','home','Home'],['team','users','Team'],['teamgps','route','Team GPS'],['companies','building','Companies'],['plan','calendar-plus','My Plan'],['log','clipboard-list','My Visits'],['targets','target','Targets'],['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks'],['gps','truck','My GPS'],['cal','calendar','Calendar']]
     : isCoord
-    ? [['home','home','Home'],['team','users','Team'],['teamgps','route','Team GPS'],['companies','building','Companies'],['contacts','address-book','Contacts'],['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['targets','target','Targets'],['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar'],['analysis','chart-bar','Monthly Analysis'],['attendance','user-check','Attendance']]
+    ? [['home','home','Home'],['team','users','Team'],['teamgps','route','Team GPS'],['companies','building','Companies'],['contacts','address-book','Contacts'],['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['targets','target','Targets'],['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar'],['analysis','chart-bar','Monthly Analysis'],['coanalysis','report-analytics','Company Analysis'],['attendance','user-check','Attendance']]
     : [['home','home','Home'],['companies','building','Companies'],['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['targets','target','Targets'],['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']];
 
   // Mobile bottom nav — most important 5
@@ -1334,20 +1336,20 @@ function renderNav() {
         'Overview':    [['home','home','Home'],['team','users','Team Overview'],['teamgps','route','Team GPS']],
         'My field':    [['plan','calendar-plus','My Daily Plan'],['log','clipboard-list','My Visit Log'],['gps','map-pin','My GPS & TA']],
         'Sales':       [['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks']],
-        'Management':  [['companies','building','Companies'],['contacts','address-book','Contacts'],['targets','target','Targets'],['analysis','chart-bar','Monthly Analysis'],['attendance','user-check','Attendance'],['cal','calendar','Calendar']]
+        'Management':  [['companies','building','Companies'],['contacts','address-book','Contacts'],['targets','target','Targets'],['analysis','chart-bar','Monthly Analysis'],['coanalysis','report-analytics','Company Analysis'],['attendance','user-check','Attendance'],['cal','calendar','Calendar']]
       }
     : isCoord
     ? {
         'Team':        [['home','home','Home'],['team','users','Team Overview'],['teamgps','route','Team GPS']],
         'My field':    [['plan','calendar-plus','My Daily Plan'],['log','clipboard-list','My Visit Log'],['companies','building','Companies'],['contacts','address-book','Contacts']],
         'Sales':       [['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks']],
-        'Performance': [['targets','target','Targets'],['analysis','chart-bar','Monthly Analysis'],['attendance','user-check','Attendance'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']]
+        'Performance': [['targets','target','Targets'],['analysis','chart-bar','Monthly Analysis'],['coanalysis','report-analytics','Company Analysis'],['attendance','user-check','Attendance'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']]
       }
     : {
         'Dashboard':   [['home','home','Home']],
         'Field work':  [['plan','calendar-plus','Daily Plan'],['log','clipboard-list','Visit Log'],['companies','building','Companies'],['contacts','address-book','Contacts']],
         'Sales':       [['rfq','file-invoice','RFQ Tracker'],['tasks','checklist','Tasks']],
-        'Performance': [['targets','target','Targets'],['analysis','chart-bar','Monthly Analysis'],['attendance','user-check','Attendance'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']]
+        'Performance': [['targets','target','Targets'],['analysis','chart-bar','Monthly Analysis'],['coanalysis','report-analytics','Company Analysis'],['attendance','user-check','Attendance'],['gps','map-pin','GPS & Travel'],['cal','calendar','Calendar']]
       };
 
   const buildNavHtml = (activeClass) => {
@@ -1419,7 +1421,7 @@ function renderPage(p) {
     log: renderLog, targets: renderTargets, gps: renderGPS,
     team: renderTeam, teamgps: renderTeamGPS, cal: renderCal, rfq: renderRFQ,
     tasks: renderTasks, contacts: renderContacts, analysis: renderAnalysis,
-    attendance: renderAttendance
+    coanalysis: renderCompanyAnalysis, attendance: renderAttendance
   };
   try { if(map[p]) map[p](); } catch(e) { console.error('renderPage error:', p, e.message); }
 }
@@ -6118,7 +6120,114 @@ function renderAnalysis() {
     </div>`:''}`;
 }
 
-// ── ATTENDANCE REGISTER (manager) ────────────────────────────
+// ── COMPANY-WIDE ANALYSIS ────────────────────────────────────────────────────
+// All-time, per-company view (as opposed to Monthly Analysis's rep+month
+// scope) — built to answer "which customers deserve more attention," not
+// "how did this month go." Reuses openCompanyHistory() for the drill-down,
+// so every company here gets the same trend charts + category breakdowns
+// already built for Monthly Analysis's company view.
+function renderCompanyAnalysis(){
+  const el = document.getElementById('page-coanalysis'); if(!el) return;
+  const isM = STATE.user.role==='manager';
+  const isCoord = STATE.user.role==='coordinator';
+  const isMgrOrCoord = isM || isCoord;
+  if(!STATE.coAnSort) STATE.coAnSort = 'rfqs';
+  if(!STATE.coAnSearch) STATE.coAnSearch = '';
+
+  // Scope: reps (and coordinators, for their own patch) see companies they
+  // have a target/visit relationship with; managers see every company.
+  const myId = STATE.user.id;
+  const myCoIds = isM ? null : new Set([
+    ...STATE.targets.filter(t=>t.repId===myId).map(t=>t.companyId),
+    ...STATE.visits.filter(v=>v.repId===myId).map(v=>v.companyId)
+  ]);
+  const scope = isM ? STATE.companies : STATE.companies.filter(c=>myCoIds.has(c.id));
+
+  // All-time aggregation per company.
+  const rows = scope.map(c=>{
+    const visits = STATE.visits.filter(v=>v.companyId===c.id && v.status!=='cancelled');
+    const orders = STATE.pos.filter(p=>p.companyId===c.id && p.status!=='rejected');
+    const rfqs = (STATE.rfqs||[]).filter(r=>resolveRFQCompany(r)?.id===c.id);
+    const value = orders.reduce((s,p)=>s+Number(p.amount||0),0);
+    const lastVisit = visits.map(v=>normDate(v.date)).filter(Boolean).sort().slice(-1)[0] || '';
+    return {
+      id: c.id, name: c.name||'Unknown',
+      visits: visits.length, rfqs: rfqs.length, orders: orders.length, value,
+      conversion: rfqs.length ? Math.round(orders.length/rfqs.length*100) : null,
+      lastVisit,
+      reps: [...new Set(visits.map(v=>rep(v.repId)?.name?.split(' ')[0]).filter(Boolean))].join(', ')
+    };
+  }).filter(r=>r.visits>0 || r.rfqs>0 || r.orders>0);   // hide companies with zero activity of any kind
+
+  const searched = STATE.coAnSearch
+    ? rows.filter(r=>r.name.toLowerCase().includes(STATE.coAnSearch.toLowerCase()))
+    : rows;
+
+  const sorters = {
+    rfqs:       (a,b)=> b.rfqs-a.rfqs || b.visits-a.visits,
+    value:      (a,b)=> b.value-a.value,
+    conversion: (a,b)=> (b.conversion??-1)-(a.conversion??-1),
+    stale:      (a,b)=> (a.lastVisit||'0000-00-00').localeCompare(b.lastVisit||'0000-00-00'),   // oldest/never first
+    unconverted:(a,b)=> (b.rfqs>0&&b.orders===0?1:0)-(a.rfqs>0&&a.orders===0?1:0) || b.rfqs-a.rfqs
+  };
+  const sorted = [...searched].sort(sorters[STATE.coAnSort]||sorters.rfqs);
+
+  const totalRfqs = rows.reduce((s,r)=>s+r.rfqs,0);
+  const totalOrders = rows.reduce((s,r)=>s+r.orders,0);
+  const totalValue = rows.reduce((s,r)=>s+r.value,0);
+  const overallConv = totalRfqs ? Math.round(totalOrders/totalRfqs*100) : 0;
+
+  el.innerHTML = `
+    <div class="row-between" style="margin-bottom:12px">
+      <div style="font-size:16px;font-weight:600">Company Analysis</div>
+      <div class="text-xs" style="color:var(--text3)">All time · ${rows.length} companies with activity</div>
+    </div>
+
+    <div class="grid2 desk-grid2" style="margin-bottom:12px;grid-template-columns:repeat(auto-fit,minmax(90px,1fr))">
+      <div class="card" style="padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--purple)">${totalRfqs}</div><div class="text-xs">RFQs (all time)</div></div>
+      <div class="card" style="padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--emerald)">${totalOrders}</div><div class="text-xs">Orders (all time)</div></div>
+      <div class="card" style="padding:12px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--emerald)">${fmt(totalValue)}</div><div class="text-xs">Total value</div></div>
+      <div class="card" style="padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--indigo2)">${overallConv}%</div><div class="text-xs">RFQ→Order rate</div></div>
+    </div>
+
+    <input class="inp" style="margin-bottom:10px" placeholder="Search company…" value="${STATE.coAnSearch}" oninput="STATE.coAnSearch=this.value;renderCompanyAnalysis()">
+
+    <div class="chip-row">
+      <span class="chip${STATE.coAnSort==='rfqs'?' active':''}" onclick="STATE.coAnSort='rfqs';renderCompanyAnalysis()">Most RFQs</span>
+      <span class="chip${STATE.coAnSort==='value'?' active':''}" onclick="STATE.coAnSort='value';renderCompanyAnalysis()">Highest value</span>
+      <span class="chip${STATE.coAnSort==='conversion'?' active':''}" onclick="STATE.coAnSort='conversion';renderCompanyAnalysis()">Best conversion</span>
+      <span class="chip${STATE.coAnSort==='unconverted'?' active':''}" onclick="STATE.coAnSort='unconverted';renderCompanyAnalysis()">RFQs, no order yet</span>
+      <span class="chip${STATE.coAnSort==='stale'?' active':''}" onclick="STATE.coAnSort='stale';renderCompanyAnalysis()">Least recently visited</span>
+    </div>
+
+    ${sorted.length?`
+    <div class="co-list">
+      <div style="display:flex;align-items:center;padding:8px 12px;gap:6px;border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">
+        <div style="flex:1">Company</div>
+        <div style="width:40px;text-align:center">Visits</div>
+        <div style="width:40px;text-align:center">RFQs</div>
+        <div style="width:40px;text-align:center">Orders</div>
+        <div style="width:44px;text-align:center">Conv.</div>
+        <div style="width:76px;text-align:right">Value</div>
+        <div style="width:14px"></div>
+      </div>
+      ${sorted.map(r=>`
+      <div class="co-row" onclick="openCompanyHistory('${r.id}')" style="cursor:pointer"><div style="display:flex;align-items:center;padding:10px 12px;gap:6px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</div>
+          <div style="font-size:9px;color:var(--text3)">${r.reps||'—'}${r.lastVisit?' · last visit '+r.lastVisit:''}</div>
+        </div>
+        <div style="width:40px;text-align:center">${r.visits>0?`<span class="badge badge-blue">${r.visits}</span>`:'<span class="text-xs" style="color:var(--text3)">—</span>'}</div>
+        <div style="width:40px;text-align:center">${r.rfqs>0?`<span class="badge badge-purple">${r.rfqs}</span>`:'<span class="text-xs" style="color:var(--text3)">—</span>'}</div>
+        <div style="width:40px;text-align:center">${r.orders>0?`<span class="badge badge-green">${r.orders}</span>`:'<span class="text-xs" style="color:var(--text3)">—</span>'}</div>
+        <div style="width:44px;text-align:center;font-size:10px;font-weight:600;color:${r.conversion==null?'var(--text3)':r.conversion>=50?'var(--emerald)':r.conversion>0?'var(--amber)':'var(--rose)'}">${r.conversion==null?'—':r.conversion+'%'}</div>
+        <div style="width:76px;text-align:right;font-size:11px;font-weight:600;color:${r.value>0?'var(--emerald)':'var(--text3)'}">${r.value>0?fmt(r.value):'—'}</div>
+        <i class="ti ti-chevron-right" style="font-size:14px;color:var(--text3);flex-shrink:0"></i>
+      </div></div>`).join('')}
+    </div>` : `<div class="empty"><i class="ti ti-building-off"></i><p>No matching companies</p></div>`}`;
+}
+
+
 function changeAttMonth(delta){ let {y,m}=STATE.attMonth; m+=delta; if(m<0){m=11;y--;} if(m>11){m=0;y++;} STATE.attMonth={y,m}; renderAttendance(); }
 
 // Present if the rep is currently marked on-field today (optimistic, real-time),
@@ -6142,6 +6251,7 @@ function repPresentOn(repId, dateStr){
   });
 }
 
+// ── ATTENDANCE REGISTER (manager) ────────────────────────────
 function renderAttendance(){
   const el=document.getElementById('page-attendance'); if(!el) return;
   const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
