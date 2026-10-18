@@ -366,7 +366,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.64</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.67</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -559,7 +559,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.44'; // bump this to force SW cache invalidation
+const APP_VERSION = '7.47'; // bump this to force SW cache invalidation
 // v7.40: Reliability overhaul — global action locks prevent double-taps
 //        on all critical buttons (mark on/off field, check in/out, post visit).
 //        Fullscreen loading overlay blocks interaction during saves.
@@ -692,7 +692,7 @@ function fmtDate(d) {
   const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? m[3]+'-'+m[2]+'-'+m[1] : String(d);
 }
-function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,8) + Math.random().toString(36).slice(2,5); }
 function fmt(n) { n = Number(n)||0; if(n>=1e7) return '₹'+(n/1e7).toFixed(2)+'Cr'; if(n>=1e5) return '₹'+(n/1e5).toFixed(2)+'L'; if(n>=1e3) return '₹'+(n/1e3).toFixed(1)+'K'; return '₹'+n; }
 function fmtINR(n) { return '₹'+Math.round(Number(n)||0).toLocaleString('en-IN'); }
 function dsi(d) { if(!d) return null; return Math.floor((Date.now()-new Date(d))/86400000); }
@@ -799,13 +799,13 @@ function showToast(msg, type='') {
 // ── API CALLS ────────────────────────────────────────────────────────────────
 // ── CACHE ─────────────────────────────────────────────────────────────────────
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const CACHE_PREFIX = 'ffp_c_';
+function CACHE_PREFIX() { return 'ffp_c_' + (STATE.user?.id||'') + '_'; }
 function cacheSet(key, data) {
-  try { localStorage.setItem(CACHE_PREFIX+key, JSON.stringify({data, ts: Date.now()})); } catch(e) {}
+  try { localStorage.setItem(CACHE_PREFIX()+key, JSON.stringify({data, ts: Date.now()})); } catch(e) {}
 }
 function cacheGet(key) {
   try {
-    const raw = localStorage.getItem(CACHE_PREFIX+key);
+    const raw = localStorage.getItem(CACHE_PREFIX()+key);
     if(!raw) return null;
     const {data, ts} = JSON.parse(raw);
     if(Date.now()-ts > CACHE_TTL) return null;
@@ -813,7 +813,7 @@ function cacheGet(key) {
   } catch(e) { return null; }
 }
 function cacheInvalidate(sheet) {
-  try { localStorage.removeItem(CACHE_PREFIX+sheet); } catch(e) {}
+  try { localStorage.removeItem(CACHE_PREFIX()+sheet); } catch(e) {}
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -835,7 +835,7 @@ async function apiRead(sheet, {cache=true}={}) {
     console.error('Read error',sheet,e?.name==='AbortError'?'(timeout)':e);
     // Always try stale cache as fallback — even if expired
     try {
-      const raw = localStorage.getItem(CACHE_PREFIX+sheet);
+      const raw = localStorage.getItem(CACHE_PREFIX()+sheet);
       if(raw) { const {data}=JSON.parse(raw); if(data?.length) { console.log('Using stale cache for',sheet); return data; } }
     } catch(e2) {}
     return [];
@@ -1005,7 +1005,11 @@ function btnLoad(el, loading=true, label='') {
 // ── DATA LOADING ─────────────────────────────────────────────────────────────
 function normDate(d) {
   if(!d) return '';
-  if(d instanceof Date) return d.toISOString().slice(0,10);
+  if(d instanceof Date) {
+    // Use IST (Asia/Kolkata) to match todayStr() — avoids midnight-5:30am mismatch
+    const parts = d.toLocaleDateString('en-CA', {timeZone:'Asia/Kolkata'});
+    return parts; // 'YYYY-MM-DD' format from en-CA locale
+  }
   const s = String(d).trim();
   if(s.match(/^\d{2}\/\d{2}\/\d{4}$/)) { const [dd,mm,yyyy]=s.split('/'); return `${yyyy}-${mm}-${dd}`; }
   return s.slice(0,10);
@@ -1127,6 +1131,7 @@ async function loadAll(navigateAfter=false) {
 
       if(restored) {
         fieldSessionSave();
+        if(typeof startGPS==='function') startGPS();  // resume GPS tracking after session restore
         showToast('On-field session restored ✓','success');
         if(['gps','teamgps','home'].includes(STATE.page)) renderPage(STATE.page);
       }
@@ -1372,6 +1377,13 @@ async function completeLogin(u) {
 
 function logout() {
   if(confirm('Log out?')) {
+    // Clear user-scoped cache to prevent data bleed to next user
+    try {
+      const prefix = CACHE_PREFIX();
+      Object.keys(localStorage).forEach(k=>{ if(k.startsWith(prefix)) localStorage.removeItem(k); });
+      // Also clear collabNotifs for this user
+      localStorage.removeItem('ffp_collabNotifs_'+(STATE.user?.id||''));
+    } catch(e) {}
     localStorage.removeItem('ffp_user_id');
     STATE.user=null;
     selectedLoginId=null;
@@ -3732,6 +3744,21 @@ async function saveVisitPlan() {
   const coId = document.getElementById('av-co').value;
   const dt=document.getElementById('av-dt').value;
   if(!coId||!dt){showToast('Select a company and date','error');return;}
+
+  // ── Dedup: prevent same company+date+rep from being planned twice ──
+  const myId = STATE.user.id;
+  const alreadyPlanned = STATE.planItems.find(p=>
+    String(p.companyId||'').trim()===String(coId).trim() &&
+    p.date===dt &&
+    String(p.repId||'').trim().toLowerCase()===String(myId||'').trim().toLowerCase() &&
+    p.status!=='cancelled' && p.status!=='not-visited'
+  );
+  if(alreadyPlanned){
+    const cName = co(coId)?.name||'this company';
+    showToast(`${cName} is already planned for ${dt}`,'error');
+    return;
+  }
+
   const meetingWith = document.getElementById('av-wt').value||'TBD';
   const designation = document.getElementById('av-dg').value||'';
   const phone = document.getElementById('av-ph')?.value||'';
@@ -3790,10 +3817,12 @@ async function saveVisitPlan() {
   }
 }
 
+function _collabKey(){ return 'ffp_collabNotifs_'+(STATE.user?.id||''); }
+
 function addCollabNotification(coId, dt, collaboratorIds) {
   // Store pending notifications in localStorage for each collaborator
   // When they open the app, the notif dot will be active
-  const notifs = JSON.parse(localStorage.getItem('collabNotifs')||'[]');
+  const notifs = JSON.parse(localStorage.getItem(_collabKey())||'[]');
   const c = co(coId);
   collaboratorIds.forEach(repId=>{
     notifs.push({
@@ -3802,23 +3831,30 @@ function addCollabNotification(coId, dt, collaboratorIds) {
       seen:false, createdAt: new Date().toISOString()
     });
   });
-  localStorage.setItem('collabNotifs', JSON.stringify(notifs));
+  localStorage.setItem(_collabKey(), JSON.stringify(notifs));
   updateNotifDot();
 }
 
 function updateNotifDot() {
   const dot = document.getElementById('notif-dot');
   if(!dot) return;
-  const notifs = JSON.parse(localStorage.getItem('collabNotifs')||'[]');
+  const notifs = JSON.parse(localStorage.getItem(_collabKey())||'[]');
   const mine = notifs.filter(n=>n.repId===STATE.user?.id&&!n.seen);
   dot.style.display = mine.length>0 ? 'block' : 'none';
 }
 
 async function deletePlanItem(id) {
   if(!confirm('Remove this visit from plan?'))return;
+  const removed = STATE.planItems.find(p=>p.id===id);
   STATE.planItems=STATE.planItems.filter(p=>p.id!==id);
-  await apiUpdate('VisitPlan',{id,status:'cancelled'});
   renderPlan();
+  const ok = await apiUpdate('VisitPlan',{id,status:'cancelled'});
+  if(!ok && removed) {
+    // Rollback on failure
+    STATE.planItems.push(removed);
+    renderPlan();
+    showToast('Failed to remove — please try again','error');
+  }
   showToast('Removed','');
 }
 
@@ -4111,6 +4147,20 @@ async function saveUnplannedVisit() {
   const remarks = document.getElementById('uv-remarks').value.trim();
   if(!coId){showToast('Please select a company','error');return;}
   if(!remarks){showToast('Please add what was discussed','error');return;}
+
+  // ── Dedup: warn if this company already has a visit today ──
+  if(coId!=='__new__'){
+    const today=todayStr();
+    const existingVisit = STATE.visits.find(v=>
+      String(v.companyId||'').trim()===String(coId).trim() &&
+      v.date===today &&
+      String(v.repId||'').trim().toLowerCase()===String(STATE.user.id||'').trim().toLowerCase()
+    );
+    if(existingVisit){
+      const cName = co(coId)?.name||'this company';
+      if(!confirm(`You already have a visit logged for ${cName} today. Add another?`)) return;
+    }
+  }
   if(coId==='__new__'){
     const newName = document.getElementById('uv-newname').value.trim();
     if(!newName){showToast('Please enter company name','error');return;}
@@ -4262,13 +4312,19 @@ function renderLog() {
     ? STATE.planItems.filter(p=>
         String(p.repId||'').trim().toLowerCase()===myId &&
         p.date===STATE.vd &&
-        !allV.some(v=>v.companyId===p.companyId&&v.date===STATE.vd)
+        p.status!=='cancelled' && p.status!=='not-visited' &&
+        !allV.some(v=>String(v.companyId||'').trim()===String(p.companyId||'').trim()
+          && v.date===STATE.vd
+          && String(v.repId||'').trim().toLowerCase()===myId)
       )
     : (STATE.logView!=='mine'&&STATE.logView!=='all'&&STATE.vd===todayStr())
     ? STATE.planItems.filter(p=>
         String(p.repId||'').trim().toLowerCase()===STATE.logView.toLowerCase() &&
         p.date===STATE.vd &&
-        !allV.some(v=>v.companyId===p.companyId&&v.date===STATE.vd)
+        p.status!=='cancelled' && p.status!=='not-visited' &&
+        !allV.some(v=>String(v.companyId||'').trim()===String(p.companyId||'').trim()
+          && v.date===STATE.vd
+          && String(v.repId||'').trim().toLowerCase()===STATE.logView.toLowerCase())
       )
     : [];
 
@@ -4630,7 +4686,7 @@ async function finalizeCheckin(opt){
     if(!photoUrl) showToast('Photo upload failed — checked in, add it again from the visit','error');
   } else if(opt.reason){ photoSkipReason=opt.reason; }
 
-  const update={id:pc.planId, status:'in-progress', checkinTime:ct, gpsVerified, photoUrl, photoSkipReason, lat, lng};
+  const update={id:pc.planId, status:'in-progress', checkinTime:ct, gpsVerified, photoUrl, photoSkipReason, lat, lng, linkedVisitId:pc.visitId};
   if(v) Object.assign(v, update);
   const visit={
     id:pc.visitId, repId:STATE.user.id, companyId:pc.companyId, date:(v&&v.date)||todayStr(), time:(v&&v.time)||ct,
@@ -4943,14 +4999,29 @@ async function savePostVisit(planId, visitId) {
   const na = document.getElementById('pv-na').value;
   const nd = document.getElementById('pv-nd').value;
 
-  if(visitId && STATE.visits.find(v=>v.id===visitId)) {
-    const update = {id:visitId,meetingWith,designation,itemsPitched:items,remarks,rfqShared:rfq,sampleRequired:smp,nextAction:na,nextActionDate:nd,status:'completed',remarksSavedAt:todayStr()};
-    await apiUpdate('Visits',update);
-    const v=STATE.visits.find(x=>x.id===visitId);if(v)Object.assign(v,update);
+  // Try to find existing visit: by explicit visitId, plan's linkedVisitId, or companyId+date+repId
+  let existingVisit = visitId ? STATE.visits.find(v=>v.id===visitId) : null;
+  if(!existingVisit && plan.linkedVisitId) existingVisit = STATE.visits.find(v=>v.id===plan.linkedVisitId);
+  if(!existingVisit) existingVisit = STATE.visits.find(v=>
+    String(v.companyId||'').trim()===String(plan.companyId||'').trim() &&
+    normDate(v.date)===normDate(plan.date) &&
+    String(v.repId||'').trim().toLowerCase()===String(STATE.user.id||'').trim().toLowerCase()
+  );
+
+  let saveFailed = false;
+  if(existingVisit) {
+    const update = {id:existingVisit.id,meetingWith,designation,itemsPitched:items,remarks,rfqShared:rfq,sampleRequired:smp,nextAction:na,nextActionDate:nd,status:'completed',remarksSavedAt:todayStr()};
+    const ok = await apiUpdate('Visits',update);
+    if(ok===false) saveFailed=true;
+    Object.assign(existingVisit, update);
   } else {
     const visit = {id:uid(),repId:STATE.user.id,companyId:plan.companyId,date:plan.date,time:plan.time,meetingWith,designation,status:'completed',checkinTime:plan.checkinTime||'',checkoutTime:nowStr(),itemsPitched:items,remarks,rfqShared:rfq,sampleRequired:smp,gpsVerified:plan.gpsVerified||'FALSE',nextAction:na,nextActionDate:nd,photoUrl:'',remarksSavedAt:todayStr()};
-    await apiWrite('Visits',visit);
+    const ok = await apiWrite('Visits',visit);
+    if(ok===false) saveFailed=true;
     STATE.visits.push(visit);
+    // Link the new visit back to the plan item
+    plan.linkedVisitId = visit.id;
+    await apiUpdate('VisitPlan',{id:planId,linkedVisitId:visit.id}).catch(()=>{});
   }
 
   // Save new contacts for each person
@@ -4978,10 +5049,14 @@ async function savePostVisit(planId, visitId) {
   }
 
   closePanel('visit');
-  showSuccessPopup('Visit logged!', [
-    '🏢 ' + companyName,
-    nd&&na ? '📅 Follow-up: ' + na + ' by ' + nd : null
-  ].filter(Boolean), 3000);
+  if(saveFailed) {
+    showToast('⚠️ Visit saved locally but may not have reached the server — check connection','error');
+  } else {
+    showSuccessPopup('Visit logged!', [
+      '🏢 ' + companyName,
+      nd&&na ? '📅 Follow-up: ' + na + ' by ' + nd : null
+    ].filter(Boolean), 3000);
+  }
   renderPlan();
   } finally {
     hideFullscreenLoading();
@@ -5622,8 +5697,9 @@ function startField() {
     saveFieldStatus(true, null, null).then(saved=>{
       fieldEventLog('on', false);
       finish(saved, false);
-    });
+    }).catch(()=>finish(false, false));
   }
+  startGPS();   // start background GPS tracking for TA distance
   navigate('home');
 }
 
@@ -5706,7 +5782,7 @@ function closeOffFieldWarning(){
 }
 
 async function confirmStopField() {
-  if(isActionLocked('stopField')) return;
+  if(STATE.stoppingField || isActionLocked('stopField')) return;
   if(!confirm('Mark yourself off field? This will save today\'s KM log.')) return;
   STATE.stoppingField=true;
   lockAction('stopField');
@@ -5760,8 +5836,26 @@ async function confirmStopField() {
 
     // Allow manual override if no waypoints or GPS failed
     if(totalKm===0||wps.length<2) {
-      const manual = prompt(`Enter today's total distance (km):\n(GPS tracking gave: ${gpsKm.toFixed(1)} km)`);
-      if(manual && !isNaN(parseFloat(manual))) totalKm = parseFloat(manual);
+      // Hide fullscreen loading temporarily so the user can interact
+      hideFullscreenLoading();
+      const manual = await new Promise(resolve=>{
+        const div=document.createElement('div');
+        div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10001;display:flex;align-items:center;justify-content:center';
+        div.innerHTML=`<div style="background:#1E293B;border-radius:12px;padding:24px;max-width:320px;width:90%;text-align:center">
+          <p style="color:#F1F5F9;margin:0 0 8px;font-weight:600">Enter today's distance</p>
+          <p style="color:#94A3B8;margin:0 0 16px;font-size:14px">GPS tracking gave: ${gpsKm.toFixed(1)} km</p>
+          <input id="manual-km-input" type="number" inputmode="decimal" step="0.1" min="0" value="${gpsKm.toFixed(1)}" style="width:100%;padding:10px;border-radius:8px;border:1px solid #475569;background:#0F172A;color:#F1F5F9;font-size:16px;text-align:center;box-sizing:border-box;margin-bottom:16px">
+          <div style="display:flex;gap:12px;justify-content:center">
+            <button onclick="this.closest('div[style]').dataset.val='';this.closest('div[style*=fixed]').remove()" style="padding:10px 20px;border-radius:8px;background:#475569;color:#F1F5F9;border:none;font-size:14px;cursor:pointer">Skip</button>
+            <button onclick="this.closest('div[style]').dataset.val=document.getElementById('manual-km-input').value;this.closest('div[style*=fixed]').remove()" style="padding:10px 20px;border-radius:8px;background:#3B82F6;color:#fff;border:none;font-size:14px;cursor:pointer">Save</button>
+          </div></div>`;
+        document.body.appendChild(div);
+        const obs=new MutationObserver(()=>{ if(!document.body.contains(div)){obs.disconnect(); resolve(div.querySelector('div').dataset.val||null);} });
+        obs.observe(document.body,{childList:true,subtree:true});
+        setTimeout(()=>document.getElementById('manual-km-input')?.focus(),100);
+      });
+      showFullscreenLoading('Saving…');
+      if(manual && !isNaN(parseFloat(manual)) && parseFloat(manual)>0) totalKm = parseFloat(manual);
     }
 
     // Upsert: if a log already exists for this rep today, update it in place
@@ -5829,18 +5923,22 @@ function startGPS() {
 function stopGPS() {if(STATE.gpsWatcher&&navigator.geolocation){navigator.geolocation.clearWatch(STATE.gpsWatcher);STATE.gpsWatcher=null;}}
 async function submitTAClaim(rId,start,end,km,ta) {
   const claim={id:uid(),repId:rId,weekStart:start,weekEnd:end,totalKm:km.toFixed(2),taAmount:Math.round(ta),status:'submitted',submittedDate:todayStr(),approvedBy:'',approvedDate:'',paidDate:''};
-  await apiWrite('TAClaims',claim);STATE.taClaims.push(claim);
-  showToast('TA claim submitted ✓','success');renderGPS();
+  const ok = await apiWrite('TAClaims',claim);
+  if(ok!==false){ STATE.taClaims.push(claim); showToast('TA claim submitted ✓','success'); }
+  else showToast('Failed to submit TA claim — check connection','error');
+  renderGPS();
 }
 async function approveTA(id) {
-  await apiUpdate('TAClaims',{id,status:'approved',approvedBy:STATE.user.name,approvedDate:todayStr()});
-  const c=STATE.taClaims.find(x=>x.id===id);if(c){c.status='approved';c.approvedBy=STATE.user.name;}
-  showToast('TA approved ✓','success');renderGPS();renderHome();
+  const ok = await apiUpdate('TAClaims',{id,status:'approved',approvedBy:STATE.user.name,approvedDate:todayStr()});
+  if(ok!==false){ const c=STATE.taClaims.find(x=>x.id===id);if(c){c.status='approved';c.approvedBy=STATE.user.name;} showToast('TA approved ✓','success'); }
+  else showToast('Failed to approve TA — check connection','error');
+  renderGPS();renderHome();
 }
 async function rejectTA(id) {
-  await apiUpdate('TAClaims',{id,status:'flagged'});
-  const c=STATE.taClaims.find(x=>x.id===id);if(c)c.status='flagged';
-  showToast('TA flagged','');renderGPS();
+  const ok = await apiUpdate('TAClaims',{id,status:'flagged'});
+  if(ok!==false){ const c=STATE.taClaims.find(x=>x.id===id);if(c)c.status='flagged'; showToast('TA flagged',''); }
+  else showToast('Failed to flag TA — check connection','error');
+  renderGPS();
 }
 
 // ── TEAM VIEW ─────────────────────────────────────────────────────────────────
@@ -7643,11 +7741,11 @@ async function snoozeTask(taskId) {
 })();
 
 function showCollabNotifications() {
-  const notifs = JSON.parse(localStorage.getItem('collabNotifs')||'[]');
+  const notifs = JSON.parse(localStorage.getItem(_collabKey())||'[]');
   const mine = notifs.filter(function(n){return n.repId===STATE.user?.id;});
   if(!mine.length){ showToast('No new notifications',''); return; }
   mine.forEach(function(n){n.seen=true;});
-  localStorage.setItem('collabNotifs', JSON.stringify(notifs));
+  localStorage.setItem(_collabKey(), JSON.stringify(notifs));
   updateNotifDot();
   const panel = document.getElementById('panel-visit');
   let html = "";
