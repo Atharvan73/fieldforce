@@ -366,7 +366,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.61</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.62</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -542,7 +542,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.41'; // bump this to force SW cache invalidation
+const APP_VERSION = '7.42'; // bump this to force SW cache invalidation
 // v7.40: Reliability overhaul — global action locks prevent double-taps
 //        on all critical buttons (mark on/off field, check in/out, post visit).
 //        Fullscreen loading overlay blocks interaction during saves.
@@ -1075,7 +1075,7 @@ async function loadAll(navigateAfter=false) {
       let restored = false;
       let localDecided = false;   // once THIS device has a session for today, it wins in BOTH directions
       try {
-        const ls = JSON.parse(localStorage.getItem('ffp_field_session')||'null');
+        const ls = JSON.parse(localStorage.getItem(_fieldSessionKey())||localStorage.getItem('ffp_field_session')||'null');
         if(ls && ls.date===todayStr()) {
           localDecided = true;
           if(ls.onField) {
@@ -5509,21 +5509,23 @@ function renderTeamGPS() {
 // localStorage is authoritative for the rep's own on-field state (the sheet is for
 // the manager's view). This prevents stale/duplicate sheet rows from flipping a rep
 // to "off field" on reload.
+function _fieldSessionKey() { return 'ffp_field_session_'+(STATE.user?.id||'x'); }
+function _fieldEventsKey() { return 'ffp_field_events_'+(STATE.user?.id||'x'); }
 function fieldSessionSave() {
-  try { localStorage.setItem('ffp_field_session', JSON.stringify({
+  try { localStorage.setItem(_fieldSessionKey(), JSON.stringify({
     onField: !!STATE.onField, date: todayStr(), vehicle: STATE.fieldVehicle||'',
     onTime: STATE.fieldOnTime||'', waypoints: STATE.waypoints||[], currentDayKm: STATE.currentDayKm||0, ts: nowStr()
   })); } catch(e) {}
 }
 function fieldEventLog(action, locOk) {   // action: 'on' | 'off'
   try {
-    const all = JSON.parse(localStorage.getItem('ffp_field_events')||'[]');
+    const all = JSON.parse(localStorage.getItem(_fieldEventsKey())||'[]');
     all.push({ date: todayStr(), time: nowStr(), action, locOk: !!locOk });
-    localStorage.setItem('ffp_field_events', JSON.stringify(all.slice(-200)));
+    localStorage.setItem(_fieldEventsKey(), JSON.stringify(all.slice(-200)));
   } catch(e) {}
 }
 function fieldEventsToday() {
-  try { return JSON.parse(localStorage.getItem('ffp_field_events')||'[]').filter(e=>e.date===todayStr()); }
+  try { return JSON.parse(localStorage.getItem(_fieldEventsKey())||'[]').filter(e=>e.date===todayStr()); }
   catch(e) { return []; }
 }
 
