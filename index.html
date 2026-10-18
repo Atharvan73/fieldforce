@@ -5421,7 +5421,7 @@ function renderGPS() {
           ?`${liveWaypoints.length} location${liveWaypoints.length!==1?'s':''} captured · ${vehicleTag(STATE.fieldVehicle)}`
           :'Mark yourself on field to start tracking'}</div>
       </div>
-      <button class="btn btn-sm ${STATE.onField?'btn-danger':''}" onclick="${STATE.onField?'act(this,()=>stopField(),\\'…\\')':'showVehicleSelector()'}">${STATE.onField?'Mark Off Field':'Mark On Field'}</button>
+      <button class="btn btn-sm ${STATE.onField?'btn-danger':''}" onclick="${STATE.onField?`act(this,()=>stopField(),'Stopping…')`:'showVehicleSelector()'}">${STATE.onField?'Mark Off Field':'Mark On Field'}</button>
     </div>
 
     ${STATE.onField&&liveWaypoints.length>0?`
