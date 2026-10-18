@@ -366,7 +366,7 @@ select.inp { cursor: pointer; }
       <div class="logo-mark"><i class="ti ti-trending-up"></i></div>
       <span class="topbar-title">FieldForce Pro</span>
       <span id="topbar-org" style="font-size:11px;color:var(--text3);margin-left:4px;display:none">· Shakti Machinery</span>
-      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.63</span>
+      <span style="font-size:9px;color:var(--text3);margin-left:6px;background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:monospace">v9.64</span>
     </div>
     <div class="topbar-right">
       <div class="notif-btn" onclick="refreshData(this)" title="Refresh data"><i class="ti ti-refresh" style="font-size:18px"></i></div>
@@ -472,7 +472,7 @@ select.inp { cursor: pointer; }
 </div>
 
 <!-- iOS install hint (Safari can't fire beforeinstallprompt — guide the user manually) -->
-<div id="ios-install-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#1E293B;border-top:1px solid #334155;padding:12px 16px;z-index:300;align-items:center;gap:12px">
+<div id="ios-install-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#1E293B;border-top:1px solid #334155;padding:12px 16px;z-index:9999;align-items:center;gap:12px">
   <div style="width:36px;height:36px;background:#4F46E5;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
     <i class="ti ti-trending-up" style="font-size:18px;color:#fff"></i>
   </div>
@@ -531,9 +531,11 @@ function _checkShowIosBanner(){
       }
     }
   }catch(e){}
+  console.log('[iOS Banner]', {isIOS, isSafari, isNonSafariIOS, standalone, dismissed, ua: ua.substring(0,120)});
   if(isIOS && isSafari && !standalone && !dismissed){
     const b=document.getElementById('ios-install-banner');
     if(b) b.style.display='flex';
+    console.log('[iOS Banner] SHOWN');
   }
 }
 _checkShowIosBanner();
@@ -557,7 +559,7 @@ if('serviceWorker' in navigator) {
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const APP_VERSION = '7.43'; // bump this to force SW cache invalidation
+const APP_VERSION = '7.44'; // bump this to force SW cache invalidation
 // v7.40: Reliability overhaul — global action locks prevent double-taps
 //        on all critical buttons (mark on/off field, check in/out, post visit).
 //        Fullscreen loading overlay blocks interaction during saves.
@@ -1364,6 +1366,8 @@ async function completeLogin(u) {
     console.error('Login load error:', e.message);
     if(document.getElementById('page-home')) navigate('home');
   }
+  // Re-check iOS install banner after login (in case SW served cached page on first load)
+  if(typeof _checkShowIosBanner==='function') setTimeout(_checkShowIosBanner, 500);
 }
 
 function logout() {
